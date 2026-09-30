@@ -608,7 +608,7 @@ export const OwnerDashboardScreen = () => {
         return (
           <View style={styles.modalBody}>
             <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>🚀 Delivery Success Rate</Text>
+              <Text style={styles.modalTitle}>🚀 Delivery Completed</Text>
               <TouchableOpacity onPress={() => setModalType(null)} style={styles.closeBtn}>
                 <Text style={styles.closeTxt}>✕</Text>
               </TouchableOpacity>
@@ -746,7 +746,7 @@ export const OwnerDashboardScreen = () => {
               onPress={() => setModalType('rating')}
             />
             <AppCard
-              title="Delivery Success"
+              title="Delivery Completed"
               value={`${deliverySuccessRate}%`}
               style={styles.gridCard}
               subtitle={`${completedOrdersCount} Delivered`}

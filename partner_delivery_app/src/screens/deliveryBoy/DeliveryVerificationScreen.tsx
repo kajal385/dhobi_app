@@ -174,8 +174,10 @@ export const DeliveryVerificationScreen = ({ route }: any) => {
     const numericId = task.rawOrder?.id || (task.id ? task.id.replace(/\D/g, '') : null);
     if (numericId) {
       try {
-        await apiClient.put(`/delivery/orders/${numericId}/status`, {
-          status: 'delivered',
+        await apiClient.put(`/delivery/orders/${numericId}/deliver`, {
+          status: 'DELIVERED',
+          photo_url: photoUri,
+          signature_url: signatureUri,
         });
       } catch (err) {
         console.log('Update delivery status error:', err);

@@ -182,10 +182,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $payload = [
             'name' => $_POST['shop_name'] ?? '',
             'phone' => $_POST['phone'] ?? '',
+            'email' => $_POST['email'] ?? '',
             'address' => $_POST['address'] ?? '',
             'city' => $_POST['city'] ?? '',
+            'pincode' => $_POST['pincode'] ?? '',
             'working_hours' => $_POST['working_hours'] ?? '',
             'pickup_radius_km' => intval($_POST['pickup_radius_km'] ?? 5),
+            'bank_name' => $_POST['bank_name'] ?? '',
+            'bank_account' => $_POST['bank_account'] ?? '',
+            'account_holder' => $_POST['bank_holder'] ?? '',
+            'ifsc_code' => $_POST['ifsc_code'] ?? '',
+            'upi_id' => $_POST['upi_id'] ?? '',
+            'gst_number' => $_POST['gst_number'] ?? '',
         ];
         $res = apiPut("/admin/laundries/{$targetId}", $payload);
         $actionMsg = 'Shop profile details updated successfully!';
@@ -1118,14 +1126,31 @@ if ($tab === 'ACTIVE') {
         <input type="text" id="editShopName" name="shop_name" class="form-control" required style="width: 100%;">
       </div>
 
-      <div class="form-group" style="margin-bottom: 1rem;">
-        <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Phone Number</label>
-        <input type="text" id="editShopPhone" name="phone" class="form-control" required style="width: 100%;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+        <div class="form-group">
+          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Phone Number</label>
+          <input type="text" id="editShopPhone" name="phone" class="form-control" required style="width: 100%;">
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Email Address</label>
+          <input type="email" id="editShopEmail" name="email" class="form-control" style="width: 100%;">
+        </div>
       </div>
 
       <div class="form-group" style="margin-bottom: 1rem;">
         <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Store Address</label>
         <textarea id="editShopAddress" name="address" class="form-control" rows="2" style="width: 100%;"></textarea>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+        <div>
+          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">City</label>
+          <input type="text" id="editShopCity" name="city" class="form-control" style="width: 100%;">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Pincode</label>
+          <input type="text" id="editShopPincode" name="pincode" class="form-control" style="width: 100%;">
+        </div>
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
@@ -1136,6 +1161,34 @@ if ($tab === 'ACTIVE') {
         <div>
           <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Pickup Radius (km)</label>
           <input type="number" id="editShopRadius" name="pickup_radius_km" class="form-control" style="width: 100%;">
+        </div>
+      </div>
+
+      <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; font-size: 1rem; font-weight: 700; color: var(--brand-purple);">Banking & Financial</h4>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+        <div>
+          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Bank Name</label>
+          <input type="text" id="editShopBankName" name="bank_name" class="form-control" style="width: 100%;">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Account Number</label>
+          <input type="text" id="editShopBankAccount" name="bank_account" class="form-control" style="width: 100%;">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Account Holder</label>
+          <input type="text" id="editShopBankHolder" name="bank_holder" class="form-control" style="width: 100%;">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">IFSC Code</label>
+          <input type="text" id="editShopIfsc" name="ifsc_code" class="form-control" style="width: 100%;">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">UPI ID</label>
+          <input type="text" id="editShopUpi" name="upi_id" class="form-control" style="width: 100%;">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">GST Number</label>
+          <input type="text" id="editShopGst" name="gst_number" class="form-control" style="width: 100%;">
         </div>
       </div>
 
@@ -1784,20 +1837,32 @@ if ($tab === 'ACTIVE') {
     document.getElementById('modalShopSubtitle').innerText = `Shop ID: #${sId} • Registered to ${oName} (${city})`;
 
     let coverGalleryHtml = '';
-    if (coverPhotos && coverPhotos.length > 0) {
+    if (coverUrl) {
       coverGalleryHtml = `
         <div style="background: var(--bg-input); padding: 1.1rem; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 1.25rem;">
           <h4 style="margin: 0 0 0.75rem 0; color: #8162EE; font-size: 0.95rem; font-weight: 800; display: flex; align-items: center; gap: 0.4rem;">
-            🖼️ Uploaded Shop Cover Photos (${coverPhotos.length})
+            🖼️ Shop Cover Photo
           </h4>
-          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.75rem;">
-            ${coverPhotos.map((c, i) => `
-              <div style="cursor: pointer; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color);" onclick="openDocPreview('${sName} - Cover Photo ${i+1}', '${c.url}')">
-                <img src="${c.url}" alt="${c.name || 'Cover'}" style="width: 100%; height: 85px; object-fit: cover;">
-                <div style="font-size: 0.68rem; padding: 0.25rem 0.4rem; background: var(--bg-card); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${c.name || 'Cover ' + (i+1)}</div>
-              </div>
-            `).join('')}
+          <div style="cursor: pointer; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); max-height: 150px;" onclick="openDocPreview('${sName} - Cover Photo', '${coverUrl}')">
+            <img src="${coverUrl}" alt="Cover" style="width: 100%; height: 100%; object-fit: cover;">
           </div>
+        </div>
+      `;
+    } else {
+      coverGalleryHtml = `
+        <div style="background: var(--bg-input); padding: 1.1rem; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 1.25rem;">
+          <h4 style="margin: 0 0 0.75rem 0; color: #8162EE; font-size: 0.95rem; font-weight: 800; display: flex; align-items: center; gap: 0.4rem;">
+            🖼️ Shop Cover Photo
+          </h4>
+          <div style="color: #D97706; font-size: 0.75rem; font-weight: 700; margin-bottom: 10px;">⚠️ Cover Photo Not Uploaded</div>
+          <form action="<?= ADMIN_BASE_URL ?>/laundries/verifications.php" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="upload_missing_doc">
+            <input type="hidden" name="shop_id" value="${sId}">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <input type="file" name="doc_files[cover_url]" style="font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; flex: 1;" required accept="image/*">
+              <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; border-radius: 6px; white-space: nowrap;">Upload Cover Photo</button>
+            </div>
+          </form>
         </div>
       `;
     }
@@ -1808,11 +1873,21 @@ if ($tab === 'ACTIVE') {
         <!-- Header Banner with Shop Logo -->
         <div style="display: flex; align-items: center; gap: 1rem; background: var(--bg-input); padding: 1rem 1.25rem; border-radius: 14px; border: 1px solid var(--border-color);">
           ${sLogo ? `
-            <img src="${sLogo}" alt="${sName}" style="width: 60px; height: 60px; border-radius: 12px; object-fit: cover; border: 2px solid var(--brand-purple); box-shadow: 0 4px 12px rgba(0,0,0,0.15); background: #fff; flex-shrink: 0;">
+            <img src="${sLogo}" alt="${sName}" style="width: 60px; height: 60px; border-radius: 12px; object-fit: cover; border: 2px solid var(--brand-purple); box-shadow: 0 4px 12px rgba(0,0,0,0.15); background: #fff; flex-shrink: 0; cursor: pointer;" onclick="openDocPreview('${sName} - Shop Logo', '${sLogo}')">
           ` : `
-            <div style="width: 60px; height: 60px; border-radius: 12px; background: linear-gradient(135deg, #8162EE 0%, #32138F 100%); color: #FFF; font-size: 1.25rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 12px rgba(129,98,238,0.3);">
-              ${initials}
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <div style="width: 60px; height: 60px; border-radius: 12px; background: linear-gradient(135deg, #8162EE 0%, #32138F 100%); color: #FFF; font-size: 1.25rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 12px rgba(129,98,238,0.3);">
+                ${initials}
+              </div>
             </div>
+            <form action="<?= ADMIN_BASE_URL ?>/laundries/verifications.php" method="POST" enctype="multipart/form-data" style="margin-left: 10px;">
+              <input type="hidden" name="action" value="upload_missing_doc">
+              <input type="hidden" name="shop_id" value="${sId}">
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <input type="file" name="doc_files[logo_url]" style="font-size: 0.65rem; border: 1px solid var(--border-color); border-radius: 4px; padding: 2px; flex: 1; max-width: 120px;" required accept="image/*">
+                <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.65rem; padding: 0.2rem 0.5rem; border-radius: 4px; white-space: nowrap;">Upload Logo</button>
+              </div>
+            </form>
           `}
           <div style="flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
             <div>
@@ -1891,6 +1966,14 @@ if ($tab === 'ACTIVE') {
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 800; font-size: 0.85rem;">Aadhaar / ID Proof</div>
                   <span style="font-size: 0.72rem; color: #D97706; font-weight: 700;">⚠️ Document Not Uploaded</span>
+                  <form action="<?= ADMIN_BASE_URL ?>/laundries/verifications.php" method="POST" enctype="multipart/form-data" style="margin-top: 10px;">
+                    <input type="hidden" name="action" value="upload_missing_doc">
+                    <input type="hidden" name="shop_id" value="${sId}">
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                      <input type="file" name="doc_files[aadhaar]" style="font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; flex: 1;" required accept="image/*,.pdf">
+                      <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; border-radius: 6px; white-space: nowrap;">Upload</button>
+                    </div>
+                  </form>
                 </div>
               `}
             </div>
@@ -1910,6 +1993,14 @@ if ($tab === 'ACTIVE') {
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 800; font-size: 0.85rem;">Trade License / Udyam</div>
                   <span style="font-size: 0.72rem; color: #D97706; font-weight: 700;">⚠️ Document Not Uploaded</span>
+                  <form action="<?= ADMIN_BASE_URL ?>/laundries/verifications.php" method="POST" enctype="multipart/form-data" style="margin-top: 10px;">
+                    <input type="hidden" name="action" value="upload_missing_doc">
+                    <input type="hidden" name="shop_id" value="${sId}">
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                      <input type="file" name="doc_files[udyam]" style="font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; flex: 1;" required accept="image/*,.pdf">
+                      <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; border-radius: 6px; white-space: nowrap;">Upload</button>
+                    </div>
+                  </form>
                 </div>
               `}
             </div>
@@ -1929,6 +2020,14 @@ if ($tab === 'ACTIVE') {
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 800; font-size: 0.85rem;">Bank Cheque / Passbook</div>
                   <span style="font-size: 0.72rem; color: #D97706; font-weight: 700;">⚠️ Document Not Uploaded</span>
+                  <form action="<?= ADMIN_BASE_URL ?>/laundries/verifications.php" method="POST" enctype="multipart/form-data" style="margin-top: 10px;">
+                    <input type="hidden" name="action" value="upload_missing_doc">
+                    <input type="hidden" name="shop_id" value="${sId}">
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                      <input type="file" name="doc_files[bank]" style="font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; flex: 1;" required accept="image/*,.pdf">
+                      <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; border-radius: 6px; white-space: nowrap;">Upload</button>
+                    </div>
+                  </form>
                 </div>
               `}
             </div>
@@ -1948,6 +2047,14 @@ if ($tab === 'ACTIVE') {
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 800; font-size: 0.85rem;">Storefront Signboard</div>
                   <span style="font-size: 0.72rem; color: #D97706; font-weight: 700;">⚠️ Photo Not Uploaded</span>
+                  <form action="<?= ADMIN_BASE_URL ?>/laundries/verifications.php" method="POST" enctype="multipart/form-data" style="margin-top: 10px;">
+                    <input type="hidden" name="action" value="upload_missing_doc">
+                    <input type="hidden" name="shop_id" value="${sId}">
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                      <input type="file" name="doc_files[signboard]" style="font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; flex: 1;" required accept="image/*">
+                      <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; border-radius: 6px; white-space: nowrap;">Upload</button>
+                    </div>
+                  </form>
                 </div>
               `}
             </div>
@@ -1992,9 +2099,18 @@ if ($tab === 'ACTIVE') {
     document.getElementById('editShopId').value = shop.id || shop.shop_id || '';
     document.getElementById('editShopName').value = shop.shopName || shop.name || '';
     document.getElementById('editShopPhone').value = shop.phone || '';
+    document.getElementById('editShopEmail').value = shop.email || '';
     document.getElementById('editShopAddress').value = shop.address || '';
+    document.getElementById('editShopCity').value = shop.city || '';
+    document.getElementById('editShopPincode').value = shop.pincode || shop.pin || '';
     document.getElementById('editShopHours').value = shop.workingHours || shop.working_hours || '08:00 AM - 09:30 PM';
     document.getElementById('editShopRadius').value = shop.pickupRadiusKm || 8;
+    document.getElementById('editShopBankName').value = shop.bankName || shop.bank_name || '';
+    document.getElementById('editShopBankAccount').value = shop.bankAccount || shop.bank_account || '';
+    document.getElementById('editShopBankHolder').value = shop.accountHolder || shop.bank_holder || '';
+    document.getElementById('editShopIfsc').value = shop.ifscCode || shop.ifsc_code || '';
+    document.getElementById('editShopUpi').value = shop.upiId || shop.upi_id || '';
+    document.getElementById('editShopGst').value = shop.gstNumber || shop.gst_number || '';
     openModal('editShopModal');
   }
 

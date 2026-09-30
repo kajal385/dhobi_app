@@ -146,12 +146,15 @@ class OrderController extends Controller
             $order->payment_method = in_array(strtolower($request->input('payment_method', 'cod')), ['cod', 'wallet', 'razorpay', 'upi', 'card', 'netbanking']) ? strtolower($request->input('payment_method', 'cod')) : 'cod';
             $order->subtotal = (float) ($request->input('subtotal', $totalAmount));
             $order->total_amount = $totalAmount;
+            $order->total = $totalAmount;
             $order->commission_amount = $commissionAmount;
             $order->laundry_earnings = $laundryEarnings;
             $order->pickup_charge = (float) ($request->input('pickup_charge', 0));
             $order->delivery_charge = (float) ($request->input('delivery_charge', 0));
+            $order->delivery_fee = $order->delivery_charge;
             $order->tax_amount = (float) ($request->input('tax_amount', 0));
             $order->discount_amount = (float) ($request->input('discount_amount', 0));
+            $order->discount = $order->discount_amount;
             $order->pickup_address = $request->input('pickup_address', $request->input('address', 'Customer Address, Pune'));
             $order->pickup_date = $request->input('pickup_date', now()->format('Y-m-d'));
             $order->delivery_date = $request->input('delivery_date', now()->addDays(2)->format('Y-m-d'));

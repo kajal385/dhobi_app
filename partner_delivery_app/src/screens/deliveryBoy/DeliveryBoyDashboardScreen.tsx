@@ -72,21 +72,21 @@ export const DeliveryBoyDashboardScreen = () => {
         for (const a of assignments) {
           const order = a.order ?? a;
           const status = String(order.status ?? a.status ?? '').toUpperCase();
-          const items = Array.isArray(order.items)
-            ? order.items.map((i: any) => `${i.service_name || i.item_name || 'Service'} x${i.quantity || 1}`).join(', ')
+          const items = Array.isArray(order.items) && order.items.length > 0
+            ? order.items.map((i: any) => `${i.service_name || i.item_name || i.name || 'Service'} x${i.quantity || i.qty || 1}`).join(', ')
             : 'Laundry Service';
           const task: DeliveryTaskItem = {
             id: `ORD-${order.id ?? order.order_id ?? a.id}`,
             type: ['RECEIVED', 'CONFIRMED', 'PICKUP_ASSIGNED', 'PICKED_UP'].includes(status) ? 'Pickup' : 'Delivery',
-            customer: order.customer?.name || order.customerName || 'Customer',
-            phone: order.customer?.phone || order.customerPhone || 'N/A',
-            address: order.customer?.address || order.address || 'Pune',
-            shopName: order.laundry_shop?.name || order.laundryName || 'Laundry Shop',
-            time: order.pickup_time || order.delivery_time || order.created_at?.slice(0, 16)?.replace('T', ' ') || 'Today',
+            customer: (typeof order.customer === 'object' ? order.customer?.name : order.customer) || (typeof order.customerName === 'object' ? order.customerName?.name : order.customerName) || 'Customer',
+            phone: (typeof order.customer === 'object' ? order.customer?.phone : null) || (typeof order.customerPhone === 'object' ? order.customerPhone?.phone : order.customerPhone) || 'N/A',
+            address: (typeof order.customer === 'object' ? order.customer?.address : null) || (typeof order.address === 'object' ? order.address?.address : order.address) || 'Pune',
+            shopName: (typeof order.laundry_shop === 'object' ? order.laundry_shop?.name : null) || (typeof order.laundryName === 'object' ? order.laundryName?.name : order.laundryName) || 'Laundry Shop',
+            time: typeof order.pickup_time === 'string' ? order.pickup_time : (typeof order.delivery_time === 'string' ? order.delivery_time : (typeof order.created_at === 'string' ? order.created_at.slice(0, 16).replace('T', ' ') : 'Today')),
             items,
             status: ['DELIVERED', 'COMPLETED'].includes(status) ? 'Completed' : 'Pending',
             isUrgent: Boolean(order.is_urgent || order.isUrgent),
-            amount: `₹${order.total_amount ?? order.totalAmount ?? 0} (${order.payment_status || order.paymentStatus || 'Unpaid'})`,
+            amount: `₹${order.total_amount ?? order.totalAmount ?? 0} (${typeof order.payment_status === 'string' ? order.payment_status : (typeof order.paymentStatus === 'string' ? order.paymentStatus : 'Unpaid')})`,
             rawOrder: order,
           };
 
@@ -115,22 +115,22 @@ export const DeliveryBoyDashboardScreen = () => {
       if (isAlreadyAdded) continue;
 
       const statusUpper = String(order.status || '').toUpperCase();
-      const itemsStr = Array.isArray(order.items)
-        ? order.items.map((i: any) => `${i.serviceName || i.name} x${i.qty || 1}`).join(', ')
-        : 'Laundry Items';
+      const itemsStr = Array.isArray(order.items) && order.items.length > 0
+        ? order.items.map((i: any) => `${i.serviceName || i.service_name || i.name || i.item_name || 'Service'} x${i.qty || i.quantity || 1}`).join(', ')
+        : 'Laundry Service';
 
       const task: DeliveryTaskItem = {
         id: order.id,
         type: ['RECEIVED', 'CONFIRMED', 'PROCESSING'].includes(statusUpper) ? 'Pickup' : 'Delivery',
-        customer: order.customerName || 'Customer',
-        phone: order.mobile || 'N/A',
-        address: order.address || 'Pune',
+        customer: (typeof order.customerName === 'object' ? order.customerName?.name : order.customerName) || (typeof order.customer === 'object' ? order.customer?.name : order.customer) || 'Customer',
+        phone: (typeof order.mobile === 'object' ? order.mobile?.phone : order.mobile) || 'N/A',
+        address: (typeof order.address === 'object' ? order.address?.address : order.address) || 'Pune',
         shopName: 'DhobiPro Laundry',
-        time: order.dueDate || 'Today',
+        time: typeof order.dueDate === 'string' ? order.dueDate : 'Today',
         items: itemsStr,
         status: ['DELIVERED', 'COMPLETED'].includes(statusUpper) ? 'Completed' : 'Pending',
         isUrgent: Boolean(order.isUrgent),
-        amount: `₹${order.totalAmount} (${order.paymentStatus || 'Unpaid'})`,
+        amount: `₹${order.totalAmount} (${typeof order.paymentStatus === 'string' ? order.paymentStatus : 'Unpaid'})`,
         rawOrder: order,
       };
 

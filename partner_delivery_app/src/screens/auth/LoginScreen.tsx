@@ -42,7 +42,7 @@ export const LoginScreen = () => {
 
   const handleLogin = async () => {
     if (!phone.trim()) {
-      Alert.alert('Required', 'Please enter your mobile number.');
+      Alert.alert('Required', 'Please enter your email or mobile number.');
       return;
     }
     if (!password.trim()) {
@@ -198,9 +198,10 @@ export const LoginScreen = () => {
           {/* Form */}
           <View style={styles.form}>
             <AppInput
-              label="Mobile Number"
-              placeholder="Enter mobile number"
-              keyboardType="phone-pad"
+              label="Email or Mobile Number"
+              placeholder="Enter email or mobile number"
+              keyboardType="email-address"
+              autoCapitalize="none"
               value={phone}
               onChangeText={setPhone}
             />

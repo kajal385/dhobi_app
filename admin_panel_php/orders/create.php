@@ -35,13 +35,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($customerName) || empty($customerPhone)) {
         $error = 'Customer Name and Mobile Number are required.';
     } else {
-        // Here we would call the API:
-        // $res = ApiClient::post('/owner/orders', [...]);
-        // For demonstration, we simply mock success.
+        $shopId = isLaundryOwner() ? currentShopId() : null; 
+
+        // Structure the payload exactly as the Laravel API expects
+        $payload = [
+            'shop_id'         => $shopId,
+            'customer_name'   => $customerName,
+            'customer_phone'  => $customerPhone,
+            'total_amount'    => $totalAmount,
+            'payment_method'  => $paymentMethod,
+            'payment_status'  => 'paid',
+            'status'          => 'RECEIVED',
+            'pickup_address'  => 'Walk-in / Counter',
+            'items'           => $servicesItems
+        ];
         
-        // Mocking a successful booking:
-        $_SESSION['order_status_overrides']['NEW-WALKIN-' . time()] = 'RECEIVED';
-        $msg = 'Walk-in order created successfully for ' . htmlspecialchars($customerName) . '!';
+        $orderEndpoint = $isOwner ? '/owner/orders' : '/admin/orders';
+        $res = apiPost($orderEndpoint, $payload);
+        
+        if ($res && isset($res['success']) && $res['success'] === true) {
+            $orderNumber = $res['data']['data']['order_number'] ?? 'New Order';
+            $msg = 'Walk-in order (' . $orderNumber . ') created successfully for ' . htmlspecialchars($customerName) . '!';
+        } else {
+            $error = $res['error'] ?? ($res['data']['message'] ?? 'API Error: ' . json_encode($res));
+        }
     }
 }
 ?>

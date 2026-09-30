@@ -32,56 +32,11 @@ $cities = $d['cities'] ?? $d['topCities'] ?? [
 $topShops = $d['topLaundryShops'] ?? $d['topShops'] ?? [];
 
 // Owner Specific Orders & Calculations (Strictly Private to Logged-in Shop)
-$ownerShopOrders = [
-    [
-        'id' => '101',
-        'orderNumber' => 'ORD-5PZLJ9',
-        'customerName' => 'Kajal Gajare',
-        'customerPhone' => '+91 9309386003',
-        'shopName' => $myShopName,
-        'amount' => 1475,
-        'status' => 'CANCELLED',
-        'items' => '5 Garments (Dry Clean & Wash)',
-        'driver' => 'Unassigned',
-        'createdAt' => 'Today 09:30 AM'
-    ],
-    [
-        'id' => '102',
-        'orderNumber' => 'ORD-22IYNV',
-        'customerName' => 'Kajal Gajare',
-        'customerPhone' => '+91 9309386003',
-        'shopName' => $myShopName,
-        'amount' => 1130,
-        'status' => 'DELIVERED',
-        'items' => '5 Garments (Wash & Fold)',
-        'driver' => 'Rahul Shinde',
-        'createdAt' => 'Yesterday 04:15 PM'
-    ],
-    [
-        'id' => '103',
-        'orderNumber' => 'ORD-BYLGX5',
-        'customerName' => 'Kajal Gajare',
-        'customerPhone' => '+91 9309386003',
-        'shopName' => $myShopName,
-        'amount' => 270,
-        'status' => 'READY',
-        'items' => '2 Garments (Jeans & Saree)',
-        'driver' => 'Rahul Shinde',
-        'createdAt' => 'Today 10:15 AM'
-    ],
-    [
-        'id' => '104',
-        'orderNumber' => 'ORD-8801',
-        'customerName' => 'Pooja Verma',
-        'customerPhone' => '+91 9811200998',
-        'shopName' => $myShopName,
-        'amount' => 1250,
-        'status' => 'OUT_FOR_DELIVERY',
-        'items' => '6 Garments (Suit & Fold)',
-        'driver' => 'Rahul Shinde',
-        'createdAt' => 'Today 11:45 AM'
-    ]
-];
+// Fetch real live orders from the database
+$orderEndpoint = $isOwner ? '/owner/orders' : '/admin/orders';
+$params = $isOwner && $shopId ? ['shop_id' => $shopId] : [];
+$ordersRes = apiGet($orderEndpoint, $params);
+$ownerShopOrders = apiExtractList($ordersRes);
 
 // Apply any order status overrides saved in session
 if (!empty($_SESSION['order_status_overrides'])) {
@@ -99,7 +54,12 @@ if (!empty($_SESSION['order_status_overrides'])) {
 
 // Compute shop-level metrics
 $ownerTotalOrders = count($ownerShopOrders);
-$ownerGrossRevenue = 1400; // Matches financial settlement record
+$ownerGrossRevenue = 0;
+foreach ($ownerShopOrders as $o) {
+    if (in_array($o['status'], ['DELIVERED', 'COMPLETED'])) {
+        $ownerGrossRevenue += floatval($o['total_amount'] ?? $o['amount'] ?? 0);
+    }
+}
 $ownerCommission = round($ownerGrossRevenue * 0.15, 2);
 $ownerGst = round($ownerCommission * 0.18, 2);
 $ownerNetPayable = round($ownerGrossRevenue - $ownerCommission - $ownerGst, 2);
@@ -191,13 +151,13 @@ $ownerDeliveredOrders = count(array_filter($ownerShopOrders, fn($o) => $o['statu
     <div style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #E18C8E 67.34%, #FE9A5D 98.26%); border-radius: 16px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 10px 25px rgba(129, 98, 238, 0.35); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
       <div style="flex: 1; min-width: 150px;">
         <div style="font-size: 0.85rem; color: rgba(255,255,255,0.9); margin-bottom: 0.4rem; font-weight: 700;">Today's Revenue</div>
-        <div style="font-size: 2.2rem; font-weight: 900; line-height: 1; color: #FFF;">₹1,400</div>
+        <div style="font-size: 2.2rem; font-weight: 900; line-height: 1; color: #FFF;">₹<?= number_format($ownerGrossRevenue) ?></div>
       </div>
       <div style="width: 2px; height: 50px; background: rgba(255,255,255,0.25); margin: 0 1rem;" class="hide-mobile"></div>
       <div style="flex: 1; min-width: 150px; display: flex; align-items: center; justify-content: space-between;">
         <div>
           <div style="font-size: 0.85rem; color: rgba(255,255,255,0.9); margin-bottom: 0.4rem; font-weight: 700;">Shop Total Earnings</div>
-          <div style="font-size: 1.8rem; font-weight: 800; line-height: 1; color: #FFF;">₹2,875</div>
+          <div style="font-size: 1.8rem; font-weight: 800; line-height: 1; color: #FFF;">₹<?= number_format($ownerGrossRevenue) ?></div>
         </div>
         <a href="<?= ADMIN_BASE_URL ?>/finance/index.php" style="color: #FFF; text-decoration: none; width: 36px; height: 36px; background: rgba(255,255,255,0.25); border-radius: 50%; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
           <i data-lucide="arrow-right" style="width: 20px; height: 20px;"></i>
@@ -215,29 +175,29 @@ $ownerDeliveredOrders = count(array_filter($ownerShopOrders, fn($o) => $o['statu
 
     <!-- Stats Grid -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2.5rem;">
-      <div style="background: #FFF; border-radius: 16px; padding: 1.25rem; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+      <a href="<?= ADMIN_BASE_URL ?>/orders/index.php" style="text-decoration: none; display: block; background: #FFF; border-radius: 16px; padding: 1.25rem; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 12px rgba(0,0,0,0.03); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(0,0,0,0.08)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.03)';">
         <div style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 0.5rem;">Today's Orders</div>
-        <div style="font-size: 1.8rem; font-weight: 900; color: #1E1B4B;">3</div>
-        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">1 Active</div>
-      </div>
+        <div style="font-size: 1.8rem; font-weight: 900; color: #1E1B4B;"><?= $ownerTotalOrders ?></div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;"><?= $ownerPendingOrders ?> Active</div>
+      </a>
       
-      <div style="background: #FFF; border-radius: 16px; padding: 1.25rem; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+      <a href="<?= ADMIN_BASE_URL ?>/orders/index.php?status=PENDING,CONFIRMED" style="text-decoration: none; display: block; background: #FFF; border-radius: 16px; padding: 1.25rem; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 12px rgba(0,0,0,0.03); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(0,0,0,0.08)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.03)';">
         <div style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 0.5rem;">Pending Pickups</div>
-        <div style="font-size: 1.8rem; font-weight: 900; color: #1E1B4B;">0</div>
+        <div style="font-size: 1.8rem; font-weight: 900; color: #1E1B4B;"><?= count(array_filter($ownerShopOrders, fn($o) => in_array($o['status'], ['PENDING', 'CONFIRMED']))) ?></div>
         <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Scheduled / Pending</div>
-      </div>
+      </a>
       
-      <div style="background: #FFF; border-radius: 16px; padding: 1.25rem; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+      <a href="<?= ADMIN_BASE_URL ?>/orders/index.php?status=READY,OUT_FOR_DELIVERY" style="text-decoration: none; display: block; background: #FFF; border-radius: 16px; padding: 1.25rem; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 12px rgba(0,0,0,0.03); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(0,0,0,0.08)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.03)';">
         <div style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 0.5rem;">Pending Deliveries</div>
-        <div style="font-size: 1.8rem; font-weight: 900; color: #1E1B4B;">1</div>
+        <div style="font-size: 1.8rem; font-weight: 900; color: #1E1B4B;"><?= count(array_filter($ownerShopOrders, fn($o) => in_array($o['status'], ['READY', 'OUT_FOR_DELIVERY']))) ?></div>
         <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Ready / Out for delivery</div>
-      </div>
+      </a>
       
-      <div style="background: #FFF; border-radius: 16px; padding: 1.25rem; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+      <a href="<?= ADMIN_BASE_URL ?>/orders/index.php?status=CANCELLED" style="text-decoration: none; display: block; background: #FFF; border-radius: 16px; padding: 1.25rem; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 12px rgba(0,0,0,0.03); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(0,0,0,0.08)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.03)';">
         <div style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 0.5rem;">Cancelled</div>
-        <div style="font-size: 1.8rem; font-weight: 900; color: #1E1B4B;">0</div>
+        <div style="font-size: 1.8rem; font-weight: 900; color: #1E1B4B;"><?= count(array_filter($ownerShopOrders, fn($o) => $o['status'] === 'CANCELLED')) ?></div>
         <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Total Cancelled</div>
-      </div>
+      </a>
       
       <div style="background: #FFF; border-radius: 16px; padding: 1.25rem; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
         <div style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 0.5rem;">Customer Rating</div>
@@ -249,9 +209,9 @@ $ownerDeliveredOrders = count(array_filter($ownerShopOrders, fn($o) => $o['statu
       </div>
       
       <div style="background: #FFF; border-radius: 16px; padding: 1.25rem; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
-        <div style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 0.5rem;">Delivery Success</div>
-        <div style="font-size: 1.8rem; font-weight: 900; color: #1E1B4B;">67%</div>
-        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">2 Deliveries today</div>
+        <div style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 0.5rem;">Delivery Completed</div>
+        <div style="font-size: 1.8rem; font-weight: 900; color: #1E1B4B;"><?= $ownerDeliveredOrders ?></div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Total Delivered</div>
       </div>
     </div>
 

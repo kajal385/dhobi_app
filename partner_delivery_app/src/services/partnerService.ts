@@ -32,9 +32,15 @@ export const partnerService = {
     }
   },
 
-  ownerLogin: async (phone: string, password: string) => {
+  ownerLogin: async (identifier: string, password: string) => {
     try {
-      const res = await apiClient.post('/owner/login', { phone, password, role: 'laundry_owner' });
+      const isEmail = identifier.includes('@');
+      const payload = { 
+        password, 
+        role: 'laundry_owner',
+        ...(isEmail ? { email: identifier.trim() } : { phone: identifier.trim() })
+      };
+      const res = await apiClient.post('/owner/login', payload);
       return res.data;
     } catch (err: any) {
       // Surface server errors (401 wrong password, 404 not found) to the caller
@@ -184,9 +190,10 @@ export const partnerService = {
     }
   },
 
-  getDeliveryAssignments: async (): Promise<DeliveryAssignment[]> => {
+  getDeliveryAssignments: async (driverId?: string | number): Promise<DeliveryAssignment[]> => {
     try {
-      const res = await apiClient.get('/delivery/assignments');
+      const params = driverId ? { driver_id: driverId } : {};
+      const res = await apiClient.get('/delivery/assignments', { params });
       return res.data.data;
     } catch {
       return [

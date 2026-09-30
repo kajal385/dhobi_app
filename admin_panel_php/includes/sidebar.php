@@ -93,11 +93,7 @@ $isLaundryActive = isSidebarActive('/laundries/', $currentUri);
         <i data-lucide="store" style="width: 18px; height: 18px; color: <?= $active ? '#FFF' : '#4338CA' ?>;"></i>
         <span class="nav-text">My Shop Profile</span>
       </a>
-      <?php $vActive = isSidebarActive('/laundries/verifications', $currentUri); ?>
-      <a href="<?= ADMIN_BASE_URL ?>/laundries/verifications.php" class="nav-item <?= $vActive ? 'active' : '' ?>" title="Verification & Compliance">
-        <i data-lucide="shield-check" style="width: 18px; height: 18px; color: <?= $vActive ? '#FFF' : '#10B981' ?>;"></i>
-        <span class="nav-text">Verification &amp; KYC</span>
-      </a>
+
     <?php endif; ?>
 
     <!-- Order Control Center -->

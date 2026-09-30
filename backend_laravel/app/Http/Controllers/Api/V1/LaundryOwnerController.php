@@ -359,6 +359,7 @@ class LaundryOwnerController extends Controller
         if (in_array($status, ['CANCELLED', 'REJECTED', 'CANCEL'])) {
             $reason = $request->input('cancellation_reason') ?? $request->input('reason') ?? $request->input('notes') ?? 'Order cancelled by laundry shop owner';
             $order->cancellation_reason = $reason;
+            $order->cancel_reason = $reason; // Ensure duplicate column is also filled for apps that expect it
             $notes = $reason;
         }
         $order->save();
@@ -708,7 +709,6 @@ class LaundryOwnerController extends Controller
             $shopUpdates['upi_id'] = $request->input('upi_id');
         }
 
-        // Process logo and cover images if sent
         if ($request->filled('logo_url')) {
             $logoUrl = $this->processDocumentMedia($request->input('logo_url'), 'logo', $shop->id);
             $shopUpdates['logo_url'] = $logoUrl ?: $request->input('logo_url');
@@ -716,6 +716,22 @@ class LaundryOwnerController extends Controller
         if ($request->filled('cover_url')) {
             $coverUrl = $this->processDocumentMedia($request->input('cover_url'), 'cover', $shop->id);
             $shopUpdates['cover_url'] = $coverUrl ?: $request->input('cover_url');
+        }
+        if ($request->filled('id_proof_photo')) {
+            $idProofPhoto = $this->processDocumentMedia($request->input('id_proof_photo'), 'id_proof', $shop->id);
+            $shopUpdates['id_proof_photo'] = $idProofPhoto ?: $request->input('id_proof_photo');
+        }
+        if ($request->filled('business_proof_photo')) {
+            $bizProofPhoto = $this->processDocumentMedia($request->input('business_proof_photo'), 'biz_proof', $shop->id);
+            $shopUpdates['business_proof_photo'] = $bizProofPhoto ?: $request->input('business_proof_photo');
+        }
+        if ($request->filled('bank_proof_photo')) {
+            $bankProofPhoto = $this->processDocumentMedia($request->input('bank_proof_photo'), 'bank_proof', $shop->id);
+            $shopUpdates['bank_proof_photo'] = $bankProofPhoto ?: $request->input('bank_proof_photo');
+        }
+        if ($request->filled('shop_board_photo')) {
+            $shopBoardPhoto = $this->processDocumentMedia($request->input('shop_board_photo'), 'shop_board', $shop->id);
+            $shopUpdates['shop_board_photo'] = $shopBoardPhoto ?: $request->input('shop_board_photo');
         }
 
         if (!empty($shopUpdates)) {
@@ -1399,13 +1415,16 @@ class LaundryOwnerController extends Controller
             $order->payment_method    = in_array($paymentMethod, ['cash', 'upi', 'card', 'bank', 'cod', 'online']) ? $paymentMethod : 'cash';
             $order->subtotal          = $subtotal;
             $order->total_amount      = $totalAmount;
+            $order->total             = $totalAmount;
             $order->discount_amount   = $discount;
+            $order->discount          = $discount;
             $order->delivery_charge   = $deliveryCharge;
+            $order->delivery_fee      = $deliveryCharge;
             $order->tax_amount        = $taxAmount;
             $order->commission_amount = $commissionAmount;
             $order->laundry_earnings  = $laundryEarnings;
             $order->pickup_address    = $request->input('pickup_address', 'Shop Counter / Walk-in');
-            $order->delivery_address  = $request->input('delivery_address', $request->input('pickup_address', 'Shop Counter'));
+
             $order->pickup_date       = $request->input('pickup_date', now()->format('Y-m-d'));
             $order->delivery_date     = $request->input('delivery_date', now()->addDays(2)->format('Y-m-d'));
             $order->notes             = $request->input('notes', 'Walk-in order created by laundry owner');

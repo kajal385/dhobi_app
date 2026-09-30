@@ -18,9 +18,11 @@ import { COLORS, FONTS, SPACING, SIZES } from '../../theme';
 import { partnerService } from '../../services/partnerService';
 import { apiClient } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
 export const DeliveryBoyManagementScreen = () => {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
   const { currentShop } = useAuth();
   const shopId = currentShop?.id;
 
@@ -39,6 +41,7 @@ export const DeliveryBoyManagementScreen = () => {
         setBoys(serverBoys.map((b: any) => ({
           id: String(b.id ?? b.raw_id),
           numericId: b.id ?? b.raw_id,
+          userId: b.user_id ?? b.userId ?? '',
           shopId: b.shop_id || shopId,
           name: b.name ?? 'Delivery Boy',
           phone: b.phone ?? '',
@@ -278,51 +281,7 @@ export const DeliveryBoyManagementScreen = () => {
                   </View>
                 </View>
 
-                {/* Assigned Orders for this Executive */}
-                {(() => {
-                  const boyId = String(boy.raw_id || boy.numericId || boy.id || '').replace('BOY-', '');
-                  const boyUserId = String(boy.user_id || boy.userId || '');
-                  const assigned = shopOrders.filter((o: any) => {
-                    const targetId = String(o.delivery_boy_id ?? o.deliveryPartner?.id ?? '').replace('BOY-', '');
-                    return targetId && (targetId === boyId || targetId === boyUserId);
-                  });
-                  return (
-                    <View style={styles.assignedOrdersContainer}>
-                      <Text style={styles.assignedSectionTitle}>
-                        📦 Assigned Orders ({assigned.length})
-                      </Text>
-                      {assigned.length === 0 ? (
-                        <Text style={styles.assignedEmptyTxt}>No active orders assigned currently</Text>
-                      ) : (
-                        assigned.map((ao: any) => {
-                          const customerName = ao.customer?.name || ao.customer_name || 'Customer';
-                          const customerPhone = ao.customer?.phone || ao.customer_phone || '';
-                          const itemsTxt = Array.isArray(ao.items) && ao.items.length > 0
-                            ? ao.items.map((i: any) => `${i.service_name || i.item_name || 'Item'} x${i.quantity || 1}`).join(', ')
-                            : '';
-                          return (
-                            <View key={ao.id} style={styles.assignedOrderChip}>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.assignedOrderTxt} numberOfLines={1}>
-                                  {ao.order_number || `ORD-${ao.id}`} • {customerName} {customerPhone ? `(${customerPhone})` : ''}
-                                </Text>
-                                <Text style={styles.assignedSubTxt} numberOfLines={1}>
-                                  📍 {ao.pickup_address || ao.delivery_address || 'Address N/A'} • ₹{ao.total_amount || 0}
-                                </Text>
-                                {itemsTxt ? (
-                                  <Text style={[styles.assignedSubTxt, { color: COLORS.primaryDark, marginTop: 1 }]} numberOfLines={1}>
-                                    🧺 {itemsTxt}
-                                  </Text>
-                                ) : null}
-                              </View>
-                              <Text style={styles.assignedStatusTxt}>{ao.status || 'ASSIGNED'}</Text>
-                            </View>
-                          );
-                        })
-                      )}
-                    </View>
-                  );
-                })()}
+
 
                 {/* Card Action Buttons */}
                 <View style={styles.actionRow}>
@@ -451,6 +410,91 @@ export const DeliveryBoyManagementScreen = () => {
                       </Text>
                     </View>
                   </View>
+
+                  {/* Comprehensive Assigned Orders & Stats inside Modal */}
+                  {(() => {
+                    const boyId = String(selectedBoy.raw_id || selectedBoy.numericId || selectedBoy.id || '').replace('BOY-', '');
+                    const boyUserId = String(selectedBoy.user_id || selectedBoy.userId || '');
+                    const assigned = shopOrders.filter((o: any) => {
+                      const targetId = String(o.delivery_boy_id ?? o.deliveryPartner?.id ?? '').replace('BOY-', '');
+                      return targetId && (targetId === boyId || targetId === boyUserId);
+                    });
+
+                    let completed = 0, pickup = 0, delivery = 0, pending = 0;
+                    assigned.forEach((ao: any) => {
+                      const st = String(ao.status || '').toUpperCase();
+                      const rawSt = String(ao.rawStatus || ao.status || '').toUpperCase();
+                      if (['COMPLETED', 'DELIVERED'].includes(st) || ['COMPLETED', 'DELIVERED'].includes(rawSt)) completed++;
+                      else pending++;
+
+                      if (['RECEIVED', 'CONFIRMED', 'PICKUP_ASSIGNED', 'PICKED_UP'].includes(rawSt)) pickup++;
+                      else delivery++;
+                    });
+
+                    return (
+                      <View style={{ marginTop: SPACING.md }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.sm }}>
+                          <View style={[styles.detailStatBox, { backgroundColor: COLORS.primaryLight + '20' }]}>
+                            <Text style={[styles.detailStatVal, { color: COLORS.primaryDark }]}>{assigned.length}</Text>
+                            <Text style={styles.detailStatLbl}>Total Assigned</Text>
+                          </View>
+                          <View style={[styles.detailStatBox, { backgroundColor: COLORS.success + '20' }]}>
+                            <Text style={[styles.detailStatVal, { color: COLORS.success }]}>{completed}</Text>
+                            <Text style={styles.detailStatLbl}>Completed</Text>
+                          </View>
+                          <View style={[styles.detailStatBox, { backgroundColor: COLORS.warning + '20' }]}>
+                            <Text style={[styles.detailStatVal, { color: COLORS.warning }]}>{pending}</Text>
+                            <Text style={styles.detailStatLbl}>Pending</Text>
+                          </View>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.md }}>
+                          <View style={[styles.detailStatBox, { backgroundColor: COLORS.error + '10', flex: 1, marginRight: 5 }]}>
+                            <Text style={[styles.detailStatVal, { color: COLORS.error }]}>{pickup}</Text>
+                            <Text style={styles.detailStatLbl}>Pickups</Text>
+                          </View>
+                          <View style={[styles.detailStatBox, { backgroundColor: COLORS.info + '10', flex: 1, marginLeft: 5 }]}>
+                            <Text style={[styles.detailStatVal, { color: COLORS.info }]}>{delivery}</Text>
+                            <Text style={styles.detailStatLbl}>Deliveries</Text>
+                          </View>
+                        </View>
+
+                        <Text style={styles.assignedSectionTitle}>
+                          📋 Active & Past Assignments
+                        </Text>
+                        <ScrollView style={{ maxHeight: 200, backgroundColor: COLORS.background, borderRadius: SIZES.radius_sm, padding: SPACING.sm, borderColor: COLORS.border, borderWidth: 1 }} nestedScrollEnabled>
+                          {assigned.length === 0 ? (
+                            <Text style={styles.assignedEmptyTxt}>No active orders assigned currently</Text>
+                          ) : (
+                            assigned.map((ao: any) => {
+                              const customerName = ao.customer?.name || ao.customer_name || ao.customer || 'Customer';
+                              const customerPhone = ao.customer?.phone || ao.customer_phone || ao.phone || '';
+                              return (
+                                <TouchableOpacity 
+                                  key={ao.id} 
+                                  style={[styles.assignedOrderChip, { backgroundColor: COLORS.white, marginBottom: 8 }]}
+                                  activeOpacity={0.7}
+                                  onPress={() => {
+                                    setSelectedBoy(null);
+                                    navigation.navigate('OrderDetail', { order: ao });
+                                  }}
+                                >
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={styles.assignedOrderTxt} numberOfLines={1}>
+                                      {ao.order_number || ao.id} • {customerName}
+                                    </Text>
+                                    <Text style={styles.assignedSubTxt} numberOfLines={1}>
+                                      📍 {ao.pickup_address || ao.delivery_address || ao.address || 'Address N/A'}
+                                    </Text>
+                                  </View>
+                                  <Text style={styles.assignedStatusTxt}>{ao.status || 'ASSIGNED'}</Text>
+                                </TouchableOpacity>
+                              );
+                            })
+                          )}
+                        </ScrollView>
+                      </View>
+                    );
+                  })()}
 
                   <TouchableOpacity
                     style={[styles.saveBtn, { marginTop: SPACING.lg }]}
@@ -931,5 +975,24 @@ const styles = StyleSheet.create({
     borderRadius: SIZES.radius_sm,
   },
   assignBtnTxt: { fontFamily: FONTS.bold, fontSize: 12, color: COLORS.white },
+  detailStatBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.sm,
+    borderRadius: SIZES.radius_sm,
+    flex: 1,
+    marginHorizontal: 3,
+  },
+  detailStatVal: {
+    fontFamily: FONTS.bold,
+    fontSize: 16,
+  },
+  detailStatLbl: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
 });
 

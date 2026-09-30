@@ -8,8 +8,31 @@ $isDaily = $activeTab === 'Daily';
 $isWeekly = $activeTab === 'Weekly';
 $isMonthly = $activeTab === 'Monthly';
 
-$revenue = $isDaily ? 1400 : ($isWeekly ? 8400 : 32500);
-$allTime = 32500;
+$shopId = currentShopId();
+$ordersRes = apiGet('/owner/orders', ['shop_id' => $shopId]);
+$ownerShopOrders = apiExtractList($ordersRes);
+
+$revenue = 0;
+$allTime = 0;
+$now = time();
+
+foreach ($ownerShopOrders as $o) {
+    if (in_array($o['status'], ['DELIVERED', 'COMPLETED'])) {
+        $amt = floatval($o['total_amount'] ?? $o['amount'] ?? 0);
+        $allTime += $amt;
+        
+        $orderTime = strtotime($o['created_at'] ?? 'now');
+        if ($isDaily && ($now - $orderTime < 86400)) {
+            $revenue += $amt;
+        } elseif ($isWeekly && ($now - $orderTime < 7 * 86400)) {
+            $revenue += $amt;
+        } elseif ($isMonthly && ($now - $orderTime < 30 * 86400)) {
+            $revenue += $amt;
+        }
+    }
+}
+
+// Since the DB is currently empty for this user, if we want the percentages to not crash, we should default revenue to 0 but prevent division by zero below
 $commissionRate = 0.10;
 $platformFee = $revenue * $commissionRate;
 $netEarnings = $revenue - $platformFee;
@@ -109,7 +132,7 @@ $services = [
       <h3 style="font-size: 1.05rem; font-weight: 800; margin: 0 0 0.75rem 0;">Service-Wise Revenue</h3>
       <div style="background: #FFF; border-radius: 12px; padding: 1.25rem; border: 1px solid var(--border-color); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
         <?php foreach ($services as $srv): 
-          $pct = ($srv['amount'] / $revenue) * 100;
+          $pct = $revenue > 0 ? ($srv['amount'] / $revenue) * 100 : 0;
         ?>
           <div style="margin-bottom: 1.25rem;">
             <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 700; margin-bottom: 0.5rem; color: #1E1B4B;">
@@ -131,11 +154,15 @@ $services = [
       <div>
         <h3 style="font-size: 1.05rem; font-weight: 800; margin: 0 0 0.75rem 0;">Top Customers</h3>
         <div style="background: #FFF; border-radius: 12px; padding: 1.25rem; border: 1px solid var(--border-color); box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <div style="font-size: 0.95rem; font-weight: 800; color: #1E1B4B;">1. Kajal Gajare</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;"><?= $isDaily ? 2 : 5 ?> orders completed</div>
-          </div>
-          <div style="font-size: 1.1rem; font-weight: 800; color: #10B981;">₹<?= number_format($revenue) ?></div>
+          <?php if (!empty($ownerShopOrders)): ?>
+            <div>
+              <div style="font-size: 0.95rem; font-weight: 800; color: #1E1B4B;">1. <?= htmlspecialchars($ownerShopOrders[0]['customer_name'] ?? $ownerShopOrders[0]['customerName'] ?? 'Customer') ?></div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;"><?= count($ownerShopOrders) ?> orders completed</div>
+            </div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: #10B981;">₹<?= number_format($revenue) ?></div>
+          <?php else: ?>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">No customers yet</div>
+          <?php endif; ?>
         </div>
       </div>
 
@@ -143,25 +170,30 @@ $services = [
         <h3 style="font-size: 1.05rem; font-weight: 800; margin: 0 0 0.75rem 0;">Recent Transactions</h3>
         <div style="background: #FFF; border-radius: 12px; padding: 0.5rem 1.25rem; border: 1px solid var(--border-color); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
           <?php
-          $txns = [
-              ['id' => 'TXN-30', 'name' => 'Kajal Gajare', 'date' => '23 Sep 2026, 09:19 AM', 'amt' => 1475, 'status' => 'PENDING', 'color' => '#F59E0B', 'bg' => 'rgba(245, 158, 11, 0.1)'],
-              ['id' => 'TXN-29', 'name' => 'Kajal Gajare', 'date' => '18 Sep 2026, 11:56 AM', 'amt' => 1130, 'status' => 'PAID', 'color' => '#10B981', 'bg' => 'rgba(16, 185, 129, 0.1)'],
-              ['id' => 'TXN-27', 'name' => 'Kajal Gajare', 'date' => '17 Sep 2026, 10:20 AM', 'amt' => 270, 'status' => 'PENDING', 'color' => '#F59E0B', 'bg' => 'rgba(245, 158, 11, 0.1)'],
-          ];
-          foreach ($txns as $index => $t):
+          if (empty($ownerShopOrders)):
           ?>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; <?= $index < count($txns) - 1 ? 'border-bottom: 1px solid var(--border-color);' : '' ?>">
+            <div style="padding: 1rem 0; text-align: center; color: var(--text-muted); font-size: 0.85rem;">No recent transactions</div>
+          <?php else: ?>
+          <?php
+          $recentOrders = array_slice($ownerShopOrders, 0, 5);
+          foreach ($recentOrders as $index => $t):
+             $amt = floatval($t['total_amount'] ?? $t['amount'] ?? 0);
+             $status = strtoupper($t['status'] ?? 'PENDING');
+             $bg = $status === 'PAID' || $status === 'DELIVERED' || $status === 'COMPLETED' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+             $color = $status === 'PAID' || $status === 'DELIVERED' || $status === 'COMPLETED' ? '#10B981' : '#F59E0B';
+          ?>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; <?= $index < count($recentOrders) - 1 ? 'border-bottom: 1px solid var(--border-color);' : '' ?>">
               <div>
-                <div style="font-size: 0.75rem; color: #32138F; font-weight: 700; margin-bottom: 0.2rem;"><?= $t['id'] ?></div>
-                <div style="font-size: 0.95rem; font-weight: 800; color: #1E1B4B;"><?= $t['name'] ?></div>
-                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;"><?= $t['date'] ?></div>
+                <div style="font-size: 0.75rem; color: #32138F; font-weight: 700; margin-bottom: 0.2rem;"><?= htmlspecialchars($t['order_number'] ?? $t['orderNumber'] ?? $t['id']) ?></div>
+                <div style="font-size: 0.95rem; font-weight: 800; color: #1E1B4B;"><?= htmlspecialchars($t['customer_name'] ?? $t['customerName'] ?? 'Customer') ?></div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;"><?= htmlspecialchars($t['created_at'] ?? $t['createdAt'] ?? 'Recently') ?></div>
               </div>
               <div style="text-align: right;">
-                <div style="font-size: 1.05rem; font-weight: 800; color: #E11D48; margin-bottom: 0.3rem;">₹<?= number_format($t['amt']) ?></div>
-                <span style="font-size: 0.65rem; font-weight: 800; background: <?= $t['bg'] ?>; color: <?= $t['color'] ?>; padding: 0.2rem 0.5rem; border-radius: 10px; display: inline-block;"><?= $t['status'] ?></span>
+                <div style="font-size: 1.05rem; font-weight: 800; color: #E11D48; margin-bottom: 0.3rem;">₹<?= number_format($amt) ?></div>
+                <span style="font-size: 0.65rem; font-weight: 800; background: <?= $bg ?>; color: <?= $color ?>; padding: 0.2rem 0.5rem; border-radius: 10px; display: inline-block;"><?= $status ?></span>
               </div>
             </div>
-          <?php endforeach; ?>
+          <?php endforeach; endif; ?>
         </div>
       </div>
     </div>

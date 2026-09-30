@@ -17,6 +17,7 @@ import { AppBackground } from '../../components/AppBackground';
 import { COLORS, FONTS, SPACING, SIZES } from '../../theme';
 import { useNavigation } from '@react-navigation/native';
 import { mockDataStore } from '../../services/mockDataStore';
+import { apiClient } from '../../services/apiClient';
 
 // Service Categories & Preset Garment Catalog
 const SERVICE_CATEGORIES = [
@@ -208,8 +209,20 @@ export const PickupVerificationScreen = ({ route }: any) => {
     }
   };
 
-  const handleCompletePickup = () => {
+  const handleCompletePickup = async () => {
     setPickupStatus('Picked Up');
+    
+    const numericId = task.rawOrder?.id || (task.id ? task.id.replace(/\D/g, '') : null);
+    if (numericId) {
+      try {
+        await apiClient.put(`/delivery/orders/${numericId}/pickup`, {
+          status: 'PICKED_UP'
+        });
+      } catch (err) {
+        console.log('Update pickup status error:', err);
+      }
+    }
+    
     mockDataStore.updateOrderStatus(task.id, 'Processing', `Cloth pickup completed. Total bill: ₹${totalBill}`);
     Alert.alert('Pickup Successful! 🎉', `Order ${task.id} picked up. Status automatically updated to Processing!`);
     navigation.goBack();

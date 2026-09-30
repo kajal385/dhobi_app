@@ -53,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         $uploadedCount = 0;
+        $apiUpdatePayload = [];
         
         if (!empty($_FILES['doc_files']['name']) && is_array($_FILES['doc_files']['name'])) {
             foreach ($_FILES['doc_files']['name'] as $docField => $origName) {
@@ -63,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (move_uploaded_file($_FILES['doc_files']['tmp_name'][$docField], $uploadDir . $fName)) {
                         $fileUrl = ADMIN_BASE_URL . '/uploads/documents/' . $fName;
                         $uploadedCount++;
+                        $apiUpdatePayload[$docField] = $fileUrl;
                         
                         if (!empty($_SESSION['custom_shops'])) {
                             foreach ($_SESSION['custom_shops'] as &$cs) {
@@ -72,6 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     if ($docField === 'business_proof_photo') $cs['businessProofPhoto'] = $fileUrl;
                                     if ($docField === 'bank_proof_photo') $cs['bankProofPhoto'] = $fileUrl;
                                     if ($docField === 'shop_board_photo') $cs['shopBoardPhoto'] = $fileUrl;
+                                    if ($docField === 'logo_url') $cs['logo_url'] = $fileUrl;
+                                    if ($docField === 'cover_url') $cs['cover_url'] = $fileUrl;
                                     break;
                                 }
                             }
@@ -89,6 +93,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             if ($uploadedCount > 0) {
+                // Sync the newly uploaded document URLs to the Laravel database
+                if (isLaundryOwner()) {
+                    apiPut('/owner/profile', $apiUpdatePayload);
+                } else {
+                    apiPut("/admin/laundries/{$shopId}", $apiUpdatePayload);
+                }
+
                 if (isset($_SESSION['doc_requests'][$shopId])) {
                     $_SESSION['doc_requests'][$shopId]['status'] = 'SUBMITTED';
                     $_SESSION['doc_requests'][$shopId]['submitted_at'] = date('Y-m-d H:i:s');

@@ -551,9 +551,9 @@ $totalCompleted = array_sum(array_map(fn($d) => intval($d['completedDeliveries']
               </td>
               <td>
                 <div style="display: flex; gap: 0.35rem; align-items: center; white-space: nowrap;">
-                  <!-- Inspect Profile Button -->
-                  <button type="button" onclick="inspectDriver(<?= htmlspecialchars(json_encode($d)) ?>)" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.25rem;" title="Inspect Rider Complete Details">
-                    <i data-lucide="eye" style="width: 14px; height: 14px;"></i> Inspect
+                  <!-- Orders Button -->
+                  <button type="button" onclick="inspectDriver(<?= htmlspecialchars(json_encode($d)) ?>)" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.25rem;" title="View Assigned Orders">
+                    <i data-lucide="list" style="width: 14px; height: 14px;"></i> Orders
                   </button>
 
                   <!-- Edit Full Registration Info Button -->
@@ -947,6 +947,12 @@ $totalCompleted = array_sum(array_map(fn($d) => intval($d['completedDeliveries']
         <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;">Owner: ${d.ownerName || 'DhobiPro Franchise Partner'}</div>
       </div>
 
+      <!-- Orders Summary UI Placeholder -->
+      <div id="driverOrdersLoading" style="text-align: center; padding: 1rem; font-size: 0.85rem; color: var(--text-muted); font-weight: 700;">
+        <i data-lucide="loader" style="width:16px;height:16px;animation:spin 1s linear infinite;"></i> Loading Order Data...
+      </div>
+      <div id="driverOrdersContent" style="display:none; flex-direction: column; gap: 1rem;"></div>
+
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
         <div style="background: var(--bg-card); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--border-color);">
           <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">📞 Contact Mobile</div>
@@ -970,16 +976,6 @@ $totalCompleted = array_sum(array_map(fn($d) => intval($d['completedDeliveries']
           <div style="font-size: 0.72rem; color: #10B981; font-weight: 700;">Verified Active ✓</div>
         </div>
       </div>
-
-      <div style="background: var(--bg-input); padding: 0.95rem; border-radius: 10px; border: 1px solid var(--border-color);">
-        <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 0.4rem;">🏦 Payout Bank Details &amp; Compensation</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.82rem;">
-          <div><span style="color: var(--text-muted);">Model:</span> <strong>${d.salaryModel || '₹40 / Delivered Order'}</strong></div>
-          <div><span style="color: var(--text-muted);">A/C:</span> <strong>${d.bankAccount || d.bank_account || '50100987654321'}</strong></div>
-          <div><span style="color: var(--text-muted);">IFSC:</span> <strong>${d.ifscCode || d.ifsc_code || 'HDFC0001234'}</strong></div>
-          <div><span style="color: var(--text-muted);">Aadhaar:</span> <strong>${d.aadhaarNumber || '5421 8765 4321'}</strong></div>
-        </div>
-      </div>
     `;
 
     document.getElementById('inspectEditBtn').onclick = () => {
@@ -989,6 +985,109 @@ $totalCompleted = array_sum(array_map(fn($d) => intval($d['completedDeliveries']
 
     openModal('inspectDriverModal');
     if (window.lucide) lucide.createIcons();
+
+    // Fetch orders to populate the Order details
+    const orderEndpoint = '<?= $isOwner ? "/owner/orders" : "/admin/orders" ?>';
+    fetch(`../includes/api_proxy.php?endpoint=${orderEndpoint}`)
+      .then(r => r.json())
+      .then(res => {
+        let orders = [];
+        if(res && res.data) orders = res.data;
+        if(res && res.data && res.data.data) orders = res.data.data;
+        
+        const driverId = String(d.id || d.delivery_boy_id || '');
+        const driverUserId = String(d.user_id || d.userId || '');
+        const myOrders = orders.filter(o => String(o.delivery_boy_id) === driverId || String(o.delivery_boy_id) === driverUserId);
+
+        let completed = 0, pending = 0, assigned = 0, delivered = 0;
+        myOrders.forEach(o => {
+            const st = (o.status || '').toLowerCase();
+            if(st === 'completed') completed++;
+            else if(st === 'delivered') delivered++;
+            else if(st === 'assigned' || st === 'out_for_pickup' || st === 'out_for_delivery') assigned++;
+            else pending++;
+        });
+
+        const renderOrders = (filterType) => {
+            let filteredOrders = myOrders;
+            if (filterType === 'completed') {
+                filteredOrders = myOrders.filter(o => {
+                   const st = (o.status || '').toLowerCase();
+                   return st === 'completed' || st === 'delivered';
+                });
+            } else if (filterType === 'assigned') {
+                filteredOrders = myOrders.filter(o => {
+                   const st = (o.status || '').toLowerCase();
+                   return st === 'assigned' || st === 'out_for_pickup' || st === 'out_for_delivery';
+                });
+            } else if (filterType === 'pending') {
+                filteredOrders = myOrders.filter(o => {
+                   const st = (o.status || '').toLowerCase();
+                   return st !== 'completed' && st !== 'delivered' && st !== 'assigned' && st !== 'out_for_pickup' && st !== 'out_for_delivery';
+                });
+            }
+
+            let ordersHtml = `<div style="font-size: 0.85rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 0.5rem;">Assigned Tasks ${filterType !== 'all' ? `(${filterType})` : ''}</div><div style="display:flex; flex-direction:column; gap:0.5rem; max-height:200px; overflow-y:auto; padding-right:5px;">`;
+            
+            filteredOrders.forEach(o => {
+                const st = (o.status || '').toLowerCase();
+                ordersHtml += `
+                    <a href="../orders/index.php?view_order=${o.id}" style="text-decoration: none; color: inherit; display: block; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; background: var(--bg-card); display:flex; justify-content:space-between; align-items:center; cursor:pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--brand-purple)'; this.style.boxShadow='0 2px 8px rgba(129,98,238,0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
+                        <div>
+                            <div style="font-weight:800; font-size:0.85rem; color: var(--brand-purple);">${o.order_number || 'N/A'}</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">Total: ₹${o.total_amount || 0} • Status: ${st.toUpperCase()}</div>
+                        </div>
+                        <span class="badge badge-primary" style="font-size:0.7rem;">${st}</span>
+                    </a>
+                `;
+            });
+            ordersHtml += `</div>`;
+            if(filteredOrders.length === 0) {
+                ordersHtml += `<div style="text-align:center; color:var(--text-muted); font-size:0.8rem; font-style:italic; padding-top:1rem;">No orders match this filter.</div>`;
+            }
+            return ordersHtml;
+        };
+
+        window.updateDriverOrdersFilter = (type) => {
+            const container = document.getElementById('driverOrdersListContainer');
+            if (container) {
+                container.innerHTML = renderOrders(type);
+            }
+        };
+
+        const statsHtml = `
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 1rem;">
+            <div onclick="window.updateDriverOrdersFilter('completed')" style="cursor:pointer; background: rgba(16,185,129,0.1); padding: 0.75rem; border-radius: 8px; text-align: center; border: 1px solid rgba(16,185,129,0.2); transition: transform 0.1s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'">
+                <div style="font-size: 1.25rem; font-weight: 900; color: #10B981;">${completed + delivered}</div>
+                <div style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Completed</div>
+            </div>
+            <div onclick="window.updateDriverOrdersFilter('assigned')" style="cursor:pointer; background: rgba(245,158,11,0.1); padding: 0.75rem; border-radius: 8px; text-align: center; border: 1px solid rgba(245,158,11,0.2); transition: transform 0.1s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'">
+                <div style="font-size: 1.25rem; font-weight: 900; color: #F59E0B;">${assigned}</div>
+                <div style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Assigned</div>
+            </div>
+            <div onclick="window.updateDriverOrdersFilter('pending')" style="cursor:pointer; background: rgba(239,68,68,0.1); padding: 0.75rem; border-radius: 8px; text-align: center; border: 1px solid rgba(239,68,68,0.2); transition: transform 0.1s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'">
+                <div style="font-size: 1.25rem; font-weight: 900; color: #EF4444;">${pending}</div>
+                <div style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Pending</div>
+            </div>
+             <div onclick="window.updateDriverOrdersFilter('all')" style="cursor:pointer; background: rgba(129,98,238,0.1); padding: 0.75rem; border-radius: 8px; text-align: center; border: 1px solid rgba(129,98,238,0.2); transition: transform 0.1s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'">
+                <div style="font-size: 1.25rem; font-weight: 900; color: #8162EE;">${myOrders.length}</div>
+                <div style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Total</div>
+            </div>
+          </div>
+          <div id="driverOrdersListContainer">
+            ${renderOrders('all')}
+          </div>
+        `;
+
+        document.getElementById('driverOrdersLoading').style.display = 'none';
+        const contentDiv = document.getElementById('driverOrdersContent');
+        contentDiv.style.display = 'flex';
+        contentDiv.style.flexDirection = 'column';
+        contentDiv.innerHTML = statsHtml;
+      })
+      .catch(err => {
+        document.getElementById('driverOrdersLoading').innerHTML = `<span style="color:#EF4444;">Failed to load orders.</span>`;
+      });
   }
 </script>
 

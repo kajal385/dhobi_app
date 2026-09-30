@@ -26,12 +26,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $_SESSION['order_status_overrides'][$orderId] = $newStatus;
         $msg = "Order #{$orderId} status changed to {$newStatus}.";
-    } elseif ($action === 'assign_driver' && $orderId && $driverName) {
-        $endpoint = $isOwner ? "/owner/orders/{$orderId}/assign-delivery" : "/admin/orders/{$orderId}/status";
+    } elseif ($action === 'assign_driver' && $orderId && !empty($_POST['delivery_boy_id'])) {
+        $driverId = $_POST['delivery_boy_id'];
+        $driverName = $_POST['driver_name'] ?? 'Driver';
+        $endpoint = $isOwner ? "/owner/orders/{$orderId}/assign-delivery" : "/admin/orders/{$orderId}/assign-delivery";
         apiPost($endpoint, [
-            'status' => 'OUT_FOR_DELIVERY',
-            'delivery_partner_name' => $driverName,
-            'notes' => "Assigned to driver {$driverName}"
+            'delivery_boy_id' => $driverId,
+            'assignment_type' => 'delivery'
         ]);
         assignDriverToOrderInDb($orderId, $driverName);
 
@@ -228,6 +229,14 @@ if ($searchQuery !== '') {
     }));
 }
 
+if ($filterStatus !== 'ALL' && $filterStatus !== '') {
+    $statusArray = array_map('trim', explode(',', strtoupper($filterStatus)));
+    $orders = array_values(array_filter($orders, function($o) use ($statusArray) {
+        $st = strtoupper($o['status'] ?? 'PENDING');
+        return in_array($st, $statusArray);
+    }));
+}
+
 $viewMode = $_GET['view'] ?? 'table';
 ?>
 
@@ -383,7 +392,7 @@ $viewMode = $_GET['view'] ?? 'table';
                 $amt = floatval($o['total_amount'] ?? $o['amount'] ?? 0);
                 $payMethod = $o['payment_method'] ?? $o['paymentMethod'] ?? 'COD';
                 $payStatus = $o['payment_status'] ?? $o['paymentStatus'] ?? 'PAID';
-                $driver = $o['delivery_boy_name'] ?? $o['deliveryBoyName'] ?? ($o['delivery_boy']['name'] ?? 'Unassigned');
+                $driver = $o['delivery_boy_name'] ?? $o['deliveryBoyName'] ?? ($o['delivery_boy']['name'] ?? ($o['delivery_partner']['user']['name'] ?? 'Unassigned'));
                 $status = strtoupper($o['status'] ?? 'PENDING');
                 $created = $o['created_at'] ?? $o['createdAt'] ?? 'Today';
             ?>
@@ -472,7 +481,7 @@ $viewMode = $_GET['view'] ?? 'table';
           $cardAmt = floatval($o['total_amount'] ?? $o['amount'] ?? 0);
           $payMethod = $o['payment_method'] ?? $o['paymentMethod'] ?? 'Online (UPI)';
           $payStatus = strtoupper($o['payment_status'] ?? $o['paymentStatus'] ?? 'PAID');
-          $driver = $o['delivery_boy_name'] ?? $o['deliveryBoyName'] ?? ($o['delivery_boy']['name'] ?? 'Unassigned');
+          $driver = $o['delivery_boy_name'] ?? $o['deliveryBoyName'] ?? ($o['delivery_boy']['name'] ?? ($o['delivery_partner']['user']['name'] ?? 'Unassigned'));
           $itemsCount = !empty($o['items']) ? count($o['items']) : 1;
 
           // Status colors & icons
@@ -639,14 +648,16 @@ $viewMode = $_GET['view'] ?? 'table';
 
       <div class="form-group" style="margin-bottom: 1.25rem;">
         <label class="form-label" style="display: block; margin-bottom: 0.35rem; font-weight: 700;">Select Delivery Partner *</label>
-        <select name="driver_name" class="form-control" required style="width: 100%;">
+        <input type="hidden" name="driver_name" id="hiddenDriverName" value="">
+        <select name="delivery_boy_id" id="driverSelect" class="form-control" required style="width: 100%;">
           <?php if (!empty($drivers)): ?>
             <?php foreach ($drivers as $dr): ?>
               <?php 
+                $drId = htmlspecialchars($dr['id'] ?? $dr['user_id'] ?? '');
                 $drName = htmlspecialchars($dr['name'] ?? '');
                 $drVeh = htmlspecialchars($dr['vehicle_number'] ?? $dr['vehicleNumber'] ?? $dr['vehicle_type'] ?? $dr['vehicleType'] ?? 'Scooter');
               ?>
-              <option value="<?= $drName ?>">
+              <option value="<?= $drId ?>" data-name="<?= $drName ?>">
                 🛵 <?= $drName ?> (<?= $drVeh ?>)
               </option>
             <?php endforeach; ?>
@@ -658,7 +669,7 @@ $viewMode = $_GET['view'] ?? 'table';
 
       <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
         <button type="button" onclick="closeModal('assignDriverModal')" class="btn btn-secondary">Cancel</button>
-        <button type="submit" class="btn btn-primary" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); color: #FFF; border: none; padding: 0.6rem 1.25rem; border-radius: 8px; font-weight: 700;">Confirm Dispatch</button>
+        <button type="submit" onclick="document.getElementById('hiddenDriverName').value = document.getElementById('driverSelect').options[document.getElementById('driverSelect').selectedIndex].getAttribute('data-name');" class="btn btn-primary" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); color: #FFF; border: none; padding: 0.6rem 1.25rem; border-radius: 8px; font-weight: 700;">Confirm Dispatch</button>
       </div>
     </form>
   </div>
@@ -676,7 +687,7 @@ $viewMode = $_GET['view'] ?? 'table';
     const amount = ord.total_amount || ord.amount || ord.grand_total || ord.total || (ord.items && ord.items.reduce((acc, it) => acc + (it.total_price || (it.unit_price ? it.unit_price * (it.quantity || 1) : 0)), 0)) || 0;
     const payMethod = (ord.payment_method || ord.paymentMethod || 'Online UPI').toUpperCase();
     const payStatus = (ord.payment_status || ord.paymentStatus || 'PAID').toUpperCase();
-    const driver = ord.delivery_boy_name || ord.deliveryBoyName || (ord.delivery_boy && ord.delivery_boy.name) || 'Unassigned';
+    const driver = ord.delivery_boy_name || ord.deliveryBoyName || (ord.delivery_boy && ord.delivery_boy.name) || (ord.delivery_partner && ord.delivery_partner.user && ord.delivery_partner.user.name) || 'Unassigned';
     const status = (ord.status || 'PENDING').toUpperCase();
 
     // Render Status Badge
@@ -826,7 +837,23 @@ $viewMode = $_GET['view'] ?? 'table';
       const idInput = document.getElementById('modalStatusOrderId');
       const selInput = document.getElementById('modalStatusSelect');
       if (idInput) idInput.value = ord.id || ord.order_number || ord.orderNumber || '';
-      if (selInput) selInput.value = (ord.status || 'PENDING').toUpperCase();
+      if (selInput) {
+        const currentStatus = (ord.status || 'PENDING').toUpperCase();
+        selInput.value = currentStatus;
+        
+        // Disable backward status changes
+        const statusOrder = ['PENDING', 'CONFIRMED', 'WASHING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'];
+        const currentIndex = statusOrder.indexOf(currentStatus);
+        
+        Array.from(selInput.options).forEach(opt => {
+          const optIndex = statusOrder.indexOf(opt.value);
+          if (optIndex !== -1 && optIndex < currentIndex) {
+            opt.disabled = true;
+          } else {
+            opt.disabled = false;
+          }
+        });
+      }
     }, 50);
 
     openModal('orderDetailsModal');
@@ -857,6 +884,20 @@ $viewMode = $_GET['view'] ?? 'table';
       openAssignModal(orderId, orderNum);
     }
   }
+
+  // Auto-open specific order if requested
+  <?php if (!empty($_GET['view_order'])): ?>
+  window.addEventListener('DOMContentLoaded', () => {
+    const targetOrderId = <?= json_encode($_GET['view_order']) ?>;
+    const allOrdersJson = <?= json_encode($orders) ?>;
+    const targetOrder = allOrdersJson.find(o => String(o.id) === String(targetOrderId) || String(o.order_number) === String(targetOrderId));
+    if (targetOrder) {
+      setTimeout(() => {
+        viewOrderDetails(targetOrder);
+      }, 500);
+    }
+  });
+  <?php endif; ?>
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

@@ -1100,6 +1100,18 @@ class AdminDashboardController extends Controller
             if ($request->filled('cover_url')) {
                 $shop->cover_url = $this->processDocumentMedia($request->input('cover_url'), 'cover', $shop->id);
             }
+            if ($request->filled('id_proof_photo')) {
+                $shop->id_proof_photo = $this->processDocumentMedia($request->input('id_proof_photo'), 'id_proof', $shop->id);
+            }
+            if ($request->filled('business_proof_photo')) {
+                $shop->business_proof_photo = $this->processDocumentMedia($request->input('business_proof_photo'), 'biz_proof', $shop->id);
+            }
+            if ($request->filled('bank_proof_photo')) {
+                $shop->bank_proof_photo = $this->processDocumentMedia($request->input('bank_proof_photo'), 'bank_proof', $shop->id);
+            }
+            if ($request->filled('shop_board_photo')) {
+                $shop->shop_board_photo = $this->processDocumentMedia($request->input('shop_board_photo'), 'shop_board', $shop->id);
+            }
 
             $shop->updated_at = now();
             $shop->save();
