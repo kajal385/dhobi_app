@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 350" width="600" height="350">
+  <defs>
+    <linearGradient id="shopBoardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8162EE"/>
+      <stop offset="100%" stop-color="#32138F"/>
+    </linearGradient>
+  </defs>
+  <!-- Shop Front Wall -->
+  <rect x="0" y="0" width="600" height="350" fill="#F1F5F9"/>
+  <!-- Brick line patterns -->
+  <line x1="0" y1="50" x2="600" y2="50" stroke="#E2E8F0" stroke-width="1"/>
+  <line x1="0" y1="100" x2="600" y2="100" stroke="#E2E8F0" stroke-width="1"/>
+  <line x1="0" y1="150" x2="600" y2="150" stroke="#E2E8F0" stroke-width="1"/>
+  <line x1="0" y1="200" x2="600" y2="200" stroke="#E2E8F0" stroke-width="1"/>
+  <line x1="0" y1="250" x2="600" y2="250" stroke="#E2E8F0" stroke-width="1"/>
+  <line x1="0" y1="300" x2="600" y2="300" stroke="#E2E8F0" stroke-width="1"/>
+  
+  <!-- Signboard Frame -->
+  <rect x="40" y="30" width="520" height="130" rx="12" fill="url(#shopBoardGrad)" stroke="#FFFFFF" stroke-width="3"/>
+  <rect x="46" y="36" width="508" height="118" rx="8" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+  
+  <text x="300" y="80" text-anchor="middle" font-family="'Outfit', 'Inter', sans-serif" font-size="28" font-weight="900" fill="#FFFFFF" letter-spacing="1">STAR WASH ULTRA PREMIUM</text>
+  <text x="300" y="105" text-anchor="middle" font-family="'Outfit', 'Inter', sans-serif" font-size="13" font-weight="700" fill="#FE9A5D" letter-spacing="3">EXPRESS LAUNDRY &amp; DRY CLEANING HUB</text>
+  <text x="300" y="132" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="rgba(255,255,255,0.9)">Wakad • Tathawade • Hinjewadi Coverage | 📞 8600692767</text>
+  
+  <!-- Glass Shop Front -->
+  <rect x="70" y="180" width="210" height="160" rx="4" fill="#E2E8F0" stroke="#94A3B8" stroke-width="2"/>
+  <rect x="80" y="190" width="190" height="140" fill="#BAE6FD" opacity="0.3"/>
+  <text x="175" y="270" text-anchor="middle" font-size="44">🧺</text>
+  
+  <!-- Shop Door -->
+  <rect x="320" y="180" width="120" height="160" fill="#CBD5E1" stroke="#64748B" stroke-width="2"/>
+  <rect x="330" y="190" width="100" height="140" fill="#E0F2FE" opacity="0.4"/>
+  <circle cx="340" cy="270" r="5" fill="#475569"/>
+  
+  <!-- Partner Verification Badge on Door -->
+  <rect x="345" y="210" width="70" height="35" rx="4" fill="#10B981"/>
+  <text x="380" y="226" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#FFF">DhobiPro</text>
+  <text x="380" y="238" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#FFF">VERIFIED</text>
+</svg>

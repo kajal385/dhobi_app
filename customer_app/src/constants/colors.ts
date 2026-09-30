@@ -1,0 +1,18 @@
+export const Colors = {
+  intro_bg: "#F6F6F6",
+  intro_head_text: "#32138F",
+  black_color: "#000000",
+  white_color: "#FFFFFF",
+  green_color: "#439022",
+  image_bg_color: "#D9D9D9",
+  over_due_color: "#D80044",
+  percent_bg_color: "#ecf5e1",
+  gradient_color_1: "#8162EE",
+  gradient_color_2: "#A672D6",
+  gradient_color_3: "#E18C8E",
+  gradient_color_4: "#FE9A5D",
+  status_gradient_1: "#CECCFC",
+  status_gradient_2: "#FDF6F6",
+  status_gradient_3: "#FBD3B6",
+  statusGradient: ["rgba(206,204,252,0.5)", "rgba(206,204,252,0.5)", "rgba(206,204,252,0.5)"] as const,
+};

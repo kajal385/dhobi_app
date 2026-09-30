@@ -1,0 +1,13 @@
+{
+  "shop_id": 1,
+  "user_id": 1,
+  "total_amount": 450,
+  "items": [
+    {
+      "name": "Shirt Steam Press",
+      "quantity": 3,
+      "unit_price": 50,
+      "total_price": 150
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 380" width="600" height="380">
+  <defs>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF9933"/>
+      <stop offset="50%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#138808"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <!-- Card Background -->
+  <rect x="10" y="10" width="580" height="360" rx="16" fill="#FFFDF8" stroke="#E2E8F0" stroke-width="2" filter="url(#cardShadow)"/>
+  
+  <!-- Tricolor bar on top -->
+  <path d="M10 26 Q10 10 26 10 L574 10 Q590 10 590 26 L590 32 L10 32 Z" fill="url(#headerGrad)"/>
+  
+  <!-- Govt Header -->
+  <text x="300" y="60" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#B91C1C">भारत सरकार | GOVERNMENT OF INDIA</text>
+  <text x="300" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="600" fill="#475569">UNIQUE IDENTIFICATION AUTHORITY OF INDIA</text>
+  
+  <!-- Emblem & Aadhaar Logo -->
+  <circle cx="65" cy="65" r="22" fill="#E2E8F0"/>
+  <text x="65" y="72" text-anchor="middle" font-size="24">🏛️</text>
+  
+  <circle cx="535" cy="65" r="22" fill="#FEF3C7"/>
+  <text x="535" y="72" text-anchor="middle" font-size="24">☀️</text>
+  
+  <line x1="40" y1="95" x2="560" y2="95" stroke="#CBD5E1" stroke-width="1"/>
+  
+  <!-- Photo Box -->
+  <rect x="45" y="115" width="110" height="135" rx="8" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1.5"/>
+  <circle cx="100" cy="160" r="32" fill="#CBD5E1"/>
+  <path d="M68 230 Q100 195 132 230 Z" fill="#94A3B8"/>
+  <rect x="45" y="260" width="110" height="24" rx="4" fill="#E0E7FF"/>
+  <text x="100" y="276" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#4338CA">VERIFIED ID</text>
+  
+  <!-- Details -->
+  <text x="180" y="135" font-family="Arial, sans-serif" font-size="12" fill="#64748B">नाम / Name</text>
+  <text x="180" y="155" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#0F172A">Ashish Bhosale / Demo Partner</text>
+  
+  <text x="180" y="182" font-family="Arial, sans-serif" font-size="12" fill="#64748B">जन्म तिथि / DOB</text>
+  <text x="180" y="200" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#1E293B">15/08/1992</text>
+  
+  <text x="340" y="182" font-family="Arial, sans-serif" font-size="12" fill="#64748B">लिंग / Gender</text>
+  <text x="340" y="200" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#1E293B">MALE / पुरुष</text>
+  
+  <!-- QR Code Box -->
+  <rect x="450" y="125" width="100" height="100" rx="8" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1"/>
+  <text x="500" y="180" text-anchor="middle" font-size="44">🏁</text>
+  
+  <!-- Aadhaar Number -->
+  <rect x="40" y="300" width="520" height="48" rx="8" fill="#FFF1F2" stroke="#FECDD3" stroke-width="1"/>
+  <text x="300" y="332" text-anchor="middle" font-family="Courier New, monospace" font-size="22" font-weight="bold" letter-spacing="4" fill="#BE123C">XXXX  XXXX  4321</text>
+  
+  <!-- Footer Tagline -->
+  <text x="300" y="362" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#059669">मेरा आधार, मेरी पहचान (Official KYC Compliant)</text>
+</svg>
