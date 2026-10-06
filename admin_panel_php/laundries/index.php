@@ -124,6 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'shop_board_photo' => $shopBoardPhoto,
             'logo_url' => $logoPhoto,
             'cover_url' => $coverPhotoPrimary,
+            'shop_photos' => !empty($coverPhotos) ? array_column($coverPhotos, 'url') : [],
             'verification_status' => $_POST['verification_status'] ?? 'APPROVED',
             'account_status' => $_POST['account_status'] ?? 'ACTIVE',
             'subscription_plan' => $_POST['subscription_plan'] ?? 'Starter',
@@ -214,9 +215,39 @@ if ($isOwner && $shopId) {
     $laundries = apiExtractList($res);
 }
 
-// Prepend session custom shops so user-created shops persist and display
+// Merge session custom shops safely to prevent duplicates
 if (!empty($_SESSION['custom_shops'])) {
-    $laundries = array_merge($_SESSION['custom_shops'], $laundries);
+    $existingEmails = array_map(function($l) { return strtolower(trim($l['email'] ?? '')); }, $laundries);
+    $existingPhones = array_map(function($l) { return trim($l['phone'] ?? ''); }, $laundries);
+
+    foreach (array_reverse($_SESSION['custom_shops']) as $cs) {
+        $csEmail = strtolower(trim($cs['email'] ?? ''));
+        $csPhone = trim($cs['phone'] ?? '');
+
+        $foundIndex = -1;
+        foreach ($laundries as $idx => $l) {
+            $lEmail = strtolower(trim($l['email'] ?? ''));
+            $lPhone = trim($l['phone'] ?? '');
+            if (($csEmail && $lEmail === $csEmail) || ($csPhone && $lPhone === $csPhone)) {
+                $foundIndex = $idx;
+                break;
+            }
+        }
+
+        if ($foundIndex !== -1) {
+            // Merge session fields (like uploaded logos) into API record if API didn't save them
+            $laundries[$foundIndex]['logo_url'] = !empty($cs['logo_url']) ? $cs['logo_url'] : ($laundries[$foundIndex]['logo_url'] ?? '');
+            $laundries[$foundIndex]['cover_url'] = !empty($cs['cover_url']) ? $cs['cover_url'] : ($laundries[$foundIndex]['cover_url'] ?? '');
+            $laundries[$foundIndex]['idProofPhoto'] = !empty($cs['idProofPhoto']) ? $cs['idProofPhoto'] : ($laundries[$foundIndex]['idProofPhoto'] ?? '');
+            $laundries[$foundIndex]['businessProofPhoto'] = !empty($cs['businessProofPhoto']) ? $cs['businessProofPhoto'] : ($laundries[$foundIndex]['businessProofPhoto'] ?? '');
+            $laundries[$foundIndex]['bankProofPhoto'] = !empty($cs['bankProofPhoto']) ? $cs['bankProofPhoto'] : ($laundries[$foundIndex]['bankProofPhoto'] ?? '');
+            $laundries[$foundIndex]['shopBoardPhoto'] = !empty($cs['shopBoardPhoto']) ? $cs['shopBoardPhoto'] : ($laundries[$foundIndex]['shopBoardPhoto'] ?? '');
+            $laundries[$foundIndex]['verificationStatus'] = $cs['verificationStatus'] ?? $laundries[$foundIndex]['verificationStatus'] ?? 'APPROVED';
+        } else {
+            // Not in API, prepend it
+            array_unshift($laundries, $cs);
+        }
+    }
 }
 
 // If logged in as Laundry Owner, STRICTLY isolate and filter out all other laundries!
@@ -779,11 +810,11 @@ if ($tab === 'ACTIVE') {
           <!-- Shop Cover Images (Multiple) -->
           <div>
             <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
-              Shop Cover Images (Multiple Uploads Allowed)
+              Shop Cover Media (Photos & Videos Allowed)
             </label>
-            <input type="file" id="ob_cover_photos" name="cover_photos[]" multiple accept="image/*" onchange="handleMultipleCoverPreview(this)" style="font-size: 0.8rem; width: 100%;">
+            <input type="file" id="ob_cover_photos" name="cover_photos[]" multiple accept="image/*,video/*" onchange="handleMultipleCoverPreview(this)" style="font-size: 0.8rem; width: 100%;">
             <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 0.2rem;">
-              Select multiple photos of your shop interior, machines, and storefront.
+              Select multiple photos or videos of your shop interior, machines, and storefront.
             </span>
             <div id="coverPhotosPreviewList" style="margin-top: 0.5rem;"></div>
           </div>
@@ -2096,22 +2127,63 @@ if ($tab === 'ACTIVE') {
   }
 
   function openEditShop(shop) {
-    document.getElementById('editShopId').value = shop.id || shop.shop_id || '';
-    document.getElementById('editShopName').value = shop.shopName || shop.name || '';
-    document.getElementById('editShopPhone').value = shop.phone || '';
-    document.getElementById('editShopEmail').value = shop.email || '';
-    document.getElementById('editShopAddress').value = shop.address || '';
-    document.getElementById('editShopCity').value = shop.city || '';
-    document.getElementById('editShopPincode').value = shop.pincode || shop.pin || '';
-    document.getElementById('editShopHours').value = shop.workingHours || shop.working_hours || '08:00 AM - 09:30 PM';
-    document.getElementById('editShopRadius').value = shop.pickupRadiusKm || 8;
-    document.getElementById('editShopBankName').value = shop.bankName || shop.bank_name || '';
-    document.getElementById('editShopBankAccount').value = shop.bankAccount || shop.bank_account || '';
-    document.getElementById('editShopBankHolder').value = shop.accountHolder || shop.bank_holder || '';
-    document.getElementById('editShopIfsc').value = shop.ifscCode || shop.ifsc_code || '';
-    document.getElementById('editShopUpi').value = shop.upiId || shop.upi_id || '';
-    document.getElementById('editShopGst').value = shop.gstNumber || shop.gst_number || '';
-    openModal('editShopModal');
+    let form = document.getElementById('onboardLaundryForm');
+    
+    // Set action to 'edit'
+    let actionInput = form.querySelector('input[name="action"]');
+    if (actionInput) actionInput.value = 'edit';
+    
+    // Set or inject shop_id
+    let shopIdInput = form.querySelector('input[name="shop_id"]');
+    if (!shopIdInput) {
+      shopIdInput = document.createElement('input');
+      shopIdInput.type = 'hidden';
+      shopIdInput.name = 'shop_id';
+      form.appendChild(shopIdInput);
+    }
+    shopIdInput.value = shop.id || shop.shop_id || '';
+
+    // Step 1
+    document.getElementById('ob_owner_name').value = shop.ownerName || shop.owner_name || '';
+    document.getElementById('ob_phone').value = shop.phone || shop.mobile_number || '';
+    document.getElementById('ob_email').value = shop.email || '';
+
+    // Step 2
+    document.getElementById('ob_shop_name').value = shop.shopName || shop.name || '';
+    document.getElementById('ob_address').value = shop.address || '';
+    document.getElementById('ob_city').value = shop.city || '';
+    document.getElementById('ob_pincode').value = shop.pincode || shop.pin || '';
+    
+    const lat = shop.latitude || 18.5590;
+    const lng = shop.longitude || 73.7868;
+    document.getElementById('ob_latitude').value = lat;
+    document.getElementById('ob_longitude').value = lng;
+    currentPickerLat = parseFloat(lat);
+    currentPickerLng = parseFloat(lng);
+    updateMapIframe(currentPickerLat, currentPickerLng, currentPickerZoom);
+
+    // Step 3
+    document.getElementById('ob_bank_name').value = shop.bankName || shop.bank_name || '';
+    document.getElementById('ob_bank_account').value = shop.bankAccount || shop.bank_account || '';
+    document.getElementById('ob_ifsc_code').value = shop.ifscCode || shop.ifsc_code || '';
+    document.getElementById('ob_account_holder').value = shop.accountHolder || shop.bank_holder || '';
+    document.getElementById('ob_upi_id').value = shop.upiId || shop.upi_id || '';
+    document.getElementById('ob_gst_number').value = shop.gstNumber || shop.gst_number || '';
+
+    // Step 4
+    const rad = shop.pickupRadiusKm || 8;
+    const radInput = document.querySelector(`input[name="pickup_radius_km"][value="${rad}"]`);
+    if (radInput) radInput.checked = true;
+    
+    document.getElementById('ob_working_hours').value = shop.workingHours || shop.working_hours || '08:00 AM - 09:30 PM';
+    
+    // Change Title
+    const titleH2 = document.querySelector('#onboardModal h2');
+    if (titleH2) {
+      titleH2.innerHTML = 'Edit Laundry Shop <span style="font-size: 0.65rem; padding: 0.2rem 0.6rem; border-radius: 20px; background: rgba(16, 185, 129, 0.2); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.4); font-weight: 800; text-transform: uppercase;">⚡ Update</span>';
+    }
+
+    openOnboardModal();
   }
 
   // Onboard modal opener helper to guarantee starting at Step 1

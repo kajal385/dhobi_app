@@ -9,156 +9,101 @@ $shopId = currentShopId();
 $msg = null;
 
 // Initialize session state storage if needed
-if (!isset($_SESSION['cat_store'])) {
-    $_SESSION['cat_store'] = [
-        '1' => ['id' => '1', 'name' => 'Wash & Fold', 'icon' => '🧺', 'description' => 'Everyday casual wear and towels washing & fold', 'status' => 'ACTIVE', 'activeServicesCount' => 12],
-        '2' => ['id' => '2', 'name' => 'Wash & Iron', 'icon' => '👔', 'description' => 'Clean wash with crisp crease steam ironing', 'status' => 'ACTIVE', 'activeServicesCount' => 18],
-        '3' => ['id' => '3', 'name' => 'Dry Cleaning', 'icon' => '🧥', 'description' => 'Premium eco-friendly dry cleaning for suits & dresses', 'status' => 'ACTIVE', 'activeServicesCount' => 24],
-        '4' => ['id' => '4', 'name' => 'Steam Press Only', 'icon' => '♨️', 'description' => 'Professional wrinkle-free steam ironing and crisp folding', 'status' => 'ACTIVE', 'activeServicesCount' => 14],
-        '5' => ['id' => '5', 'name' => 'Shoe Cleaning', 'icon' => '👟', 'description' => 'Deep cleaning, sanitization & polish for sports/leather shoes', 'status' => 'ACTIVE', 'activeServicesCount' => 8],
-        '6' => ['id' => '6', 'name' => 'Carpet Cleaning', 'icon' => '🧼', 'description' => 'Deep vacuum and shampoo wash for rugs & carpets', 'status' => 'ACTIVE', 'activeServicesCount' => 6],
-        '7' => ['id' => '7', 'name' => 'Blanket Cleaning', 'icon' => '🛏️', 'description' => 'Blankets, quilts, winter jackets & heavy woolens care', 'status' => 'ACTIVE', 'activeServicesCount' => 15],
-        '8' => ['id' => '8', 'name' => 'Curtain Cleaning', 'icon' => '🪟', 'description' => 'Dust removal, gentle wash and vertical steam ironing', 'status' => 'ACTIVE', 'activeServicesCount' => 9],
-    ];
-}
 
-if (!isset($_SESSION['srv_store'])) {
-    $_SESSION['srv_store'] = [
-        '1' => ['id' => '1', 'name' => 'Wash & Fold - T-Shirt / Shirt', 'category' => 'Wash & Fold', 'price' => 35, 'unit' => 'piece', 'status' => 'ACTIVE'],
-        '2' => ['id' => '2', 'name' => 'Wash & Fold - Trousers / Jeans', 'category' => 'Wash & Fold', 'price' => 50, 'unit' => 'piece', 'status' => 'ACTIVE'],
-        '3' => ['id' => '3', 'name' => 'Wash & Steam Iron - Kurta / Pyjama', 'category' => 'Wash & Iron', 'price' => 90, 'unit' => 'piece', 'status' => 'ACTIVE'],
-        '4' => ['id' => '4', 'name' => 'Wash & Steam Iron - Formal Shirt', 'category' => 'Wash & Iron', 'price' => 55, 'unit' => 'piece', 'status' => 'ACTIVE'],
-        '5' => ['id' => '5', 'name' => 'Dry Clean - 2-Piece Business Suit', 'category' => 'Dry Cleaning', 'price' => 350, 'unit' => 'set', 'status' => 'ACTIVE'],
-        '6' => ['id' => '6', 'name' => 'Dry Clean - Heavy Silk / Designer Saree', 'category' => 'Dry Cleaning', 'price' => 220, 'unit' => 'piece', 'status' => 'ACTIVE'],
-        '7' => ['id' => '7', 'name' => 'Steam Press - Blazer / Coat', 'category' => 'Steam Press Only', 'price' => 80, 'unit' => 'piece', 'status' => 'ACTIVE'],
-        '8' => ['id' => '8', 'name' => 'Shoe Care - Sneakers Deep Spa Clean', 'category' => 'Shoe Cleaning', 'price' => 299, 'unit' => 'pair', 'status' => 'ACTIVE'],
-        '9' => ['id' => '9', 'name' => 'Home Care - Heavy Blanket & Quilt Wash', 'category' => 'Blanket Cleaning', 'price' => 350, 'unit' => 'piece', 'status' => 'ACTIVE'],
-    ];
-}
 
 // POST Handlers for Categories and Services
+// Dynamic DB Fetching via API
+$categories = [];
+$services = [];
+$shopIdQuery = $isOwner ? ['shop_id' => $shopId] : [];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
+    // -- CATEGORY HANDLERS --
     if ($action === 'create_category') {
         $cName = trim($_POST['name'] ?? '');
-        $cIcon = trim($_POST['icon'] ?? '🧺');
-        $cDesc = trim($_POST['description'] ?? '');
         if ($cName) {
-            $newId = strval(count($_SESSION['cat_store']) + 1);
             $catItem = [
-                'id' => $newId,
                 'name' => $cName,
-                'icon' => $cIcon,
-                'description' => $cDesc,
-                'status' => 'ACTIVE',
-                'activeServicesCount' => 0
+                'icon' => trim($_POST['icon'] ?? '🧺'),
+                'description' => trim($_POST['description'] ?? ''),
+                'shop_id' => $isOwner ? $shopId : null,
+                'is_active' => 1
             ];
-            $_SESSION['cat_store'][$newId] = $catItem;
-            apiPost('/categories', $catItem);
-            $msg = "New category '{$cName}' created successfully!";
+            $res = apiPost('/categories', $catItem);
+            if ($res['success']) $msg = "New category '{$cName}' created successfully!";
+            else $msg = "Error creating category: " . ($res['error'] ?? 'Unknown');
         }
     } elseif ($action === 'edit_category') {
         $catId = strval($_POST['category_id'] ?? '');
         $cName = trim($_POST['name'] ?? '');
-        $cIcon = trim($_POST['icon'] ?? '🧺');
-        $cDesc = trim($_POST['description'] ?? '');
-        $cStatus = $_POST['status'] ?? 'ACTIVE';
-
-        if ($catId && isset($_SESSION['cat_store'][$catId])) {
-            $_SESSION['cat_store'][$catId]['name'] = $cName;
-            $_SESSION['cat_store'][$catId]['icon'] = $cIcon;
-            $_SESSION['cat_store'][$catId]['description'] = $cDesc;
-            $_SESSION['cat_store'][$catId]['status'] = $cStatus;
-
-            apiPut("/categories/{$catId}", [
+        if ($catId && $cName) {
+            $res = apiPut("/categories/{$catId}", [
                 'name' => $cName,
-                'icon' => $cIcon,
-                'description' => $cDesc,
-                'status' => $cStatus,
+                'icon' => trim($_POST['icon'] ?? '🧺'),
+                'description' => trim($_POST['description'] ?? ''),
+                'is_active' => ($_POST['status'] ?? 'ACTIVE') === 'ACTIVE' ? 1 : 0
             ]);
-            $msg = "Category '{$cName}' updated and saved successfully!";
+            if ($res['success']) $msg = "Category '{$cName}' updated successfully!";
+            else $msg = "Error updating category.";
         }
     } elseif ($action === 'delete_category') {
         $catId = strval($_POST['category_id'] ?? '');
-        if ($catId && isset($_SESSION['cat_store'][$catId])) {
-            $deletedName = $_SESSION['cat_store'][$catId]['name'];
-            unset($_SESSION['cat_store'][$catId]);
-            apiDelete("/categories/{$catId}");
-            $msg = "Category '{$deletedName}' removed from catalog.";
+        if ($catId) {
+            $res = apiDelete("/categories/{$catId}");
+            if ($res['success']) $msg = "Category removed.";
         }
-    } elseif ($action === 'create_service') {
+    } 
+    // -- SERVICE HANDLERS --
+    elseif ($action === 'create_service') {
         $sName = trim($_POST['name'] ?? '');
-        $sCat = trim($_POST['category'] ?? 'Wash & Fold');
-        $sPrice = floatval($_POST['price'] ?? 50);
-        $sUnit = trim($_POST['unit'] ?? 'piece');
-
         if ($sName) {
-            $newId = strval(count($_SESSION['srv_store']) + 1);
             $srvItem = [
-                'id' => $newId,
                 'name' => $sName,
-                'category' => $sCat,
-                'price' => $sPrice,
-                'unit' => $sUnit,
-                'status' => 'ACTIVE'
+                'category_id' => trim($_POST['category'] ?? ''),
+                'price' => floatval($_POST['price'] ?? 50),
+                'unit' => trim($_POST['unit'] ?? 'piece'),
+                'shop_id' => $isOwner ? $shopId : null,
+                'is_active' => 1
             ];
-            $_SESSION['srv_store'][$newId] = $srvItem;
-
-            if ($isOwner && $shopId) {
-                apiPost('/owner/services', array_merge($srvItem, ['shop_id' => $shopId]));
-            } else {
-                apiPost('/services/master', $srvItem);
-            }
-            $msg = "Service '{$sName}' added at ₹{$sPrice}/{$sUnit}!";
+            $res = apiPost('/admin/shop-services', $srvItem); // Using new API
+            if ($res['success']) $msg = "Service '{$sName}' added!";
+            else $msg = "Error adding service: " . ($res['error'] ?? 'Unknown');
         }
     } elseif ($action === 'edit_service') {
         $srvId = strval($_POST['service_id'] ?? '');
         $sName = trim($_POST['name'] ?? '');
-        $sCat = trim($_POST['category'] ?? 'Wash & Fold');
-        $sPrice = floatval($_POST['price'] ?? 50);
-        $sUnit = trim($_POST['unit'] ?? 'piece');
-        $sStatus = $_POST['status'] ?? 'ACTIVE';
-
-        if ($srvId && isset($_SESSION['srv_store'][$srvId])) {
-            $_SESSION['srv_store'][$srvId]['name'] = $sName;
-            $_SESSION['srv_store'][$srvId]['category'] = $sCat;
-            $_SESSION['srv_store'][$srvId]['price'] = $sPrice;
-            $_SESSION['srv_store'][$srvId]['unit'] = $sUnit;
-            $_SESSION['srv_store'][$srvId]['status'] = $sStatus;
-
+        if ($srvId && $sName) {
             $payload = [
                 'name' => $sName,
-                'category' => $sCat,
-                'price' => $sPrice,
-                'unit' => $sUnit,
-                'status' => $sStatus
+                'category_id' => trim($_POST['category'] ?? ''),
+                'price' => floatval($_POST['price'] ?? 50),
+                'unit' => trim($_POST['unit'] ?? 'piece'),
+                'is_active' => ($_POST['status'] ?? 'ACTIVE') === 'ACTIVE' ? 1 : 0
             ];
-            if ($isOwner && $shopId) {
-                apiPut("/owner/services/{$srvId}", $payload);
-            } else {
-                apiPut("/services/master/{$srvId}", $payload);
-            }
-            $msg = "Service '{$sName}' updated to ₹{$sPrice}/{$sUnit} ({$sStatus})!";
+            $res = apiPut("/admin/shop-services/{$srvId}", $payload);
+            if ($res['success']) $msg = "Service updated!";
         }
     } elseif ($action === 'delete_service') {
         $srvId = strval($_POST['service_id'] ?? '');
-        if ($srvId && isset($_SESSION['srv_store'][$srvId])) {
-            $deletedName = $_SESSION['srv_store'][$srvId]['name'];
-            unset($_SESSION['srv_store'][$srvId]);
-            if ($isOwner && $shopId) {
-                apiDelete("/owner/services/{$srvId}");
-            } else {
-                apiDelete("/services/master/{$srvId}");
-            }
-            $msg = "Service '{$deletedName}' removed from catalog.";
+        if ($srvId) {
+            apiDelete("/admin/shop-services/{$srvId}");
+            $msg = "Service removed.";
         }
     }
 }
 
-// Active categories & services list from session store
-$categories = array_values($_SESSION['cat_store']);
-$services = array_values($_SESSION['srv_store']);
+// Fetch Latest State
+$catRes = apiGet('/categories', $shopIdQuery);
+if ($catRes['success'] && !empty($catRes['data'])) {
+    $categories = $catRes['data'];
+}
+
+$srvRes = apiGet('/admin/shop-services', $shopIdQuery);
+if ($srvRes['success'] && !empty($srvRes['data'])) {
+    $services = $srvRes['data'];
+}
 ?>
 
 <div style="color: var(--text-primary);">

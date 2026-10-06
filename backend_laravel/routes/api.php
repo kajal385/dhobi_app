@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\DeliveryBoyController;
 use App\Http\Controllers\Api\V1\AdminDashboardController;
 use App\Http\Controllers\Api\V1\ShopController;
 use App\Http\Controllers\Api\V1\CategoryController;
+use App\Http\Controllers\Api\V1\WalletController;
 
 /*
 |--------------------------------------------------------------------------
@@ -40,6 +41,8 @@ Route::prefix('v1')->group(function () {
     Route::get('/shops/popular', [ShopController::class, 'popular']);
     Route::get('/shops/nearby', [ShopController::class, 'nearby']);
     Route::get('/shops/{id}', [ShopController::class, 'show']);
+    Route::get('/reels', [ShopController::class, 'getReels']);
+    Route::get('/banners', [CategoryController::class, 'banners']);
     Route::get('/categories', [CategoryController::class, 'index']);
     Route::post('/categories', [CategoryController::class, 'store']);
     Route::put('/categories/{id}', [CategoryController::class, 'update']);
@@ -56,6 +59,12 @@ Route::prefix('v1')->group(function () {
     Route::post('/orders/{id}/cancel', [OrderController::class, 'cancel']);
     Route::post('/orders/{id}/confirm-availability', [OrderController::class, 'confirmAvailability']);
     Route::post('/orders/{id}/rate', [OrderController::class, 'rate']);
+
+    // Wallet APIs
+    Route::get('/wallet', [WalletController::class, 'index']);
+    Route::get('/wallet/transactions', [WalletController::class, 'transactions']);
+    Route::post('/wallet/add', [WalletController::class, 'add']);
+    Route::post('/wallet/verify-payment', [WalletController::class, 'verifyPayment']);
 
     // ──────────────────────────────────────────────
     // 3. LAUNDRY OWNER / PARTNER APP CRUD APIs
@@ -150,7 +159,16 @@ Route::prefix('v1')->group(function () {
         Route::post('/laundries/{id}/reject', [AdminDashboardController::class, 'rejectLaundry']);
         Route::post('/laundries/{id}/request-docs', [AdminDashboardController::class, 'requestDocs']);
         Route::post('/laundries/{id}/status', [AdminDashboardController::class, 'setStatus']);
-        Route::post('/upload-media', [AdminDashboardController::class, 'uploadMedia']);
+        // Services & Items Management
+        Route::get('/shop-services', [ShopServiceController::class, 'getServices']);
+        Route::post('/shop-services', [ShopServiceController::class, 'createService']);
+        Route::put('/shop-services/{id}', [ShopServiceController::class, 'updateService']);
+        Route::delete('/shop-services/{id}', [ShopServiceController::class, 'deleteService']);
+        Route::post('/shop-services/{id}/status', [ShopServiceController::class, 'toggleServiceStatus']);
+
+        Route::post('/service-items', [ShopServiceController::class, 'createItem']);
+        Route::put('/service-items/{id}', [ShopServiceController::class, 'updateItem']);
+        Route::delete('/service-items/{id}', [ShopServiceController::class, 'deleteItem']);
         
         // Delivery Boy Management
         Route::get('/delivery-boys', [AdminDashboardController::class, 'deliveryBoys']);

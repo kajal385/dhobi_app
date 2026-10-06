@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, DARK_COLORS, SPACING, SIZES, FONTS } from '../../constants/theme';
@@ -34,7 +35,7 @@ import {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const TABS = ['Overview', 'Services', 'Reviews', 'Reels'] as const;
+const TABS = ['Overview', 'Services', 'Reviews', 'Gallery'] as const;
 type TabType = typeof TABS[number];
 
 const STORE_COVERS = [
@@ -261,6 +262,7 @@ export const ShopDetailScreen = ({ navigation, route }: any) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('Overview');
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -660,49 +662,90 @@ export const ShopDetailScreen = ({ navigation, route }: any) => {
     </View>
   );
 
-  const renderReels = () => (
-    <View style={styles.tabContent}>
-      {reels.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>🎬</Text>
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No reels yet</Text>
-        </View>
-      ) : (
-        <View style={styles.reelsGrid}>
-          {reels.map((reel) => {
-            const thumbSource = (reel.thumbnail_url && typeof reel.thumbnail_url === 'string' && reel.thumbnail_url.startsWith('http'))
-              ? { uri: reel.thumbnail_url }
-              : getCoverSource(shop, shop.id);
-            return (
-              <TouchableOpacity
-                key={reel.id}
-                style={styles.reelThumb}
-                activeOpacity={0.85}
-                onPress={() => Alert.alert(
-                  `🎬 ${shop.name} Reel`,
-                  `${reel.caption || 'Shop Video Reel'}\n\nOffer: ${reel.offer_text || 'Exclusive Laundry Deal'}\n👁 ${reel.views_count} views  •  ❤️ ${reel.likes_count} likes`
-                )}
-              >
-                <Image source={thumbSource} style={styles.reelImage} resizeMode="cover" />
-                <View style={styles.reelOverlay}>
-                  <Text style={styles.reelPlay}>▶</Text>
-                  {reel.offer_text ? (
-                    <View style={styles.reelOfferBadge}>
-                      <Text style={styles.reelOfferText}>{reel.offer_text}</Text>
+  const renderGallery = () => {
+    const rawItems: any[] = (data as any)?.gallery || (shop as any)?.gallery || (shop as any)?.shop_photos || reels || [];
+    
+    // Normalize gallery items
+    const galleryItems = rawItems.map((item, idx) => {
+      if (typeof item === 'string') {
+        const clean = item.toLowerCase().split('?')[0];
+        const isVideo = clean.endsWith('.mp4') || clean.endsWith('.mov') || clean.endsWith('.webm') || clean.includes('/videos/');
+        return {
+          id: String(idx + 1),
+          url: item,
+          video_url: isVideo ? item : null,
+          thumbnail_url: item,
+          type: isVideo ? 'video' : 'photo',
+        };
+      }
+      const mediaUrl = item.video_url || item.url || item.thumbnail_url || item.image || '';
+      const clean = String(mediaUrl).toLowerCase().split('?')[0];
+      const isVideo = item.type === 'video' || Boolean(item.video_url) || clean.endsWith('.mp4') || clean.endsWith('.mov') || clean.endsWith('.webm') || clean.includes('/videos/');
+      return {
+        id: String(item.id || idx + 1),
+        url: mediaUrl,
+        video_url: isVideo ? mediaUrl : null,
+        thumbnail_url: item.thumbnail_url || item.thumbnail || mediaUrl,
+        type: isVideo ? 'video' : 'photo',
+      };
+    });
+
+    return (
+      <View style={styles.tabContent}>
+        {galleryItems.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>🖼️</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No photos or videos uploaded yet</Text>
+          </View>
+        ) : (
+          <View style={styles.reelsGrid}>
+            {galleryItems.map((item) => {
+              const isVideo = item.type === 'video' || Boolean(item.video_url);
+              const resolvedUrl = resolveImageUrl(item.thumbnail_url || item.url);
+              const thumbSource = resolvedUrl ? { uri: resolvedUrl } : getCoverSource(shop, shop.id);
+              const playUrl = item.video_url || item.url;
+
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.reelThumb}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    if (isVideo && playUrl) {
+                      const fullUrl = resolveImageUrl(playUrl) || playUrl;
+                      Linking.openURL(fullUrl).catch(() => {
+                        Alert.alert(`🎬 ${shop.name} Video`, 'Could not open video player.');
+                      });
+                    } else if (resolvedUrl) {
+                      setPreviewImage(resolvedUrl);
+                    }
+                  }}
+                >
+                  <Image source={thumbSource} style={styles.reelImage} resizeMode="cover" />
+                  {isVideo ? (
+                    <View style={styles.reelOverlay}>
+                      <View style={styles.galleryPlayBtn}>
+                        <Text style={styles.reelPlay}>▶</Text>
+                      </View>
+                      <View style={styles.videoBadge}>
+                        <Text style={styles.videoBadgeText}>VIDEO</Text>
+                      </View>
                     </View>
-                  ) : null}
-                </View>
-                <View style={styles.reelMeta}>
-                  <Text style={styles.reelViews}>👁 {reel.views_count}</Text>
-                  <Text style={styles.reelLikes}>❤️ {reel.likes_count}</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-    </View>
-  );
+                  ) : (
+                    <View style={styles.photoOverlay}>
+                      <View style={styles.photoZoomIcon}>
+                        <Text style={{ fontSize: 13, color: '#FFF' }}>🔍</Text>
+                      </View>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </View>
+    );
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -789,7 +832,7 @@ export const ShopDetailScreen = ({ navigation, route }: any) => {
         {activeTab === 'Overview' && renderOverview()}
         {activeTab === 'Services' && renderServices()}
         {activeTab === 'Reviews' && renderReviews()}
-        {activeTab === 'Reels' && renderReels()}
+        {activeTab === 'Gallery' && renderGallery()}
 
         <View style={{ height: 120 + insets.bottom }} />
       </Animated.ScrollView>
@@ -820,6 +863,18 @@ export const ShopDetailScreen = ({ navigation, route }: any) => {
           </LinearGradient>
         </TouchableOpacity>
       </View>
+
+      {/* Full Photo Preview Modal */}
+      {previewImage ? (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setPreviewImage(null)}>
+          <View style={styles.modalBackdrop}>
+            <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setPreviewImage(null)}>
+              <Text style={styles.modalCloseText}>✕</Text>
+            </TouchableOpacity>
+            <Image source={{ uri: previewImage }} style={styles.modalFullImage} resizeMode="contain" />
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 };
@@ -1044,6 +1099,78 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   reelPlay: { color: '#fff', fontSize: 28, opacity: 0.9 },
+  galleryPlayBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  videoBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  photoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    padding: 8,
+  },
+  photoZoomIcon: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 14,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseBtn: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  modalFullImage: {
+    width: '94%',
+    height: '80%',
+    borderRadius: 12,
+  },
   reelOfferBadge: {
     position: 'absolute', top: 8, right: 8,
     backgroundColor: '#EF4444', borderRadius: SIZES.radius_full,

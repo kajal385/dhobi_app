@@ -1,6 +1,7 @@
 export const GOOGLE_MAPS_API_KEY = 'AIzaSyBXTHZ-XiK_QmQ6HV6hFqqetu5JR8Pwgnk';
-export const BASE_URL = 'http://192.168.1.15:8000';
+export const BASE_URL = 'https://dhobi-api.bizz-manager.com/public';
 export const API_BASE_URL = `${BASE_URL}/api/v1`;
+export const ADMIN_BASE_URL = 'https://dhobi-admin.bizz-manager.com';
 
 
 /**
@@ -26,5 +27,8 @@ export const resolveImageUrl = (path?: string | null): string => {
   }
 
   const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  if (cleanPath.startsWith('/uploads/')) {
+    return `${ADMIN_BASE_URL}${cleanPath}`;
+  }
   return `${BASE_URL}${cleanPath}`;
 };

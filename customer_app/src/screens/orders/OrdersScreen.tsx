@@ -16,7 +16,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
 import { RootState } from '../../store';
 import { setOrders, ordersLoading, ordersError } from '../../store/orderSlice';
-import { orderService, defaultOrderBYLGX5, defaultDeliveredOrder } from '../../services/orderService';
+import { orderService } from '../../services/orderService';
 import { OrderCard } from '../../components/OrderCard';
 import { SkeletonLoader } from '../../components/SkeletonLoader';
 import { Order } from '../../types';
@@ -37,8 +37,7 @@ export const OrdersScreen = ({ navigation }: any) => {
     return s === 'delivered' || s === 'cancelled' || s === 'completed';
   };
 
-  // If orders is empty, provide default active & delivered orders so the customer sees both active tracking & past delivery history
-  const rawOrdersList = Array.isArray(orders) && orders.length > 0 ? orders : [defaultOrderBYLGX5, defaultDeliveredOrder];
+  const rawOrdersList = Array.isArray(orders) ? orders : [];
   const activeOrders = rawOrdersList.filter((o) => o && !isHistoryStatus(o.status));
   const historyOrders = rawOrdersList.filter((o) => o && isHistoryStatus(o.status));
   const displayed = tab === 'active' ? activeOrders : historyOrders;
@@ -46,7 +45,7 @@ export const OrdersScreen = ({ navigation }: any) => {
   const fetchOrders = useCallback(async () => {
     try {
       const res: any = await orderService.getOrders();
-      const orderData = Array.isArray(res) && res.length > 0 ? res : (res?.data?.length > 0 ? res.data : [defaultOrderBYLGX5, defaultDeliveredOrder]);
+      const orderData = Array.isArray(res) ? res : (res?.data || []);
       dispatch(setOrders(orderData));
     } catch (e: any) {
       dispatch(ordersError(e.message));

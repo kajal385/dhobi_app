@@ -292,7 +292,7 @@ class AuthController extends Controller
                 'status'         => 'ACTIVE',
                 'is_active'      => 1,
                 'city'           => $request->input('city', 'Pune'),
-                'wallet_balance' => 150.00,
+                'wallet_balance' => 0.00,
             ]);
         } else {
             $user->is_active = 1;
@@ -320,7 +320,7 @@ class AuthController extends Controller
                     'email'             => $user->email,
                     'avatar'            => $user->avatar,
                     'is_phone_verified' => true,
-                    'wallet_balance'    => (string) ($user->wallet_balance ?? '150.00'),
+                    'wallet_balance'    => (string) ($user->wallet_balance ?? '0.00'),
                 ],
                 'access_token' => $token,
                 'token'        => $token,

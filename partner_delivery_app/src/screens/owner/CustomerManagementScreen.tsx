@@ -86,12 +86,8 @@ export const CustomerManagementScreen = () => {
             notes: c.notes || 'Regular customer',
           }))
         );
-      } else {
-        setCustomers(FALLBACK_CUSTOMERS);
-      }
-    } catch {
-      setCustomers(FALLBACK_CUSTOMERS);
-    } finally {
+      } else { setCustomers([]); }
+    } catch { setCustomers([]); } finally {
       setIsLoading(false);
       setRefreshing(false);
     }

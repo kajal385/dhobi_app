@@ -278,33 +278,7 @@ if ($isOwner) {
     }));
 
     if (empty($drivers)) {
-        // Fallback dedicated driver for the owner's shop
-        $drivers = [
-            [
-                'id' => '1',
-                'name' => 'Rahul Shinde',
-                'phone' => '+91 9899011223',
-                'email' => 'rahul.rider@dhobipro.com',
-                'password' => '123456',
-                'city' => 'Pune',
-                'vehicleType' => 'Honda Activa (Scooter)',
-                'vehicleNumber' => 'MH-12-AB-1234',
-                'dlNumber' => 'MH12-2022-0098',
-                'aadhaarNumber' => '8921 4455 1209',
-                'shopId' => $myId ?: '30',
-                'shopName' => $myShopName ?: 'Star Wash Ultra Premium',
-                'ownerName' => $myOwnerName ?: 'Partner Owner',
-                'salaryModel' => '₹45 / Delivered Order',
-                'bankName' => 'HDFC Bank',
-                'bankAccount' => '50100223344551',
-                'ifscCode' => 'HDFC0001234',
-                'isOnline' => true,
-                'completedDeliveries' => 42,
-                'assignedOrders' => 2,
-                'rating' => 4.9,
-                'accountStatus' => 'ACTIVE'
-            ]
-        ];
+        $drivers = []; // Do not show dummy driver for new shops
     }
 }
 
@@ -479,8 +453,19 @@ $totalCompleted = array_sum(array_map(fn($d) => intval($d['completedDeliveries']
               $vehicle = $d['vehicleType'] ?? $d['vehicle_type'] ?? 'Scooter';
               $vNumber = $d['vehicleNumber'] ?? $d['vehicle_number'] ?? 'MH-12-XX-0000';
               $dl = $d['dlNumber'] ?? $d['dl_number'] ?? 'N/A';
-              $shop = $d['shopName'] ?? $d['shop_name'] ?? ($d['laundry_shop']['name'] ?? 'Star Wash Ultra Premium');
               $shopRef = $d['shopId'] ?? $d['shop_id'] ?? '';
+              
+              // Resolve real shop name from $allShops if available
+              $realShopName = '';
+              if ($shopRef) {
+                  foreach ($allShops as $s) {
+                      if (strval($s['id'] ?? '') === strval($shopRef)) {
+                          $realShopName = $s['name'] ?? $s['shopName'] ?? $s['shop_name'] ?? '';
+                          break;
+                      }
+                  }
+              }
+              $shop = $realShopName ?: ($d['shopName'] ?? $d['shop_name'] ?? ($d['laundry_shop']['name'] ?? 'Laundry Outlet'));
               $completed = $d['completedDeliveries'] ?? $d['completed_deliveries'] ?? 0;
               $assigned = $d['assignedOrders'] ?? $d['assigned_orders'] ?? 0;
               $rating = floatval($d['rating'] ?? 4.9);
@@ -685,14 +670,16 @@ $totalCompleted = array_sum(array_map(fn($d) => intval($d['completedDeliveries']
             <input type="hidden" name="shop_name" value="<?= htmlspecialchars($myShopName) ?>">
             <input type="text" readonly value="<?= htmlspecialchars($myShopName) ?> (#<?= htmlspecialchars($shopId ?: '30') ?>)" class="form-control" style="width: 100%; background: var(--bg-input); font-weight: 700; font-size: 0.85rem;">
           <?php else: ?>
-            <select name="shop_id" class="form-control" style="width: 100%; font-size: 0.85rem;">
-              <?php foreach ($allShops as $sh): 
+            <select name="shop_id" id="ob_shop_id_select" class="form-control" style="width: 100%; font-size: 0.85rem;" onchange="document.getElementById('ob_shop_name_input').value = this.options[this.selectedIndex].text.split(' (ID:')[0]">
+              <?php foreach ($allShops as $idx => $sh): 
                   $sId = $sh['id'] ?? '';
                   $sName = $sh['shopName'] ?? $sh['name'] ?? "Shop #{$sId}";
+                  if ($idx === 0) { $firstShopName = $sName; }
               ?>
                 <option value="<?= htmlspecialchars($sId) ?>"><?= htmlspecialchars($sName) ?> (ID: #<?= htmlspecialchars($sId) ?>)</option>
               <?php endforeach; ?>
             </select>
+            <input type="hidden" name="shop_name" id="ob_shop_name_input" value="<?= htmlspecialchars($firstShopName ?? '') ?>">
           <?php endif; ?>
         </div>
       </div>

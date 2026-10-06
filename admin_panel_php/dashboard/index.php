@@ -31,6 +31,22 @@ $cities = $d['cities'] ?? $d['topCities'] ?? [
 
 $topShops = $d['topLaundryShops'] ?? $d['topShops'] ?? [];
 
+// Sort top shops by orders descending, then revenue descending
+if (!empty($topShops)) {
+    usort($topShops, function($a, $b) {
+        if (!is_array($a) || !is_array($b)) return 0;
+        $ordersA = intval($a['orders'] ?? $a['totalOrders'] ?? $a['total_orders'] ?? 0);
+        $ordersB = intval($b['orders'] ?? $b['totalOrders'] ?? $b['total_orders'] ?? 0);
+        if ($ordersA !== $ordersB) {
+            return $ordersB - $ordersA;
+        }
+        
+        $revA = floatval($a['revenue'] ?? $a['total_revenue'] ?? 0);
+        $revB = floatval($b['revenue'] ?? $b['total_revenue'] ?? 0);
+        return $revB <=> $revA;
+    });
+}
+
 // Owner Specific Orders & Calculations (Strictly Private to Logged-in Shop)
 // Fetch real live orders from the database
 $orderEndpoint = $isOwner ? '/owner/orders' : '/admin/orders';
@@ -445,30 +461,30 @@ $ownerDeliveredOrders = count(array_filter($ownerShopOrders, fn($o) => $o['statu
             <i data-lucide="award" style="width: 20px; color: #10B981;"></i> Platform Performance Ratios
           </h3>
 
-          <div style="margin-bottom: 1.25rem;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 700; margin-bottom: 0.35rem;">
-              <span>Customer Retention Rate</span>
-              <span style="color: #10B981;">78.4%</span>
+          <div style="margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; font-weight: 700; margin-bottom: 0.4rem;">
+              <span style="flex: 1; padding-right: 0.5rem; line-height: 1.25; color: var(--text-secondary);">Customer Retention Rate</span>
+              <span style="color: #10B981; font-size: 1rem; font-weight: 900;">78.4%</span>
             </div>
             <div style="width: 100%; height: 8px; background: rgba(0,0,0,0.06); border-radius: 4px; overflow: hidden;">
               <div style="width: 78.4%; height: 100%; background: #10B981; border-radius: 4px;"></div>
             </div>
           </div>
 
-          <div style="margin-bottom: 1.25rem;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 700; margin-bottom: 0.35rem;">
-              <span>Repeat Order Frequency</span>
-              <span style="color: #8162EE;">64.2%</span>
+          <div style="margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; font-weight: 700; margin-bottom: 0.4rem;">
+              <span style="flex: 1; padding-right: 0.5rem; line-height: 1.25; color: var(--text-secondary);">Repeat Order Frequency</span>
+              <span style="color: #8162EE; font-size: 1rem; font-weight: 900;">64.2%</span>
             </div>
             <div style="width: 100%; height: 8px; background: rgba(0,0,0,0.06); border-radius: 4px; overflow: hidden;">
               <div style="width: 64.2%; height: 100%; background: #8162EE; border-radius: 4px;"></div>
             </div>
           </div>
 
-          <div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 700; margin-bottom: 0.35rem;">
-              <span>Order Fulfillment SLA (&lt; 24h)</span>
-              <span style="color: #3B82F6;">95.8%</span>
+          <div style="margin-bottom: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; font-weight: 700; margin-bottom: 0.4rem;">
+              <span style="flex: 1; padding-right: 0.5rem; line-height: 1.25; color: var(--text-secondary);">Order Fulfillment SLA (&lt; 24h)</span>
+              <span style="color: #3B82F6; font-size: 1rem; font-weight: 900;">95.8%</span>
             </div>
             <div style="width: 100%; height: 8px; background: rgba(0,0,0,0.06); border-radius: 4px; overflow: hidden;">
               <div style="width: 95.8%; height: 100%; background: #3B82F6; border-radius: 4px;"></div>
@@ -510,6 +526,7 @@ $ownerDeliveredOrders = count(array_filter($ownerShopOrders, fn($o) => $o['statu
               <th>Rating</th>
               <th>Orders</th>
               <th>Gross Revenue</th>
+              <th>Admin Comm.</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -529,6 +546,7 @@ $ownerDeliveredOrders = count(array_filter($ownerShopOrders, fn($o) => $o['statu
                 <td><strong style="color: #F59E0B;">★ 5.0</strong> (124)</td>
                 <td><strong style="font-size: 0.92rem;"><?= max(4, $totalOrders) ?> Orders</strong></td>
                 <td><strong style="color: #10B981; font-size: 0.95rem;">₹<?= number_format(max(1400, $totalRevenue)) ?></strong></td>
+                <td><strong style="color: #8162EE; font-size: 0.95rem;">₹<?= number_format(max(140, $totalRevenue * 0.10)) ?></strong></td>
                 <td><span class="badge badge-success">ACTIVE &amp; VERIFIED</span></td>
               </tr>
               <tr>
@@ -545,6 +563,7 @@ $ownerDeliveredOrders = count(array_filter($ownerShopOrders, fn($o) => $o['statu
                 <td><strong style="color: #F59E0B;">★ 4.9</strong> (89)</td>
                 <td><strong style="font-size: 0.92rem;">18 Orders</strong></td>
                 <td><strong style="color: #10B981; font-size: 0.95rem;">₹4,850</strong></td>
+                <td><strong style="color: #8162EE; font-size: 0.95rem;">₹485</strong></td>
                 <td><span class="badge badge-success">ACTIVE</span></td>
               </tr>
             <?php else: ?>
@@ -558,7 +577,8 @@ $ownerDeliveredOrders = count(array_filter($ownerShopOrders, fn($o) => $o['statu
                   $sCity = $shop['city'] ?? 'Pune';
                   $sRating = floatval($shop['rating'] ?? 5.0);
                   $sOrders = intval($shop['orders'] ?? $shop['totalOrders'] ?? $shop['total_orders'] ?? 0);
-                  $sRev = $shop['revenue'] ?? $shop['total_revenue'] ?? 0;
+                  $sRev = floatval($shop['revenue'] ?? $shop['total_revenue'] ?? 0);
+                  $sComm = floatval($shop['commission'] ?? $shop['adminCommission'] ?? ($sRev * 0.10));
                   $sStatus = strtoupper($shop['status'] ?? $shop['verification_status'] ?? 'APPROVED');
                 ?>
                 <tr>
@@ -574,7 +594,8 @@ $ownerDeliveredOrders = count(array_filter($ownerShopOrders, fn($o) => $o['statu
                   <td>📍 <?= htmlspecialchars($sCity) ?></td>
                   <td><strong style="color: #F59E0B;">★ <?= number_format($sRating, 1) ?></strong></td>
                   <td><strong style="font-size: 0.92rem;"><?= number_format($sOrders) ?> Orders</strong></td>
-                  <td><strong style="color: #10B981; font-size: 0.95rem;"><?= is_numeric($sRev) ? '₹' . number_format($sRev) : htmlspecialchars($sRev) ?></strong></td>
+                  <td><strong style="color: #10B981; font-size: 0.95rem;">₹<?= number_format($sRev) ?></strong></td>
+                  <td><strong style="color: #8162EE; font-size: 0.95rem;">₹<?= number_format($sComm) ?></strong></td>
                   <td><span class="badge badge-success"><?= htmlspecialchars($sStatus) ?></span></td>
                 </tr>
               <?php endforeach; ?>

@@ -13,7 +13,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
 import AppScreen from '../../components/AppScreen';
 import { RootState } from '../../store';
-import { setWallet, setTransactions, walletLoading } from '../../store/walletSlice';
+import { setWallet, setTransactions, addTransaction, walletLoading } from '../../store/walletSlice';
+import { updateProfile } from '../../store/authSlice';
 import { walletService } from '../../services/walletService';
 import { SkeletonLoader } from '../../components/SkeletonLoader';
 import { WalletTransaction } from '../../types';
@@ -37,8 +38,9 @@ export const WalletScreen = ({ navigation }: any) => {
       ]);
       dispatch(setWallet(wallet));
       dispatch(setTransactions(txRes.data));
+      dispatch(updateProfile({ wallet_balance: String(wallet.balance) }));
     } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'Could not load wallet' });
+      console.warn('Could not load wallet', e);
     }
   }, [dispatch]);
 
@@ -53,13 +55,20 @@ export const WalletScreen = ({ navigation }: any) => {
   const handleAddMoney = async (amount: number) => {
     try {
       const res = await walletService.addMoney(amount);
-      Toast.show({
-        type: 'info',
-        text1: 'Payment Initiated',
-        text2: `Add ₹${amount} via Razorpay`,
-      });
+      if (res && res.success) {
+        dispatch(setWallet({ balance: res.balance, currency: 'INR' }));
+        if (res.transaction) {
+          dispatch(addTransaction(res.transaction));
+        }
+        dispatch(updateProfile({ wallet_balance: String(res.balance) }));
+        Toast.show({
+          type: 'success',
+          text1: 'Money Added Successfully',
+          text2: `₹${amount} added to your wallet`,
+        });
+      }
     } catch {
-      Toast.show({ type: 'error', text1: 'Payment failed' });
+      Toast.show({ type: 'error', text1: 'Could not add money' });
     }
   };
 

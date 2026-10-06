@@ -97,7 +97,7 @@ if (!defined('API_BASE_URL')) {
     if ($isLocal) {
         define('API_BASE_URL', 'http://127.0.0.1:8000/api/v1');
     } else {
-        define('API_BASE_URL', 'https://admin.laundry.codexxa.co.in/api/v1');
+        define('API_BASE_URL', 'https://dhobi-api.bizz-manager.com/public/api/v1');
     }
 }
 
@@ -115,13 +115,17 @@ if (!defined('APP_TAGLINE')) {
 
 // Base Path for Admin Panel (Relative web root calculation)
 if (!defined('ADMIN_BASE_URL')) {
-    $scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
-    // Check if running in a subdirectory containing /admin_panel_php (e.g. XAMPP htdocs/admin_panel_php)
-    $pos = strpos($scriptName, '/admin_panel_php');
-    if ($pos !== false) {
-        define('ADMIN_BASE_URL', substr($scriptName, 0, $pos + strlen('/admin_panel_php')));
+    if (!$isLocal) {
+        define('ADMIN_BASE_URL', 'https://dhobi-admin.bizz-manager.com');
     } else {
-        // Document root is the admin panel folder itself (e.g. php -S 127.0.0.1:8080 or dedicated virtual host)
-        define('ADMIN_BASE_URL', '');
+        $scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
+        // Check if running in a subdirectory containing /admin_panel_php (e.g. XAMPP htdocs/admin_panel_php)
+        $pos = strpos($scriptName, '/admin_panel_php');
+        if ($pos !== false) {
+            define('ADMIN_BASE_URL', substr($scriptName, 0, $pos + strlen('/admin_panel_php')));
+        } else {
+            // Document root is the admin panel folder itself (e.g. php -S 127.0.0.1:8080 or dedicated virtual host)
+            define('ADMIN_BASE_URL', '');
+        }
     }
 }

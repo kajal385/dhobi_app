@@ -18,6 +18,10 @@ import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
 import AppScreen from '../../components/AppScreen';
 import { RootState } from '../../store';
 import { logoutUser } from '../../store/authSlice';
+import { clearOrders } from '../../store/orderSlice';
+import { clearWallet } from '../../store/walletSlice';
+import { orderService } from '../../services/orderService';
+import { walletService } from '../../services/walletService';
 import Toast from 'react-native-toast-message';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -35,8 +39,7 @@ export const ProfileScreen = ({ navigation }: any) => {
   const customerAddress = user?.address || 'Flat 302, Green Acres';
   const customerArea = user?.area || 'Wakad';
   const customerCity = user?.city || 'Pune';
-  const customerPincode = user?.pincode || '411057';
-  const walletBalance = parseFloat(user?.wallet_balance || '250').toFixed(0);
+  const walletBalance = parseFloat(user?.wallet_balance || '0').toFixed(0);
 
   const displayLocation = customerAddress
     ? customerAddress.includes(customerCity)
@@ -44,7 +47,7 @@ export const ProfileScreen = ({ navigation }: any) => {
       : `${customerAddress}, ${customerArea}, ${customerCity}`
     : 'Select Location...';
 
-  const totalOrdersCount = Array.isArray(orders) ? orders.length : 8;
+  const totalOrdersCount = Array.isArray(orders) ? orders.length : 0;
 
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out of your account?', [
@@ -54,6 +57,10 @@ export const ProfileScreen = ({ navigation }: any) => {
         style: 'destructive',
         onPress: () => {
           dispatch(logoutUser());
+          dispatch(clearOrders());
+          dispatch(clearWallet());
+          orderService.clearLocalOrders();
+          walletService.clearWalletData();
           Toast.show({ type: 'success', text1: 'Logged out successfully' });
         },
       },

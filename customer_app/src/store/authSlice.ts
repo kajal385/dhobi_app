@@ -37,25 +37,26 @@ const getStoredUser = (): User | null => {
   } catch (e) {
     console.warn('Error reading stored user_profile', e);
   }
-  return {
-    id: 1,
-    phone: '9309386003',
-    name: 'Kajal Gajare',
-    email: 'kajal-gajare750@dhobipro.com',
-    avatar: null,
-    is_phone_verified: true,
-    wallet_balance: '250',
-    address: 'Flat 302, Green Acres',
-    area: 'Wakad',
-    city: 'Pune',
-    pincode: '411057',
-  };
+  return null;
 };
 
+const getStoredToken = (): string | null => {
+  try {
+    const token = storage.getString('auth_token');
+    return token && token.trim().length > 0 ? token : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const storedToken = getStoredToken();
+const storedUser = getStoredUser();
+const isUserLoggedIn = Boolean(storedToken && storedUser);
+
 const initialState: AuthState = {
-  user: getStoredUser(),
-  token: storage.getString('auth_token') || null,
-  isAuthenticated: true,
+  user: isUserLoggedIn ? storedUser : null,
+  token: isUserLoggedIn ? storedToken : null,
+  isAuthenticated: isUserLoggedIn,
   loading: false,
   error: null,
 };
@@ -90,7 +91,7 @@ const authSlice = createSlice({
         email: 'kajal-gajare750@dhobipro.com',
         avatar: null,
         is_phone_verified: true,
-        wallet_balance: '250',
+        wallet_balance: '0',
         address: 'Flat 302, Green Acres',
         area: 'Wakad',
         city: 'Pune',
@@ -108,8 +109,14 @@ const authSlice = createSlice({
       state.token = null;
       state.isAuthenticated = false;
       try {
-        storage.remove('auth_token');
-        storage.remove('user_profile');
+        if (typeof (storage as any).delete === 'function') {
+          (storage as any).delete('auth_token');
+          (storage as any).delete('user_profile');
+        }
+        if (typeof storage.remove === 'function') {
+          storage.remove('auth_token');
+          storage.remove('user_profile');
+        }
       } catch (e) {}
     },
   },

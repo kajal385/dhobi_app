@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,46 +16,30 @@ import { AppButton } from '../../components/AppButton';
 import { AppInput } from '../../components/AppInput';
 import { AppBackground } from '../../components/AppBackground';
 import { COLORS, FONTS, SPACING, SIZES } from '../../theme';
+import { partnerService } from '../../services/partnerService';
+import { useAuth } from '../../context/AuthContext';
 
-const INITIAL_SERVICES = [
-  {
-    id: '1',
-    name: 'Suit Dry Cleaning',
-    category: 'Dry Clean',
-    pricingType: 'Piece Wise',
-    price: '₹350 / piece',
-    expressCharge: '₹100',
-    specialCharge: '₹50 (Stain Removal)',
-    estTime: '24 Hours',
-    isAvailable: true,
-  },
-  {
-    id: '2',
-    name: 'Daily Wash & Iron',
-    category: 'Wash & Fold',
-    pricingType: 'KG Wise',
-    price: '₹70 / KG',
-    expressCharge: '₹50',
-    specialCharge: '₹0',
-    estTime: '12 Hours',
-    isAvailable: true,
-  },
-  {
-    id: '3',
-    name: 'Steam Press Shirts',
-    category: 'Ironing',
-    pricingType: 'Piece Wise',
-    price: '₹25 / piece',
-    expressCharge: '₹15',
-    specialCharge: '₹0',
-    estTime: '6 Hours',
-    isAvailable: true,
-  },
-];
+
 
 export const ServiceManagementScreen = () => {
   const insets = useSafeAreaInsets();
-  const [services, setServices] = useState(INITIAL_SERVICES);
+  const [services, setServices] = useState<any[]>([]);
+  const { user } = useAuth();
+  const shopId = user?.shop_id;
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchServices();
+  }, [shopId]);
+
+  const fetchServices = async () => {
+    if (!shopId) return;
+    setLoading(true);
+    const data = await partnerService.getShopServices(shopId);
+    setServices(data || []);
+    setLoading(false);
+  };
+
   const [showAddModal, setShowAddModal] = useState(false);
 
   // Form State
@@ -69,35 +53,45 @@ export const ServiceManagementScreen = () => {
 
   const toggleAvailability = (id: string) => {
     setServices((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, isAvailable: !s.isAvailable } : s))
+      prev.map((s) => (s.id === id ? { ...s, isAvailable: !s.is_active } : s))
     );
   };
 
-  const handleAddService = () => {
-    if (!name || !price) {
+  
+  const handleAddService = async () => {
+    if (!name || !price || !shopId) {
       Alert.alert('Required Fields', 'Please fill in Service Name and Base Price');
       return;
     }
-    const newService = {
-      id: Date.now().toString(),
+    
+    // Attempt to map category to ID (hardcoded 1 for Wash & Fold, etc., or just pass string if API takes string name/id)
+    // The API expects category_id. We'll pass 1 as default if category isn't matched
+    let catId = 1;
+    if (category === 'Dry Clean') catId = 2;
+    if (category === 'Ironing') catId = 3;
+
+    const payload = {
+      shop_id: shopId,
       name,
-      category,
-      pricingType,
-      price: `₹${price} / ${pricingType === 'Piece Wise' ? 'piece' : 'KG'}`,
-      expressCharge: expressCharge ? `₹${expressCharge}` : '₹0',
-      specialCharge: specialCharge ? `₹${specialCharge}` : '₹0',
-      estTime: estTime || '24 Hours',
-      isAvailable: true,
+      category_id: catId,
+      price: parseFloat(price.replace(/[^0-9.]/g, '') || '0'),
+      unit: pricingType === 'Piece Wise' ? 'piece' : 'KG',
     };
-    setServices([...services, newService]);
-    setShowAddModal(false);
-    // Reset Form
-    setName('');
-    setPrice('');
-    setExpressCharge('');
-    setSpecialCharge('');
-    Alert.alert('Success', 'New service added successfully!');
+    
+    const res = await partnerService.createShopService(payload);
+    if (res?.success) {
+      setShowAddModal(false);
+      setName('');
+      setPrice('');
+      setExpressCharge('');
+      setSpecialCharge('');
+      fetchServices();
+      Alert.alert('Success', 'New service added successfully!');
+    } else {
+      Alert.alert('Error', res?.message || 'Failed to add service');
+    }
   };
+
 
   return (
     <AppBackground style={{ paddingTop: insets.top }}>

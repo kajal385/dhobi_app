@@ -47,6 +47,25 @@ class CategoryController extends Controller
     }
 
     /**
+     * GET /api/v1/banners
+     */
+    public function banners(Request $request): JsonResponse
+    {
+        // For customer app home screen, return active banners
+        // Ideally filter by distance if lat/lng provided, but for now just global or any active
+        $banners = \Illuminate\Support\Facades\DB::table('banners')
+                    ->where('is_active', 1)
+                    ->orderBy('sort_order')
+                    ->limit(10)
+                    ->get();
+                    
+        return response()->json([
+            'success' => true,
+            'data' => $banners
+        ]);
+    }
+
+    /**
      * GET /api/v1/categories/{id}
      *
      * Returns a single category by ID.

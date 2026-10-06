@@ -111,7 +111,7 @@ android {
             signingConfig signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
-            manifestPlaceholders = [usesCleartextTraffic: "false"]
+            manifestPlaceholders = [usesCleartextTraffic: "true"]
         }
     }
 }
@@ -128,3 +128,16 @@ dependencies {
 }
 
 apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
+
+tasks.matching { it.name in ["assembleRelease", "assembleDebug"] }.configureEach {
+    doLast {
+        def src = file("${buildDir}/outputs/apk")
+        def dst = file("${projectDir}/build/outputs/apk")
+        if (src.exists() && src != dst) {
+            copy {
+                from src
+                into dst
+            }
+        }
+    }
+}

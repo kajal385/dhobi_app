@@ -85,7 +85,9 @@ export const partnerService = {
 
   updateOwnerProfile: async (shopData: any) => {
     try {
-      const res = await apiClient.post('/owner/profile', shopData);
+      const shopId = shopData.id || shopData.shop_id;
+      // Use the same API as Web Panel
+      const res = await apiClient.put(`/admin/laundries/${shopId}`, shopData);
       return res.data;
     } catch (err: any) {
       if (err?.response?.data) {
@@ -236,6 +238,54 @@ export const partnerService = {
       await apiClient.post('/delivery/location', { latitude, longitude });
     } catch {
       // Ignore background tracking failure
+    }
+  },
+
+  // --- SHOP SERVICES & CATEGORIES ---
+  getShopCategories: async (shopId?: number) => {
+    try {
+      const res = await apiClient.get('/categories', { params: { shop_id: shopId } });
+      return res.data?.data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  getShopServices: async (shopId?: number) => {
+    try {
+      const res = await apiClient.get('/admin/shop-services', { params: { shop_id: shopId } });
+      return res.data?.data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  createShopService: async (serviceData: any) => {
+    try {
+      const res = await apiClient.post('/admin/shop-services', serviceData);
+      return res.data;
+    } catch (err: any) {
+      if (err?.response?.data) return err.response.data;
+      return { success: false, message: 'Network error' };
+    }
+  },
+
+  updateShopService: async (id: number | string, serviceData: any) => {
+    try {
+      const res = await apiClient.put(`/admin/shop-services/${id}`, serviceData);
+      return res.data;
+    } catch (err: any) {
+      if (err?.response?.data) return err.response.data;
+      return { success: false, message: 'Network error' };
+    }
+  },
+
+  deleteShopService: async (id: number | string) => {
+    try {
+      const res = await apiClient.delete(`/admin/shop-services/${id}`);
+      return res.data;
+    } catch (err: any) {
+      return { success: false, message: 'Network error' };
     }
   },
 };

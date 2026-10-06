@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $pageTitle = 'Customer App Management';
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/api-client.php';
@@ -19,22 +19,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($_FILES['banner_image']['name']) && $_FILES['banner_image']['error'] === UPLOAD_ERR_OK) {
             $ext = strtolower(pathinfo($_FILES['banner_image']['name'], PATHINFO_EXTENSION));
             $fname = 'banner_' . $shopId . '_' . time() . '.' . $ext;
+            
             if (move_uploaded_file($_FILES['banner_image']['tmp_name'], $uploadDir . $fname)) {
-                if (!isset($_SESSION['shop_banners'][$shopId])) $_SESSION['shop_banners'][$shopId] = [];
-                $_SESSION['shop_banners'][$shopId][] = ['id'=>uniqid(),'title'=>htmlspecialchars(trim($_POST['banner_title']??'Banner')),'url'=>'/uploads/banners/'.$fname,'active'=>true,'added'=>date('d M Y, h:i A')];
+                require_once __DIR__ . '/../includes/db.php';
+                $db = getDb();
+                $stmt = $db->prepare("INSERT INTO banners (shop_id, title, image, is_active) VALUES (?, ?, ?, ?)");
+                $stmt->execute([$shopId, htmlspecialchars(trim($_POST['banner_title'] ?? 'Banner')), '/uploads/banners/' . $fname, 1]);
                 $actionMsg = 'Banner added successfully!';
             }
+
         } else { $actionMsg='Please select a valid image.'; $actionType='error'; }
     } elseif ($act === 'delete_banner') {
+        
         $bid = $_POST['banner_id'] ?? '';
-        if (!empty($_SESSION['shop_banners'][$shopId]))
-            $_SESSION['shop_banners'][$shopId] = array_values(array_filter($_SESSION['shop_banners'][$shopId], fn($b)=>$b['id']!==$bid));
+        if ($bid) {
+            require_once __DIR__ . '/../includes/db.php';
+            $db = getDb();
+            $db->prepare("DELETE FROM banners WHERE id = ? AND shop_id = ?")->execute([$bid, $shopId]);
+        }
         $actionMsg = 'Banner removed.';
     } elseif ($act === 'toggle_banner') {
+        
         $bid = $_POST['banner_id'] ?? '';
-        if (!empty($_SESSION['shop_banners'][$shopId]))
-            foreach ($_SESSION['shop_banners'][$shopId] as &$b)
-                if ($b['id']===$bid) { $b['active']=!($b['active']??true); break; }
+        if ($bid) {
+            require_once __DIR__ . '/../includes/db.php';
+            $db = getDb();
+            $db->prepare("UPDATE banners SET is_active = NOT is_active WHERE id = ? AND shop_id = ?")->execute([$bid, $shopId]);
+        }
         $actionMsg = 'Banner status updated.';
     } elseif ($act === 'add_media') {
         $uploadDir = __DIR__ . '/../uploads/shop-media/';
@@ -55,9 +66,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['shop_media'][$shopId] = array_values(array_filter($_SESSION['shop_media'][$shopId], fn($m)=>$m['id']!==$mid));
         $actionMsg = 'Media removed.';
     }
+
+    if (in_array($act, ['add_media', 'delete_media'])) {
+        require_once __DIR__ . '/../includes/db.php';
+        $db = getDb();
+        if ($db) {
+            $urls = array_column($_SESSION['shop_media'][$shopId] ?? [], 'url');
+            $stmt = $db->prepare("UPDATE laundry_shops SET shop_photos = ? WHERE id = ?");
+            $stmt->execute([json_encode($urls), $shopId]);
+        }
+    }
 }
 
-$banners   = $_SESSION['shop_banners'][$shopId] ?? [];
+
+require_once __DIR__ . '/../includes/db.php';
+$db = getDb();
+$stmt = $db->prepare("SELECT id, title, image as url, is_active as active, DATE_FORMAT(created_at, '%d %b %Y') as added FROM banners WHERE shop_id = ?");
+$stmt->execute([$shopId]);
+$banners = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 $shopMedia = $_SESSION['shop_media'][$shopId]   ?? [];
 
 $svcRes    = apiGet('/services');

@@ -105,9 +105,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['doc_requests'][$shopId]['submitted_at'] = date('Y-m-d H:i:s');
                 }
                 
-                // If it is the laundry owner uploading, redirect them back to their pending dashboard
+                // Stay on verifications.php for laundry owners after upload
                 if (isLaundryOwner()) {
-                    header('Location: ' . ADMIN_BASE_URL . '/dashboard/index.php');
+                    header('Location: ' . ADMIN_BASE_URL . '/laundries/verifications.php');
                     exit;
                 }
                 
@@ -123,12 +123,38 @@ require_once __DIR__ . '/../includes/header.php';
 $res = apiGet('/admin/verifications');
 $queue = apiExtractList($res);
 
-// Prepend session custom shops that are pending verification
+// Prepend session custom shops safely to prevent duplicates
 if (!empty($_SESSION['custom_shops'])) {
+    $existingEmails = array_map(function($l) { return strtolower(trim($l['email'] ?? '')); }, $queue);
+    $existingPhones = array_map(function($l) { return trim($l['phone'] ?? ''); }, $queue);
+
     foreach ($_SESSION['custom_shops'] as $cs) {
         $vStatus = strtoupper($cs['verificationStatus'] ?? $cs['verification_status'] ?? 'APPROVED');
         if ($vStatus === 'PENDING') {
-            $queue[] = $cs;
+            $csEmail = strtolower(trim($cs['email'] ?? ''));
+            $csPhone = trim($cs['phone'] ?? '');
+
+            $foundIndex = -1;
+            foreach ($queue as $idx => $q) {
+                $qEmail = strtolower(trim($q['email'] ?? ''));
+                $qPhone = trim($q['phone'] ?? '');
+                if (($csEmail && $qEmail === $csEmail) || ($csPhone && $qPhone === $csPhone)) {
+                    $foundIndex = $idx;
+                    break;
+                }
+            }
+
+            if ($foundIndex !== -1) {
+                // Merge session fields into API record
+                $queue[$foundIndex]['logo_url'] = !empty($cs['logo_url']) ? $cs['logo_url'] : ($queue[$foundIndex]['logo_url'] ?? '');
+                $queue[$foundIndex]['cover_url'] = !empty($cs['cover_url']) ? $cs['cover_url'] : ($queue[$foundIndex]['cover_url'] ?? '');
+                $queue[$foundIndex]['idProofPhoto'] = !empty($cs['idProofPhoto']) ? $cs['idProofPhoto'] : ($queue[$foundIndex]['idProofPhoto'] ?? '');
+                $queue[$foundIndex]['businessProofPhoto'] = !empty($cs['businessProofPhoto']) ? $cs['businessProofPhoto'] : ($queue[$foundIndex]['businessProofPhoto'] ?? '');
+                $queue[$foundIndex]['bankProofPhoto'] = !empty($cs['bankProofPhoto']) ? $cs['bankProofPhoto'] : ($queue[$foundIndex]['bankProofPhoto'] ?? '');
+                $queue[$foundIndex]['shopBoardPhoto'] = !empty($cs['shopBoardPhoto']) ? $cs['shopBoardPhoto'] : ($queue[$foundIndex]['shopBoardPhoto'] ?? '');
+            } else {
+                $queue[] = $cs;
+            }
         }
     }
 }
@@ -221,9 +247,15 @@ if ($isOwner) {
         <div style="margin-bottom: 0.85rem;">
           <div style="font-size: 0.76rem; font-weight: 800; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.4rem;">Requested Compliance Items:</div>
           <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-            <?php foreach ($dReq['requested_docs'] ?? [] as $item): ?>
+            <?php foreach ($dReq['requested_docs'] ?? [] as $item): 
+                $label = 'Document';
+                if ($item === 'id_proof_photo') $label = 'Owner Aadhaar / PAN Proof';
+                if ($item === 'business_proof_photo') $label = 'Trade License / Udyam Certificate';
+                if ($item === 'bank_proof_photo') $label = 'Bank Account Cheque / Passbook';
+                if ($item === 'shop_board_photo') $label = 'Storefront Signboard Photo';
+            ?>
               <span style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #B45309; padding: 0.25rem 0.65rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem;">
-                📄 <?= htmlspecialchars($item) ?>
+                📄 <?= htmlspecialchars($label) ?>
               </span>
             <?php endforeach; ?>
           </div>
@@ -259,10 +291,16 @@ if ($isOwner) {
           <input type="hidden" name="shop_id" value="<?= htmlspecialchars($reqShopId) ?>">
           
           <div style="flex: 1; min-width: 100%;">
-            <?php foreach ($dReq['requested_docs'] as $docKey): ?>
+            <?php foreach ($dReq['requested_docs'] as $docKey): 
+                $label = ucwords(str_replace('_', ' ', $docKey));
+                if ($docKey === 'id_proof_photo') $label = 'Owner Aadhaar / PAN Proof';
+                if ($docKey === 'business_proof_photo') $label = 'Trade License / Udyam Certificate';
+                if ($docKey === 'bank_proof_photo') $label = 'Bank Account Cheque / Passbook';
+                if ($docKey === 'shop_board_photo') $label = 'Storefront Signboard Photo';
+            ?>
                 <div style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 1rem; width: 100%;">
                     <label style="flex: 1; font-size: 0.74rem; font-weight: 800; text-transform: uppercase; color: var(--text-secondary);">
-                        <?= ucwords(str_replace('_', ' ', $docKey)) ?>
+                        <?= htmlspecialchars($label) ?>
                     </label>
                     <input type="file" name="doc_files[<?= htmlspecialchars($docKey) ?>]" accept="image/*,.pdf" class="form-control" style="flex: 2; font-size: 0.82rem; padding: 0.35rem 0.65rem;">
                 </div>
@@ -653,19 +691,19 @@ if ($isOwner) {
       </label>
       <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.25rem;">
         <label style="display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.8rem; border-radius: 8px; background: var(--bg-input); border: 1px solid var(--border-color); cursor: pointer; font-size: 0.85rem; font-weight: 600;">
-          <input type="checkbox" name="docs[]" value="Owner Aadhaar / PAN Proof" checked>
+          <input type="checkbox" name="docs[]" value="id_proof_photo" checked>
           <span>📄 Owner Aadhaar / PAN Proof Document</span>
         </label>
         <label style="display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.8rem; border-radius: 8px; background: var(--bg-input); border: 1px solid var(--border-color); cursor: pointer; font-size: 0.85rem; font-weight: 600;">
-          <input type="checkbox" name="docs[]" value="Trade License / Udyam Certificate" checked>
+          <input type="checkbox" name="docs[]" value="business_proof_photo" checked>
           <span>📜 Trade License / Udyam MSME Certificate</span>
         </label>
         <label style="display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.8rem; border-radius: 8px; background: var(--bg-input); border: 1px solid var(--border-color); cursor: pointer; font-size: 0.85rem; font-weight: 600;">
-          <input type="checkbox" name="docs[]" value="Bank Account Cheque / Passbook">
+          <input type="checkbox" name="docs[]" value="bank_proof_photo">
           <span>🏦 Bank Account Cheque / Passbook Proof</span>
         </label>
         <label style="display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.8rem; border-radius: 8px; background: var(--bg-input); border: 1px solid var(--border-color); cursor: pointer; font-size: 0.85rem; font-weight: 600;">
-          <input type="checkbox" name="docs[]" value="Storefront Signboard Photo">
+          <input type="checkbox" name="docs[]" value="shop_board_photo">
           <span>🏪 Storefront &amp; Physical Outlet Photo</span>
         </label>
       </div>

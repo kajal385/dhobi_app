@@ -138,7 +138,7 @@ export const defaultDeliveredOrder: Order = {
   } as any,
 };
 
-const _localOrders: Order[] = [defaultOrderBYLGX5, defaultDeliveredOrder];
+const _localOrders: Order[] = [];
 
 function makeMockOrder(data: {
   shop_id?: number;
@@ -284,8 +284,7 @@ export const orderService = {
       const res = await apiClient.get('/orders', { params: { page }, timeout: 4000 });
       const raw = res.data?.data || res.data;
       const list = Array.isArray(raw) ? raw : (raw?.data || []);
-      if (list.length > 0) return list;
-      return JSON.parse(JSON.stringify(_localOrders));
+      return list;
     } catch {
       const safeLocalOrders = JSON.parse(JSON.stringify(_localOrders));
       return safeLocalOrders;
@@ -297,12 +296,15 @@ export const orderService = {
       const res = await apiClient.get('/orders/active', { timeout: 4000 });
       const raw = res.data?.data || res.data;
       const list = Array.isArray(raw) ? raw : (raw?.data || []);
-      if (list.length > 0) return list;
-      return JSON.parse(JSON.stringify(_localOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled')));
+      return list;
     } catch {
       const filtered = _localOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled');
       return JSON.parse(JSON.stringify(filtered));
     }
+  },
+
+  clearLocalOrders: () => {
+    _localOrders.length = 0;
   },
 
   getOrderById: async (id: number | string): Promise<Order> => {

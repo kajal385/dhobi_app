@@ -36,7 +36,7 @@ export const authService = {
             email: 'johndoe@example.com',
             avatar: null,
             is_phone_verified: true,
-            wallet_balance: '150.00'
+            wallet_balance: '0.00'
           },
           access_token: 'mock-jwt-token'
         }

@@ -51,8 +51,8 @@ $endpoint = ($isOwner && $shopId) ? '/owner/customers' : '/admin/customers';
 $res = apiGet($endpoint, $isOwner ? ['shop_id' => $shopId] : []);
 $customers = apiExtractList($res);
 
-// Default demo records if empty
-if (empty($customers)) {
+// Default demo records if empty (only for admin preview)
+if (empty($customers) && !$isOwner) {
     $customers = [
         ['id' => '1', 'name' => 'Kajal Gajare', 'phone' => '+91 9309386003', 'email' => 'kajal@gmail.com', 'city' => 'Pune', 'totalOrders' => 6, 'totalSpent' => 2450, 'walletBalance' => 150, 'status' => 'ACTIVE', 'createdAt' => '2026-09-01'],
         ['id' => '2', 'name' => 'Pooja Verma', 'phone' => '+91 9811200998', 'email' => 'pooja.v@gmail.com', 'city' => 'Pune', 'totalOrders' => 18, 'totalSpent' => 14500, 'walletBalance' => 320, 'status' => 'ACTIVE', 'createdAt' => '2026-08-15'],

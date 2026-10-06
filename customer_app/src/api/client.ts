@@ -34,7 +34,8 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       try {
-        storage.remove('auth_token');
+        if (typeof (storage as any).delete === 'function') (storage as any).delete('auth_token');
+        if (typeof storage.remove === 'function') storage.remove('auth_token');
       } catch (e) {
         // fallback
       }

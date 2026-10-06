@@ -29,11 +29,14 @@ import {
 } from '../../services/categoryService';
 import { OrderCard } from '../../components/OrderCard';
 import { SkeletonLoader } from '../../components/SkeletonLoader';
+import LocationAccuracyModal from '../../components/LocationAccuracyModal';
 import Toast from 'react-native-toast-message';
 import { requestLocationPermission, getCurrentLocation, reverseGeocode, calculateDistance } from '../../utils/locationUtils';
 import { shopService, ShopListItem, DEFAULT_SHOPS } from '../../services/shopService';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import LocationAccuracyModal from '../../components/LocationAccuracyModal';
+import { walletService } from '../../services/walletService';
+import { setWallet } from '../../store/walletSlice';
+import { apiClient } from '../../api/client';
 
 const PROMOS = [
   { id: 1, text: 'First order 20% OFF', sub: 'Use code: DHOBI20', bg: '#D7D9FC' },
@@ -419,6 +422,7 @@ export const HomeScreen = ({ navigation }: any) => {
   const { user } = useSelector((s: RootState) => s.auth);
   const { orders, loading } = useSelector((s: RootState) => s.orders);
   const { unreadCount } = useSelector((s: RootState) => s.notifications);
+  const { balance } = useSelector((s: RootState) => s.wallet);
 
   const [refreshing, setRefreshing] = useState(false);
   const [promoIndex, setPromoIndex] = useState(0);
@@ -430,6 +434,7 @@ export const HomeScreen = ({ navigation }: any) => {
   const [popularShops, setPopularShops] = useState<ShopListItem[]>(DEFAULT_SHOPS);
   const [nearbyShops, setNearbyShops] = useState<ShopListItem[]>(DEFAULT_SHOPS);
   const [shopsLoading, setShopsLoading] = useState(false);
+  const [banners, setBanners] = useState<any[]>([]);
 
   const getShopDistance = useCallback((shop: ShopListItem) => {
     const userLat = Number(user?.latitude || 18.5980);
@@ -466,6 +471,15 @@ export const HomeScreen = ({ navigation }: any) => {
           : shop.distance,
       }));
       setNearbyShops(processedNearby);
+
+      // Fetch global banners
+      try {
+        const bannersRes = await apiClient.get('/banners');
+        setBanners(bannersRes.data?.data || []);
+      } catch (err) {
+        console.warn('Failed to fetch banners', err);
+      }
+
     } catch (e: any) {
       console.warn('Failed to fetch shops', e);
     } finally {
@@ -573,6 +587,9 @@ export const HomeScreen = ({ navigation }: any) => {
     fetchOrders();
     fetchCategories();
     fetchShops();   // ← always fetch popular shops on mount
+    walletService.getWallet().then((w) => {
+      dispatch(setWallet(w));
+    }).catch(() => {});
     const timer = setInterval(
       () => setPromoIndex((i) => (i + 1) % 3), // We have 3 slider items
       3000
@@ -580,7 +597,7 @@ export const HomeScreen = ({ navigation }: any) => {
     return () => {
       clearInterval(timer);
     };
-  }, [fetchOrders, fetchCategories, fetchShops]);
+  }, [fetchOrders, fetchCategories, fetchShops, dispatch]);
 
   // Automatically scroll when promoIndex changes
   useEffect(() => {
@@ -686,7 +703,7 @@ export const HomeScreen = ({ navigation }: any) => {
           >
             <Text style={styles.walletEmoji}>💰</Text>
             <Text style={[styles.walletText, { color: colors.primary }]}>
-              ₹{parseFloat(user?.wallet_balance || '0').toFixed(0)}
+              ₹{parseFloat(user?.wallet_balance || String(balance || 0)).toFixed(0)}
             </Text>
           </TouchableOpacity>
           {/* Notification Bell */}
@@ -720,22 +737,24 @@ export const HomeScreen = ({ navigation }: any) => {
           </Text>
         </TouchableOpacity>
 
+        
         {/* ── Promo Banner Slider ── */}
+        {banners && banners.length > 0 && (
         <ScrollView
           ref={promoScrollViewRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md }}
         >
-          {[1, 2, 3].map((item, index) => (
+          {banners.map((item, index) => (
             <TouchableOpacity
               key={index}
               activeOpacity={0.9}
               onPress={() => navigation.navigate('Booking')}
-              style={{ marginRight: index === 2 ? 0 : SPACING.md }}
+              style={{ marginRight: index === banners.length - 1 ? 0 : SPACING.md }}
             >
               <Image
-                source={require('../../assets/image copy 3.png')}
+                source={{ uri: resolveImageUrl(item.image) }}
                 style={{
                   width: Dimensions.get('window').width * 0.85,
                   height: 160,
@@ -746,10 +765,14 @@ export const HomeScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           ))}
         </ScrollView>
+        )}
+
 
         {/* ── Recent Booking ── */}
         {(() => {
           const latestOrder = activeOrders.length > 0 ? activeOrders[0] : (orders.length > 0 ? orders[0] : null);
+          if (!latestOrder) return null;
+
           const categoriesInfo = getOrderCategoriesInfo(latestOrder);
           const itemsSummary = getOrderItemsSummary(latestOrder);
           const formattedPickupDate = formatSafeOrderDate(latestOrder?.pickup_date, 0);

@@ -206,28 +206,7 @@ if ($isOwner) {
     }));
 
     if (empty($payouts)) {
-        $payouts = [
-            [
-                'id' => 'PAY-1001',
-                'shopId' => $myId ?: '30',
-                'shopName' => $myShopName ?: 'Star Wash Ultra Premium',
-                'bankName' => 'HDFC Bank',
-                'bankAccount' => '50100987654321',
-                'ifscCode' => 'HDFC0001234',
-                'upiId' => '8600692767@hdfcbank',
-                'grossRevenue' => 1400,
-                'commissionRate' => 15,
-                'commissionDeducted' => 210,
-                'taxDeducted' => 37.8,
-                'netPayable' => 1152.2,
-                'paymentMethod' => 'IMPS Immediate Transfer',
-                'utrNumber' => 'UTR20260928014521',
-                'status' => 'PENDING',
-                'period' => '21 Sep 2026 - 27 Sep 2026',
-                'createdAt' => '2026-09-28 09:15:00',
-                'remarks' => 'Weekly batch payout for customer order fulfillments'
-            ]
-        ];
+        $payouts = [];
     }
 }
 

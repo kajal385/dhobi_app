@@ -74,9 +74,26 @@ document.addEventListener('DOMContentLoaded', () => {
     quickSearchInput.addEventListener('input', (e) => {
       const q = e.target.value.toLowerCase().trim();
       const items = searchResultsDropdown.querySelectorAll('.search-result-item');
+      let hasShortcutMatch = false;
       items.forEach(item => {
         const text = item.innerText.toLowerCase();
-        item.style.display = (!q || text.includes(q)) ? 'flex' : 'none';
+        const matches = !q || text.includes(q);
+        item.style.display = matches ? 'flex' : 'none';
+        if (matches) hasShortcutMatch = true;
+      });
+
+      // Hide dropdown if no shortcuts match, allowing the user to see the filtered table below
+      if (!hasShortcutMatch && q) {
+        searchResultsDropdown.style.display = 'none';
+      } else {
+        searchResultsDropdown.style.display = 'block';
+      }
+
+      // Live-filter on-screen data tables
+      const tableRows = document.querySelectorAll('.data-table tbody tr');
+      tableRows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        row.style.display = (!q || text.includes(q)) ? '' : 'none';
       });
     });
 

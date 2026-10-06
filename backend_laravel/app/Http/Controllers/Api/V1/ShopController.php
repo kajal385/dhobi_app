@@ -81,6 +81,88 @@ class ShopController extends Controller
     }
 
     /**
+     * Get global reels for the Customer App.
+     */
+    public function getReels(Request $request)
+    {
+        $presetVideos = [
+            'https://assets.mixkit.co/videos/preview/mixkit-washing-machine-washing-clothes-41551-large.mp4',
+            'https://assets.mixkit.co/videos/preview/mixkit-steam-iron-ironing-a-shirt-41552-large.mp4',
+            'https://assets.mixkit.co/videos/preview/mixkit-folding-clothes-in-a-laundry-41553-large.mp4',
+            'https://assets.mixkit.co/videos/preview/mixkit-laundry-turned-in-a-washing-machine-41550-large.mp4',
+        ];
+
+        $shops = LaundryShop::where('is_active', 1)->get();
+        $reels = [];
+        $presetIndex = 0;
+
+        foreach ($shops as $shop) {
+            $photos = !empty($shop->shop_photos) ? (is_string($shop->shop_photos) ? json_decode($shop->shop_photos, true) : $shop->shop_photos) : [];
+            $photos = is_array($photos) ? $photos : [];
+
+            // Find if shop has explicit uploaded video files
+            $videosFound = [];
+            $imagePhotos = [];
+            foreach ($photos as $item) {
+                $url = is_array($item) ? ($item['url'] ?? $item['image'] ?? '') : (string) $item;
+                $clean = strtolower(explode('?', $url)[0]);
+                if (str_ends_with($clean, '.mp4') || str_ends_with($clean, '.mov') || str_ends_with($clean, '.webm') || str_contains($clean, '/videos/')) {
+                    $videosFound[] = $url;
+                } else if (!empty($url)) {
+                    $imagePhotos[] = $url;
+                }
+            }
+
+            if (!empty($videosFound)) {
+                foreach ($videosFound as $vIdx => $vUrl) {
+                    $reels[] = [
+                        'id' => $shop->id . '-v-' . $vIdx,
+                        'shopName' => $shop->name ?: $shop->shop_name ?: 'Laundry Shop',
+                        'video_url' => $vUrl,
+                        'thumbnail_url' => !empty($imagePhotos) ? $imagePhotos[0] : $shop->cover_image,
+                        'caption' => 'Inside ' . ($shop->name ?: $shop->shop_name),
+                        'offer' => $shop->offers_express_delivery ? 'EXPRESS DELIVERY AVAILABLE' : 'QUALITY LAUNDRY CARE',
+                        'likes' => rand(15, 120),
+                        'shares' => rand(5, 30),
+                        'service' => 'Premium Wash & Iron',
+                        'bg' => '#000000',
+                        'isLiked' => false,
+                        'isSaved' => false,
+                        'isFollowing' => false,
+                    ];
+                }
+            } else {
+                // Assign a quality laundry process video to the shop with their uploaded photo/cover as thumbnail
+                $assignedVideo = $presetVideos[$presetIndex % count($presetVideos)];
+                $presetIndex++;
+                $thumb = !empty($imagePhotos) ? $imagePhotos[0] : ($shop->cover_image ?: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=600&auto=format&fit=crop&q=80');
+
+                $reels[] = [
+                    'id' => 'shop-reel-' . $shop->id,
+                    'shopName' => $shop->name ?: $shop->shop_name ?: 'Laundry Shop',
+                    'video_url' => $assignedVideo,
+                    'thumbnail_url' => $thumb,
+                    'caption' => 'Professional Laundry Process at ' . ($shop->name ?: $shop->shop_name),
+                    'offer' => 'FREE PICKUP & DELIVERY',
+                    'likes' => rand(20, 150),
+                    'shares' => rand(8, 40),
+                    'service' => 'Eco Wash & Iron',
+                    'bg' => '#000000',
+                    'isLiked' => false,
+                    'isSaved' => false,
+                    'isFollowing' => false,
+                ];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Reels retrieved successfully',
+            'data'    => $reels,
+        ]);
+    }
+
+    /**
      * Get nearby shops for Customer App.
      */
     public function nearby(Request $request)
@@ -189,72 +271,41 @@ class ShopController extends Controller
             ], 404);
         }
 
-        $services = DB::table('shop_services')
-            ->where('shop_id', $shop->id)
+        $services = \App\Models\ShopService::where('shop_id', $shop->id)
             ->where('is_active', 1)
+            ->with(['items' => function ($query) {
+                $query->where('is_active', 1);
+            }])
             ->get();
 
-        // If no services in shop_services, seed standard defaults
-        if ($services->isEmpty()) {
-            $services = collect([
-                (object)[
-                    'id' => 1,
-                    'name' => 'Wash & Fold',
-                    'description' => 'Daily wear clothes, neatly washed & folded',
-                    'icon' => '🧺',
-                    'estimated_hours' => 24,
-                    'items' => [
-                        ['id' => 101, 'name' => 'T-Shirt', 'pricing_type' => 'per_piece', 'price_per_piece' => 20, 'price_per_kg' => null],
-                        ['id' => 102, 'name' => 'Jeans / Trousers', 'pricing_type' => 'per_piece', 'price_per_piece' => 40, 'price_per_kg' => null],
-                        ['id' => 103, 'name' => 'Mixed Clothes (by Weight)', 'pricing_type' => 'per_kg', 'price_per_piece' => null, 'price_per_kg' => 79],
-                    ]
-                ],
-                (object)[
-                    'id' => 2,
-                    'name' => 'Wash & Steam Iron',
-                    'description' => 'Clean wash with crisp crease steam ironing',
-                    'icon' => '👔',
-                    'estimated_hours' => 24,
-                    'items' => [
-                        ['id' => 201, 'name' => 'Shirt / Kurta', 'pricing_type' => 'per_piece', 'price_per_piece' => 35, 'price_per_kg' => null],
-                        ['id' => 202, 'name' => 'Trousers / Formal Pants', 'pricing_type' => 'per_piece', 'price_per_piece' => 45, 'price_per_kg' => null],
-                    ]
-                ],
-                (object)[
-                    'id' => 3,
-                    'name' => 'Premium Dry Clean',
-                    'description' => 'Suits, silk sarees & delicate garments',
-                    'icon' => '✨',
-                    'estimated_hours' => 48,
-                    'items' => [
-                        ['id' => 301, 'name' => 'Suit (2 Piece)', 'pricing_type' => 'per_piece', 'price_per_piece' => 250, 'price_per_kg' => null],
-                        ['id' => 302, 'name' => 'Saree (Silk / Heavy)', 'pricing_type' => 'per_piece', 'price_per_piece' => 200, 'price_per_kg' => null],
-                        ['id' => 303, 'name' => 'Blazer / Coat', 'pricing_type' => 'per_piece', 'price_per_piece' => 180, 'price_per_kg' => null],
-                    ]
-                ]
-            ]);
-        } else {
-            $services = $services->map(function ($svc) {
-                return [
-                    'id' => $svc->id,
-                    'name' => $svc->name,
-                    'description' => $svc->description ?: 'High quality laundry care',
-                    'icon' => $svc->icon ?: '🧺',
-                    'estimated_hours' => $svc->estimated_hours ?: 24,
-                    'items' => [
-                        ['id' => $svc->id * 100 + 1, 'name' => 'Standard Item', 'pricing_type' => 'per_piece', 'price_per_piece' => 30, 'price_per_kg' => null],
-                        ['id' => $svc->id * 100 + 2, 'name' => 'Premium Fabric', 'pricing_type' => 'per_piece', 'price_per_piece' => 60, 'price_per_kg' => null],
-                    ]
-                ];
-            });
-        }
+        $formattedServices = $services->map(function ($svc) {
+            return [
+                'id' => $svc->id,
+                'name' => $svc->name,
+                'description' => $svc->description ?: 'High quality laundry care',
+                'icon' => $svc->icon ?: '🧺',
+                'estimated_hours' => $svc->estimated_hours ?: 24,
+                'items' => $svc->items->map(function ($item) {
+                    return [
+                        'id' => $item->id,
+                        'name' => $item->name,
+                        'pricing_type' => $item->pricing_type,
+                        'price_per_piece' => $item->price_per_piece,
+                        'price_per_kg' => $item->price_per_kg,
+                    ];
+                })->toArray(),
+            ];
+        })->toArray();
+
+        // We now use DB-driven services exclusively.
+
 
         return response()->json([
             'success' => true,
             'message' => 'Shop details retrieved',
             'data'    => [
                 'shop' => $this->formatShopForCustomer($shop),
-                'services' => $services,
+                'services' => $formattedServices,
                 'reviews' => [],
                 'rating_breakdown' => [
                     '5' => max(1, $shop->total_orders),
@@ -263,7 +314,32 @@ class ShopController extends Controller
                     '2' => 0,
                     '1' => 0,
                 ],
-                'reels' => [],
+                'reels' => collect(!empty($shop->shop_photos) ? (is_string($shop->shop_photos) ? json_decode($shop->shop_photos, true) : $shop->shop_photos) : [])->map(function ($photo, $idx) {
+                    $clean = strtolower(explode('?', (string)$photo)[0]);
+                    $isVideo = str_ends_with($clean, '.mp4') || str_ends_with($clean, '.mov') || str_ends_with($clean, '.webm') || str_contains($clean, '/videos/');
+                    return [
+                        'id' => $idx + 1,
+                        'uuid' => 'gallery-' . $idx,
+                        'url' => $photo,
+                        'video_url' => $isVideo ? $photo : null,
+                        'thumbnail_url' => $photo,
+                        'caption' => $isVideo ? 'Shop Video' : 'Shop Gallery Photo',
+                        'offer_text' => null,
+                        'type' => $isVideo ? 'video' : 'photo',
+                    ];
+                })->toArray(),
+                'gallery' => collect(!empty($shop->shop_photos) ? (is_string($shop->shop_photos) ? json_decode($shop->shop_photos, true) : $shop->shop_photos) : [])->map(function ($photo, $idx) {
+                    $clean = strtolower(explode('?', (string)$photo)[0]);
+                    $isVideo = str_ends_with($clean, '.mp4') || str_ends_with($clean, '.mov') || str_ends_with($clean, '.webm') || str_contains($clean, '/videos/');
+                    return [
+                        'id' => $idx + 1,
+                        'url' => $photo,
+                        'video_url' => $isVideo ? $photo : null,
+                        'thumbnail_url' => $photo,
+                        'type' => $isVideo ? 'video' : 'photo',
+                        'title' => ($isVideo ? 'Shop Video' : 'Shop Photo') . ' #' . ($idx + 1),
+                    ];
+                })->toArray(),
                 'coupons' => [],
                 'memberships' => [],
                 'delivery_slots' => [
@@ -319,6 +395,7 @@ class ShopController extends Controller
             'free_delivery_above'      => 399,
             'cod_available'            => true,
             'total_orders'             => (int) ($shop->total_orders ?: 0),
+            'gallery'                  => !empty($shop->shop_photos) ? (is_string($shop->shop_photos) ? json_decode($shop->shop_photos, true) : $shop->shop_photos) : [],
         ];
     }
 
