@@ -228,9 +228,21 @@ export const PickupVerificationScreen = ({ route }: any) => {
     navigation.goBack();
   };
 
-  const handleApplyStatusUpdate = () => {
+  const handleApplyStatusUpdate = async () => {
     setPickupStatus(selectedStatus);
     setShowStatusModal(false);
+    const numericId = task.rawOrder?.id || (task.id ? task.id.replace(/\D/g, '') : null);
+    if (numericId) {
+      const apiStatus = selectedStatus === 'Picked Up' ? 'PICKED_UP' : (selectedStatus === 'Cancelled' ? 'CANCELLED' : selectedStatus);
+      try {
+        await apiClient.put(`/delivery/orders/${numericId}/pickup`, {
+          status: apiStatus,
+          notes: `Pickup status changed to ${selectedStatus}`,
+        });
+      } catch (err) {
+        console.log('Update status error:', err);
+      }
+    }
     if (selectedStatus === 'Picked Up') {
       mockDataStore.updateOrderStatus(task.id, 'Processing', 'Pickup completed by delivery partner');
     } else if (selectedStatus === 'Cancelled') {

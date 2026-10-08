@@ -203,6 +203,18 @@ export const OrderDetailScreen = ({ route }: any) => {
     const nextStatus = statuses[currentIndex + 1];
 
     if (nextStatus) {
+      const apiStatusMap: { [key: string]: string } = {
+        Placed: 'placed',
+        Received: 'received',
+        'In-Process': 'in_process',
+        Ready: 'ready_for_delivery',
+        'Out for Delivery': 'out_for_delivery',
+        Delivered: 'delivered',
+      };
+      const rawId = (order as any).numericId || (typeof order.id === 'string' ? order.id.replace(/\D/g, '') : order.id) || order.id;
+      if (rawId) {
+        partnerService.updateOrderStatus(rawId, apiStatusMap[nextStatus] || nextStatus.toLowerCase());
+      }
       mockDataStore.updateOrderStatus(order.id, nextStatus);
       setOrder((prev) => (prev ? { ...prev, status: nextStatus } : prev));
       Alert.alert('Status Updated 📈', `Order ${order.id} status changed to ${nextStatus}`);

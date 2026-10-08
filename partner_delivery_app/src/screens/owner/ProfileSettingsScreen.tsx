@@ -47,12 +47,13 @@ export const ProfileSettingsScreen = () => {
 
   // State: Working Hours
   const [workingHours, setWorkingHours] = useState({
-    operatingDays: 'Monday - Sunday (7 Days)',
+    operatingDays: 'Monday - Saturday (Sunday Off)',
     openTime: '08:00 AM',
     closeTime: '09:00 PM',
     breakHours: '01:30 PM - 02:30 PM',
     expressSlaHours: '4 Hours Express SLA',
     isOpenToday: true,
+    isSundayOff: true,
   });
 
   // State: Bank Details
@@ -106,11 +107,17 @@ export const ProfileSettingsScreen = () => {
           }
 
           if (shop.working_hours) {
-            const parts = shop.working_hours.split('-');
+            const isSunOff = /sun(?:day)?\s*(?:is\s*)?(?:off|closed|close)/i.test(shop.working_hours) ||
+                             /mon(?:day)?\s*(?:to|-)\s*sat(?:urday)?/i.test(shop.working_hours);
+            const cleaned = shop.working_hours.replace(/\(.*?\)/g, '').replace(/\|.*/, '').trim();
+            const parts = cleaned.split('-');
             setWorkingHours((prev) => ({
               ...prev,
               openTime: parts[0]?.trim() || '08:00 AM',
               closeTime: parts[1]?.trim() || '09:00 PM',
+              isSundayOff: isSunOff,
+              operatingDays: isSunOff ? 'Monday - Saturday (Sunday Off)' : 'Monday - Sunday (All 7 Days)',
+              isOpenToday: shop.is_open !== undefined ? Boolean(shop.is_open) : true,
             }));
           }
 
@@ -280,17 +287,19 @@ export const ProfileSettingsScreen = () => {
   const handleSaveHours = async () => {
     try {
       setIsLoadingProfile(true);
-      const hoursStr = `${tempHours.openTime} - ${tempHours.closeTime}`;
+      const offSuffix = tempHours.isSundayOff ? ' (Sunday Off)' : ' (All 7 Days)';
+      const hoursStr = `${tempHours.openTime} - ${tempHours.closeTime}${offSuffix}`;
       await partnerService.updateOwnerProfile({
         shop_id: currentShop?.id,
         phone: shopProfile.phone || currentShop?.phone || currentUser?.phone,
         working_hours: hoursStr,
+        is_open: tempHours.isOpenToday ? 1 : 0,
       });
 
       setWorkingHours(tempHours);
-      updateShop({ working_hours: hoursStr });
+      updateShop({ working_hours: hoursStr, is_open: tempHours.isOpenToday });
       setActiveModal(null);
-      Alert.alert('Success ⏰', 'Working hours updated and synced across customer app!');
+      Alert.alert('Success ⏰', 'Working hours and weekly off days updated successfully!');
     } catch (err) {
       setWorkingHours(tempHours);
       setActiveModal(null);
@@ -669,6 +678,27 @@ export const ProfileSettingsScreen = () => {
                     onValueChange={(val) => setTempHours({ ...tempHours, isOpenToday: val })}
                     trackColor={{ false: COLORS.border, true: COLORS.success + '80' }}
                     thumbColor={tempHours.isOpenToday ? COLORS.success : COLORS.textLight}
+                  />
+                </View>
+
+                <View style={[styles.switchRow, { marginTop: 10, backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0' }]}>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={[styles.switchLabel, { fontWeight: '700' }]}>Weekly Off (Sunday Closed)</Text>
+                    <Text style={{ fontSize: 12, color: COLORS.textLight, marginTop: 2 }}>
+                      {tempHours.isSundayOff
+                        ? 'Shop is closed every Sunday. Customers cannot select Sunday for pickups.'
+                        : 'Shop is open all 7 days (including Sunday).'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={tempHours.isSundayOff}
+                    onValueChange={(val) => setTempHours({
+                      ...tempHours,
+                      isSundayOff: val,
+                      operatingDays: val ? 'Monday - Saturday (Sunday Off)' : 'Monday - Sunday (All 7 Days)'
+                    })}
+                    trackColor={{ false: COLORS.border, true: COLORS.primary + '80' }}
+                    thumbColor={tempHours.isSundayOff ? COLORS.primary : COLORS.textLight}
                   />
                 </View>
 

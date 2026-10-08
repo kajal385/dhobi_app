@@ -64,38 +64,97 @@ class CategoryController extends Controller
             if ($banners->isEmpty()) {
                 $banners = collect([
                     [
-                        'id' => 1,
-                        'title' => 'Flat 20% OFF First Order',
-                        'subtitle' => 'Use code: DHOBI20 at checkout',
+                        'id' => '1',
+                        'title' => 'Super Clean Wash',
+                        'subtitle' => 'Special festive laundry & dry clean offer',
+                        'image' => '/uploads/banners/banner_30_1791351874.png',
+                        'link' => 'booking',
+                        'tag' => 'ACTIVE',
+                        'tagColor' => '#10B981',
+                        'is_active' => 1,
+                    ],
+                    [
+                        'id' => '2',
+                        'title' => 'Flat 30% OFF on First Dry Clean Order',
+                        'subtitle' => 'Use code FIRST30 on your order',
                         'image' => 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80',
                         'link' => 'booking',
                         'tag' => 'LIMITED OFFER',
+                        'tagColor' => '#10B981',
                         'is_active' => 1,
                     ],
                     [
-                        'id' => 2,
-                        'title' => 'Express 24h Laundry',
-                        'subtitle' => 'Fast pickup & doorstep delivery',
+                        'id' => '3',
+                        'title' => 'Express 24-Hour Wash & Fold Service',
+                        'subtitle' => 'Doorstep pickup & next-day delivery',
                         'image' => 'https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=800&q=80',
                         'link' => 'booking',
                         'tag' => 'EXPRESS',
-                        'is_active' => 1,
-                    ],
-                    [
-                        'id' => 3,
-                        'title' => 'Premium Dry Cleaning',
-                        'subtitle' => 'Gentle organic care for silks & suits',
-                        'image' => 'https://images.unsplash.com/photo-1582735689369-4fe89db7114c?auto=format&fit=crop&w=800&q=80',
-                        'link' => 'booking',
-                        'tag' => 'PREMIUM',
+                        'tagColor' => '#10B981',
                         'is_active' => 1,
                     ],
                 ]);
             }
 
+            $formatted = $banners->map(function ($b) {
+                $bObj = (object) $b;
+                $img = (string) ($bObj->image ?? '');
+                if ($img && !str_starts_with($img, 'http://') && !str_starts_with($img, 'https://')) {
+                    $cleanImg = ltrim($img, '/');
+                    if (file_exists(public_path($cleanImg))) {
+                        $img = url($cleanImg);
+                    } else {
+                        $img = 'https://dhobi-admin.bizz-manager.com/' . $cleanImg;
+                    }
+                }
+                return [
+                    'id' => (string) ($bObj->id ?? '1'),
+                    'shop_id' => $bObj->shop_id ?? null,
+                    'title' => $bObj->title ?: 'Special Laundry Offer',
+                    'subtitle' => $bObj->subtitle ?? ($bObj->description ?? 'Doorstep pickup & next-day delivery'),
+                    'tag' => $bObj->tag ?? 'ACTIVE',
+                    'tagColor' => $bObj->tagColor ?? ($bObj->tag_color ?? '#10B981'),
+                    'image' => $img,
+                    'url' => $bObj->link ?? $img,
+                    'is_active' => (int) ($bObj->is_active ?? 1),
+                ];
+            });
+
+            // Merge from banners.json if present
+            $jsonFile = base_path('../customer_app/src/constants/banners.json');
+            if (file_exists($jsonFile)) {
+                $custom = json_decode(file_get_contents($jsonFile), true);
+                if (is_array($custom)) {
+                    foreach ($custom as $cb) {
+                        if (!$formatted->contains('id', (string) ($cb['id'] ?? ''))) {
+                            $cbImg = (string) ($cb['image'] ?? ($cb['url'] ?? ''));
+                            if ($cbImg && !str_starts_with($cbImg, 'http://') && !str_starts_with($cbImg, 'https://')) {
+                                $cleanCbImg = ltrim($cbImg, '/');
+                                if (file_exists(public_path($cleanCbImg))) {
+                                    $cbImg = url($cleanCbImg);
+                                } else {
+                                    $cbImg = 'https://dhobi-admin.bizz-manager.com/' . $cleanCbImg;
+                                }
+                            }
+                            $formatted->push([
+                                'id' => (string) ($cb['id'] ?? uniqid()),
+                                'shop_id' => $cb['shopId'] ?? null,
+                                'title' => $cb['title'] ?? 'Special Laundry Offer',
+                                'subtitle' => $cb['subtitle'] ?? 'Doorstep pickup & next-day delivery',
+                                'tag' => $cb['tag'] ?? 'ACTIVE',
+                                'tagColor' => $cb['tagColor'] ?? '#10B981',
+                                'image' => $cbImg,
+                                'url' => $cb['url'] ?? $cbImg,
+                                'is_active' => 1,
+                            ]);
+                        }
+                    }
+                }
+            }
+
             return response()->json([
                 'success' => true,
-                'data' => $banners
+                'data' => $formatted->values()
             ]);
         } catch (\Throwable $e) {
             return response()->json([
@@ -145,6 +204,9 @@ class CategoryController extends Controller
             }
 
             $title = $request->input('title', $request->input('banner_title', 'Promotional Offer'));
+            $subtitle = $request->input('subtitle', $request->input('banner_subtitle', 'Special festive laundry offer'));
+            $tag = $request->input('tag', $request->input('banner_tag', 'ACTIVE'));
+            $tagColor = $request->input('tagColor', $request->input('banner_tag_color', '#10B981'));
             $shopId = $request->input('shop_id');
             $link = $request->input('link', 'booking');
 
@@ -157,6 +219,15 @@ class CategoryController extends Controller
                 'updated_at' => now(),
             ];
 
+            if (\Illuminate\Support\Facades\Schema::hasColumn('banners', 'subtitle') && $subtitle) {
+                $data['subtitle'] = $subtitle;
+            }
+            if (\Illuminate\Support\Facades\Schema::hasColumn('banners', 'tag') && $tag) {
+                $data['tag'] = $tag;
+            }
+            if (\Illuminate\Support\Facades\Schema::hasColumn('banners', 'tag_color') && $tagColor) {
+                $data['tag_color'] = $tagColor;
+            }
             if (\Illuminate\Support\Facades\Schema::hasColumn('banners', 'shop_id') && $shopId) {
                 $data['shop_id'] = $shopId;
             }

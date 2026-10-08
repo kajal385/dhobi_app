@@ -40,8 +40,9 @@ Route::prefix('v1')->group(function () {
     Route::get('/shops', [ShopController::class, 'index']);
     Route::get('/shops/popular', [ShopController::class, 'popular']);
     Route::get('/shops/nearby', [ShopController::class, 'nearby']);
-    Route::get('/shops/{id}', [ShopController::class, 'show']);
     Route::get('/reels', [ShopController::class, 'getReels']);
+    Route::post('/reels', [ShopController::class, 'storeReel']);
+    Route::delete('/reels/{id}', [ShopController::class, 'deleteReel']);
     Route::get('/banners', [CategoryController::class, 'banners']);
     Route::post('/banners', [CategoryController::class, 'storeBanner']);
     Route::delete('/banners/{id}', [CategoryController::class, 'deleteBanner']);
@@ -156,7 +157,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/laundry-shops', [AdminDashboardController::class, 'laundries']);
         Route::post('/laundries', [AdminDashboardController::class, 'onboardLaundryShop']);
         Route::post('/laundries/onboard', [AdminDashboardController::class, 'onboardLaundryShop']);
-        Route::put('/laundries/{id}', [AdminDashboardController::class, 'updateLaundryShop']);
+        Route::match(['put', 'post'], '/laundries/{id}', [AdminDashboardController::class, 'updateLaundryShop']);
         Route::delete('/laundries/{id}', [AdminDashboardController::class, 'deleteLaundryShop']);
         Route::post('/laundries/{id}/approve', [AdminDashboardController::class, 'approveLaundry']);
         Route::post('/laundries/{id}/reject', [AdminDashboardController::class, 'rejectLaundry']);
@@ -185,6 +186,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/orders/{id}', [AdminDashboardController::class, 'showOrder']);
         Route::put('/orders/{id}/status', [AdminDashboardController::class, 'updateOrderStatus']);
         Route::post('/orders/{id}/status', [AdminDashboardController::class, 'updateOrderStatus']);
+        Route::post('/orders/{id}/assign-delivery', [LaundryOwnerController::class, 'assignDeliveryBoy']);
         
         Route::get('/verifications', [AdminDashboardController::class, 'verifications']);
         Route::post('/verifications/{id}/approve', [AdminDashboardController::class, 'approveLaundry']);

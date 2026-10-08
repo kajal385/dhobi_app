@@ -325,37 +325,101 @@ if (!function_exists('assignDriverToOrderInDb')) {
     /**
      * Dispatch and assign an order to a delivery partner in dhobi_db.
      */
-    function assignDriverToOrderInDb($orderId, $driverName): bool {
+    function assignDriverToOrderInDb($orderId, $driverInput, $driverName = null): bool {
         $db = getDb();
         if (!$db) return false;
 
         try {
-            // Find driver user_id (orders.delivery_boy_id references users.id)
-            $numId = is_numeric($driverName) ? (int)$driverName : 0;
-            $stmt = $db->prepare("SELECT d.id as boy_id, d.user_id 
-                                  FROM delivery_boys d 
-                                  JOIN users u ON d.user_id = u.id 
-                                  WHERE u.name = :name OR d.id = :did OR u.id = :uid LIMIT 1");
-            $stmt->execute([':name' => $driverName, ':did' => $numId, ':uid' => $numId]);
-            $driver = $stmt->fetch();
+            $driverUserId = null;
 
-            $driverUserId = $driver ? (int)$driver['user_id'] : null;
+            // 1. If numeric, resolve user_id (since orders.delivery_boy_id references users.id)
+            if (is_numeric($driverInput)) {
+                $intId = (int)$driverInput;
+                $stmt = $db->prepare("SELECT user_id FROM delivery_boys WHERE id = :id OR user_id = :uid LIMIT 1");
+                $stmt->execute([':id' => $intId, ':uid' => $intId]);
+                $row = $stmt->fetch();
+                if ($row && !empty($row['user_id'])) {
+                    $driverUserId = (int)$row['user_id'];
+                } else {
+                    $stmtU = $db->prepare("SELECT id FROM users WHERE id = :uid LIMIT 1");
+                    $stmtU->execute([':uid' => $intId]);
+                    $uRow = $stmtU->fetch();
+                    if ($uRow) $driverUserId = (int)$uRow['id'];
+                }
+            }
 
-            $up = $db->prepare("UPDATE orders 
-                                SET delivery_boy_id = :did, 
-                                    status = 'OUT_FOR_DELIVERY', 
-                                    updated_at = NOW() 
-                                WHERE id = :oid OR order_number = :onum");
-            $up->execute([
-                ':did'  => $driverUserId,
-                ':oid'  => is_numeric($orderId) ? (int)$orderId : 0,
-                ':onum' => $orderId
-            ]);
+            // 2. If not resolved yet, check by driverName
+            if (!$driverUserId && !empty($driverName)) {
+                $stmt = $db->prepare("SELECT d.user_id FROM delivery_boys d JOIN users u ON d.user_id = u.id WHERE u.name = :name LIMIT 1");
+                $stmt->execute([':name' => $driverName]);
+                $row = $stmt->fetch();
+                if ($row) $driverUserId = (int)$row['user_id'];
+            }
 
-            return true;
+            // 3. Fallback: check if driverInput is a name string
+            if (!$driverUserId && is_string($driverInput) && !empty($driverInput)) {
+                $stmt = $db->prepare("SELECT d.user_id FROM delivery_boys d JOIN users u ON d.user_id = u.id WHERE u.name = :name LIMIT 1");
+                $stmt->execute([':name' => $driverInput]);
+                $row = $stmt->fetch();
+                if ($row) $driverUserId = (int)$row['user_id'];
+            }
+
+            if ($driverUserId) {
+                $up = $db->prepare("UPDATE orders 
+                                    SET delivery_boy_id = :did, 
+                                        status = 'OUT_FOR_DELIVERY', 
+                                        updated_at = NOW() 
+                                    WHERE id = :oid OR order_number = :onum");
+                $up->execute([
+                    ':did'  => $driverUserId,
+                    ':oid'  => is_numeric($orderId) ? (int)$orderId : 0,
+                    ':onum' => $orderId
+                ]);
+
+                // Also update or insert delivery_assignments
+                try {
+                    $oidInt = is_numeric($orderId) ? (int)$orderId : 0;
+                    if ($oidInt <= 0) {
+                        $oidStmt = $db->prepare("SELECT id FROM orders WHERE order_number = :onum LIMIT 1");
+                        $oidStmt->execute([':onum' => $orderId]);
+                        $oidInt = (int)$oidStmt->fetchColumn();
+                    }
+                    if ($oidInt > 0) {
+                        $asStmt = $db->prepare("INSERT INTO delivery_assignments (order_id, delivery_boy_id, type, status, created_at, updated_at) 
+                                                VALUES (:oid, :did, 'delivery', 'assigned', NOW(), NOW())");
+                        $asStmt->execute([':oid' => $oidInt, ':did' => $driverUserId]);
+                    }
+                } catch (\Throwable $at) {}
+
+                return true;
+            }
+
+            return false;
         } catch (\Throwable $e) {
             error_log("assignDriverToOrderInDb error: " . $e->getMessage());
             return false;
+        }
+    }
+}
+
+if (!function_exists('getDriverNameById')) {
+    /**
+     * Resolve delivery driver's display name by either users.id or delivery_boys.id.
+     */
+    function getDriverNameById($id): ?string {
+        if (empty($id)) return null;
+        $db = getDb();
+        if (!$db) return null;
+        try {
+            $stmt = $db->prepare("SELECT name FROM users WHERE id = :id AND role = 'delivery_boy' 
+                                  UNION 
+                                  SELECT u.name FROM delivery_boys d JOIN users u ON d.user_id = u.id WHERE d.id = :did 
+                                  LIMIT 1");
+            $stmt->execute([':id' => $id, ':did' => $id]);
+            $val = $stmt->fetchColumn();
+            return $val ?: null;
+        } catch (\Throwable $t) {
+            return null;
         }
     }
 }
@@ -381,6 +445,100 @@ if (!function_exists('updateOrderStatusInDb')) {
             return true;
         } catch (\Throwable $e) {
             return false;
+        }
+    }
+}
+
+if (!function_exists('fetchOrdersFromDb')) {
+    /**
+     * Fetch real live orders from dhobi_db database.
+     */
+    function fetchOrdersFromDb($shopId = null, $status = null): array {
+        $db = getDb();
+        if (!$db) return [];
+
+        try {
+            $sql = "SELECT 
+                        o.id,
+                        o.order_number,
+                        o.order_number as orderNumber,
+                        o.user_id,
+                        o.shop_id,
+                        o.delivery_boy_id,
+                        COALESCE(u.name, 'Customer') as customerName,
+                        COALESCE(u.name, 'Customer') as customer_name,
+                        COALESCE(u.phone, '') as customerPhone,
+                        COALESCE(u.phone, '') as customer_phone,
+                        COALESCE(s.name, 'Laundry Shop') as laundryName,
+                        COALESCE(s.name, 'Laundry Shop') as shop_name,
+                        COALESCE(s.owner_name, '') as owner_name,
+                        COALESCE(s.phone, '') as shop_phone,
+                        COALESCE(o.city, s.city, 'Pune') as city,
+                        COALESCE(o.pickup_address, 'Pune') as pickupAddress,
+                        COALESCE(o.pickup_address, 'Pune') as pickup_address,
+                        COALESCE(o.delivery_address, o.pickup_address, 'Pune') as delivery_address,
+                        COALESCE(o.total_amount, o.amount, o.total, 0) as amount,
+                        COALESCE(o.total_amount, o.amount, o.total, 0) as total_amount,
+                        COALESCE(o.total_amount, o.amount, o.total, 0) as total,
+                        UPPER(COALESCE(o.payment_method, 'COD')) as paymentMethod,
+                        UPPER(COALESCE(o.payment_method, 'COD')) as payment_method,
+                        UPPER(COALESCE(o.payment_status, 'PENDING')) as paymentStatus,
+                        UPPER(COALESCE(o.payment_status, 'PENDING')) as payment_status,
+                        UPPER(COALESCE(o.status, 'PENDING')) as status,
+                        COALESCE(du.name, dbu.name, 'Unassigned') as deliveryBoyName,
+                        COALESCE(du.name, dbu.name, 'Unassigned') as delivery_boy_name,
+                        COALESCE(du.phone, dbu.phone, '') as delivery_boy_phone,
+                        DATE_FORMAT(o.created_at, '%d %b %Y %h:%i %p') as createdAt,
+                        o.created_at,
+                        o.notes,
+                        o.customer_available,
+                        o.customer_availability_notes
+                    FROM orders o
+                    LEFT JOIN users u ON o.user_id = u.id
+                    LEFT JOIN laundry_shops s ON o.shop_id = s.id
+                    LEFT JOIN users du ON o.delivery_boy_id = du.id
+                    LEFT JOIN delivery_boys db ON o.delivery_boy_id = db.id
+                    LEFT JOIN users dbu ON db.user_id = dbu.id";
+
+            $where = [];
+            $params = [];
+
+            if (!empty($shopId) && $shopId !== 'ALL' && $shopId !== 'all') {
+                $where[] = "o.shop_id = :shop_id";
+                $params[':shop_id'] = $shopId;
+            }
+
+            if (!empty($status) && $status !== 'ALL' && $status !== 'all') {
+                $where[] = "UPPER(o.status) = :status";
+                $params[':status'] = strtoupper($status);
+            }
+
+            if (!empty($where)) {
+                $sql .= " WHERE " . implode(" AND ", $where);
+            }
+
+            $sql .= " ORDER BY o.id DESC";
+
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
+            $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Fetch order items for each order
+            foreach ($orders as &$ord) {
+                try {
+                    $itemStmt = $db->prepare("SELECT item_name as name, item_name, service_name, quantity, unit_price, total_price FROM order_items WHERE order_id = :oid");
+                    $itemStmt->execute([':oid' => $ord['id']]);
+                    $ord['items'] = $itemStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                } catch (\Throwable $t) {
+                    $ord['items'] = [];
+                }
+            }
+            unset($ord);
+
+            return $orders;
+        } catch (\Throwable $e) {
+            error_log("fetchOrdersFromDb error: " . $e->getMessage());
+            return [];
         }
     }
 }

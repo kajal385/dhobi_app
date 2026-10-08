@@ -11,12 +11,12 @@ class ShopServiceController extends Controller
 {
     public function getServices(Request $request)
     {
-        $shopId = $request->input('shop_id') ?? $request->user()->shop_id;
-        if (!$shopId) {
-            return response()->json(['success' => false, 'message' => 'Shop ID required'], 400);
+        $shopId = $request->input('shop_id') ?? ($request->user() ? $request->user()->shop_id : null);
+        $query = ShopService::with('items');
+        if ($shopId) {
+            $query->where('shop_id', $shopId);
         }
-
-        $services = ShopService::where('shop_id', $shopId)->with('items')->get();
+        $services = $query->orderBy('id', 'desc')->get();
 
         return response()->json([
             'success' => true,

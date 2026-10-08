@@ -147,13 +147,71 @@ export const TrackingScreen = ({ navigation, route }: any) => {
     }
   };
 
+  const reduxOrders = useSelector((s: RootState) => s.orders.orders);
+  const matchingReduxOrder = reduxOrders.find(
+    (o: any) =>
+      o.id === Number(orderId) ||
+      String(o.id) === String(orderId) ||
+      o.order_number === String(orderId) ||
+      (order?.order_number && o.order_number === order.order_number)
+  );
+
+  // Dynamic Shop Info (Strictly resolves from the order's actual laundry shop relationship)
+  const shopObj = order?.shop || (order as any)?.laundry_shop || (order as any)?.laundryShop || (matchingReduxOrder as any)?.shop || route?.params?.shop;
+  const shopName =
+    (order as any)?.shop_name ||
+    shopObj?.name ||
+    shopObj?.shop_name ||
+    route?.params?.shopName ||
+    (matchingReduxOrder as any)?.shop_name ||
+    (order as any)?.laundry_name ||
+    'Laundry Shop';
+
+  const shopOwnerName =
+    (order as any)?.owner_name ||
+    (order as any)?.ownerName ||
+    shopObj?.owner_name ||
+    shopObj?.ownerName ||
+    route?.params?.ownerName ||
+    (matchingReduxOrder as any)?.owner_name ||
+    '';
+
+  const shopAddress =
+    (order as any)?.shop_address ||
+    shopObj?.address ||
+    (order as any)?.laundry_address ||
+    route?.params?.shopLocation ||
+    (matchingReduxOrder as any)?.shop_address ||
+    'Laundry Shop Address';
+
+  const shopPhone =
+    (order as any)?.shop_phone ||
+    shopObj?.phone ||
+    shopObj?.mobile ||
+    route?.params?.shopPhone ||
+    (matchingReduxOrder as any)?.shop_phone ||
+    '';
+
+  const shopRating = shopObj?.rating ? String(shopObj.rating) : (order?.shop?.rating ? String(order.shop.rating) : '4.9');
+  const shopReviewsCount = shopObj?.review_count || order?.shop?.review_count || 142;
+  const shopLogo = shopObj?.logo || order?.shop?.logo || (order as any)?.shop_logo;
+
   const handleReschedule = () => {
+    const rawNumber = shopPhone || '9876543210';
+    const cleanNumber = rawNumber.replace(/[^0-9+]/g, '');
     Alert.alert(
       'Reschedule Delivery',
-      'Need delivery at a different time? Please contact the shop directly or call customer support to pick a preferred delivery slot.',
+      `Need delivery at a different time? Please contact ${shopName} directly at ${rawNumber} to pick a preferred delivery slot.`,
       [
-        { text: 'Call Shop', onPress: () => Linking.openURL('tel:+919309386003') },
-        { text: 'Cancel', style: 'cancel' }
+        {
+          text: 'Call Laundry Owner',
+          onPress: () => {
+            if (cleanNumber) {
+              Linking.openURL(`tel:${cleanNumber}`);
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
       ]
     );
   };
@@ -201,82 +259,6 @@ export const TrackingScreen = ({ navigation, route }: any) => {
     }
     return user?.address || 'Flat 302, Green Acres, Wakad Main Road, Pune';
   })();
-
-  const reduxOrders = useSelector((s: RootState) => s.orders.orders);
-  const matchingReduxOrder = reduxOrders.find(
-    (o: any) =>
-      o.id === Number(orderId) ||
-      String(o.id) === String(orderId) ||
-      o.order_number === String(orderId) ||
-      (order?.order_number && o.order_number === order.order_number)
-  );
-
-  const isStarWash =
-    (order as any)?.order_number === 'ORD-9CSUNT' ||
-    order?.id === 45 ||
-    orderId === 'ORD-9CSUNT' ||
-    orderId === 45 ||
-    order?.shop_id === 44 ||
-    route?.params?.shopName === 'Star Wash Ultra Premium' ||
-    (order as any)?.shop_name === 'Star Wash Ultra Premium';
-
-  // Dynamic Shop Info (Resolves exactly what customer selected at booking or what order contains)
-  const shopObj = order?.shop || (matchingReduxOrder as any)?.shop || route?.params?.shop || (order as any)?.laundry_shop || (order as any)?.laundryShop;
-  const shopName = isStarWash
-    ? 'Star Wash Ultra Premium'
-    : (
-        route?.params?.shopName ||
-        (order as any)?.shop_name ||
-        (matchingReduxOrder as any)?.shop_name ||
-        order?.shop?.name ||
-        (matchingReduxOrder?.shop as any)?.name ||
-        (order as any)?.laundry_name ||
-        shopObj?.name ||
-        'Star Wash Ultra Premium'
-      );
-
-  const shopOwnerName = isStarWash
-    ? 'Ashish Bhosale'
-    : (
-        route?.params?.ownerName ||
-        (order as any)?.owner_name ||
-        (order as any)?.ownerName ||
-        (matchingReduxOrder as any)?.owner_name ||
-        order?.shop?.owner_name ||
-        (matchingReduxOrder?.shop as any)?.owner_name ||
-        shopObj?.owner_name ||
-        shopObj?.ownerName ||
-        ''
-      );
-
-  const shopAddress = isStarWash
-    ? 'Tathawade, Pune'
-    : (
-        route?.params?.shopLocation ||
-        (order as any)?.shop_address ||
-        (matchingReduxOrder as any)?.shop_address ||
-        order?.shop?.address ||
-        (matchingReduxOrder?.shop as any)?.address ||
-        shopObj?.address ||
-        (order as any)?.laundry_address ||
-        'Tathawade, Pune'
-      );
-
-  const shopPhone = isStarWash
-    ? '9876543210'
-    : (
-        route?.params?.shopPhone ||
-        (order as any)?.shop_phone ||
-        (matchingReduxOrder as any)?.shop_phone ||
-        order?.shop?.phone ||
-        (matchingReduxOrder?.shop as any)?.phone ||
-        shopObj?.phone ||
-        '9876543210'
-      );
-
-  const shopRating = isStarWash ? '4.90' : (shopObj?.rating ? String(shopObj.rating) : (order?.shop?.rating ? String(order.shop.rating) : '4.9'));
-  const shopReviewsCount = isStarWash ? 28 : (shopObj?.review_count || order?.shop?.review_count || 142);
-  const shopLogo = shopObj?.logo || order?.shop?.logo || (order as any)?.shop_logo;
 
   // Dynamic Assigned Delivery Boy Info (Assigned by Laundry Owner / Admin)
   const deliveryBoyObj = order?.delivery_boy || order?.delivery_partner || (order as any)?.deliveryPartner;

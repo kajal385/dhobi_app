@@ -13,34 +13,59 @@ $msg = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     $orderId = $_POST['order_id'] ?? '';
+    $orderNumber = trim($_POST['order_number'] ?? '');
     $newStatus = $_POST['status'] ?? '';
     $driverName = $_POST['driver_name'] ?? '';
 
     if ($action === 'status' && $orderId && $newStatus) {
         $endpoint = $isOwner ? "/owner/orders/{$orderId}/status" : "/admin/orders/{$orderId}/status";
-        apiPost($endpoint, ['status' => $newStatus]);
+        $apiRes = apiPost($endpoint, ['status' => $newStatus]);
+        if (empty($apiRes['success']) && ($apiRes['status'] ?? 0) === 404) {
+            apiPost("/owner/orders/{$orderId}/status", ['status' => $newStatus]);
+        }
         updateOrderStatusInDb($orderId, $newStatus);
 
         if (!isset($_SESSION['order_status_overrides'])) {
             $_SESSION['order_status_overrides'] = [];
         }
         $_SESSION['order_status_overrides'][$orderId] = $newStatus;
-        $msg = "Order #{$orderId} status changed to {$newStatus}.";
+        if ($orderNumber) {
+            $_SESSION['order_status_overrides'][$orderNumber] = $newStatus;
+        }
+        $msg = "Order #" . ($orderNumber ?: $orderId) . " status changed to {$newStatus}.";
     } elseif ($action === 'assign_driver' && $orderId && !empty($_POST['delivery_boy_id'])) {
         $driverId = $_POST['delivery_boy_id'];
-        $driverName = $_POST['driver_name'] ?? 'Driver';
+        $driverName = trim($_POST['driver_name'] ?? '');
         $endpoint = $isOwner ? "/owner/orders/{$orderId}/assign-delivery" : "/admin/orders/{$orderId}/assign-delivery";
-        apiPost($endpoint, [
+        $apiRes = apiPost($endpoint, [
             'delivery_boy_id' => $driverId,
             'assignment_type' => 'delivery'
         ]);
-        assignDriverToOrderInDb($orderId, $driverName);
+        if (empty($apiRes['success']) && ($apiRes['status'] ?? 0) === 404) {
+            apiPost("/owner/orders/{$orderId}/assign-delivery", [
+                'delivery_boy_id' => $driverId,
+                'assignment_type' => 'delivery'
+            ]);
+        }
+        assignDriverToOrderInDb($orderId, $driverId, $driverName);
 
         if (!isset($_SESSION['order_status_overrides'])) {
             $_SESSION['order_status_overrides'] = [];
         }
         $_SESSION['order_status_overrides'][$orderId] = 'OUT_FOR_DELIVERY';
-        $msg = "Order #{$orderId} assigned to driver {$driverName} and dispatched.";
+        if ($orderNumber) {
+            $_SESSION['order_status_overrides'][$orderNumber] = 'OUT_FOR_DELIVERY';
+        }
+
+        if (!isset($_SESSION['order_driver_overrides'])) {
+            $_SESSION['order_driver_overrides'] = [];
+        }
+        $assignedDisplayName = $driverName ?: "Driver #{$driverId}";
+        $_SESSION['order_driver_overrides'][$orderId] = $assignedDisplayName;
+        if ($orderNumber) {
+            $_SESSION['order_driver_overrides'][$orderNumber] = $assignedDisplayName;
+        }
+        $msg = "Order #" . ($orderNumber ?: $orderId) . " assigned to {$assignedDisplayName} and dispatched.";
     }
 }
 
@@ -96,103 +121,49 @@ foreach ($drivers as $dr) {
 }
 $drivers = $uniqueDrivers;
 
-// Default demo orders if empty
+// Fetch live orders directly from dhobi_db database if API returned empty
 if (empty($orders)) {
-    $orders = [
-        [
-            'id' => '101',
-            'orderNumber' => 'ORD-5PZLJ9',
-            'customerName' => 'Kajal Gajare',
-            'customerPhone' => '+91 9309386003',
-            'laundryName' => 'Star Wash Ultra Premium',
-            'city' => 'Pune',
-            'pickupAddress' => 'Flat 302, Green Acres, Wakad Main Road, Pune - 411057',
-            'amount' => 1475,
-            'paymentMethod' => 'COD',
-            'paymentStatus' => 'PAID',
-            'status' => 'CANCELLED',
-            'deliveryBoyName' => 'Unassigned',
-            'createdAt' => 'Today 09:30 AM',
-            'items' => [
-                ['name' => 'Premium Silk Dry Clean', 'quantity' => 2, 'unit_price' => 450, 'total_price' => 900],
-                ['name' => 'Woolen Blazer Wash', 'quantity' => 1, 'unit_price' => 350, 'total_price' => 350],
-                ['name' => 'Steam Iron - Kurta', 'quantity' => 3, 'unit_price' => 75, 'total_price' => 225],
-            ]
-        ],
-        [
-            'id' => '102',
-            'orderNumber' => 'ORD-22IYNV',
-            'customerName' => 'Kajal Gajare',
-            'customerPhone' => '+91 9309386003',
-            'laundryName' => 'Star Wash Ultra Premium',
-            'city' => 'Pune',
-            'pickupAddress' => 'Flat A-101, Tower A, Green Valley Homes, Pune - 411057',
-            'amount' => 1130,
-            'paymentMethod' => 'ONLINE',
-            'paymentStatus' => 'PAID',
-            'status' => 'DELIVERED',
-            'deliveryBoyName' => 'Rahul Shinde',
-            'createdAt' => 'Yesterday 04:15 PM',
-            'items' => [
-                ['name' => 'Wash & Fold 5KG', 'quantity' => 5, 'unit_price' => 120, 'total_price' => 600],
-                ['name' => 'Bed Sheet Steam Press', 'quantity' => 2, 'unit_price' => 150, 'total_price' => 300],
-                ['name' => 'Curtains Deep Wash', 'quantity' => 1, 'unit_price' => 230, 'total_price' => 230],
-            ]
-        ],
-        [
-            'id' => '103',
-            'orderNumber' => 'ORD-BYLGX5',
-            'customerName' => 'Kajal Gajare',
-            'customerPhone' => '+91 9309386003',
-            'laundryName' => 'Star Wash Ultra Premium',
-            'city' => 'Pune',
-            'pickupAddress' => 'Kalat Nagar, Wakad, Pimpri-Chinchwad, Pune - 411057',
-            'amount' => 270,
-            'paymentMethod' => 'COD',
-            'paymentStatus' => 'PAID',
-            'status' => 'READY',
-            'deliveryBoyName' => 'Rahul Shinde',
-            'createdAt' => 'Today 10:15 AM',
-            'items' => [
-                ['name' => 'Wash & Fold - Jeans', 'quantity' => 1, 'unit_price' => 120, 'total_price' => 120],
-                ['name' => 'Wash & Iron - Saree', 'quantity' => 1, 'unit_price' => 150, 'total_price' => 150],
-            ]
-        ],
-        [
-            'id' => '104',
-            'orderNumber' => 'ORD-8801',
-            'customerName' => 'Pooja Verma',
-            'customerPhone' => '+91 9811200998',
-            'laundryName' => 'Star Wash Ultra Premium',
-            'city' => 'Pune',
-            'pickupAddress' => 'Bldg A, Kothrud, Pune - 411038',
-            'amount' => 1250,
-            'paymentMethod' => 'ONLINE',
-            'paymentStatus' => 'PAID',
-            'status' => 'OUT_FOR_DELIVERY',
-            'deliveryBoyName' => 'Rahul Shinde',
-            'createdAt' => 'Today 11:45 AM',
-            'items' => [
-                ['name' => 'Suit Premium Dry Clean', 'quantity' => 2, 'unit_price' => 350, 'total_price' => 700],
-                ['name' => 'Wash & Fold 4KG', 'quantity' => 4, 'unit_price' => 100, 'total_price' => 400],
-            ]
-        ],
-    ];
+    $orders = fetchOrdersFromDb($filterShop !== 'ALL' ? $filterShop : null, $filterStatus !== 'ALL' ? $filterStatus : null);
 }
 
-// Apply session order status overrides
-if (!empty($_SESSION['order_status_overrides'])) {
-    foreach ($orders as &$oItem) {
-        $oid = strval($oItem['id'] ?? '');
-        $num = strval($oItem['order_number'] ?? $oItem['orderNumber'] ?? '');
-        if (isset($_SESSION['order_status_overrides'][$oid])) {
-            $oItem['status'] = $_SESSION['order_status_overrides'][$oid];
-        } elseif (isset($_SESSION['order_status_overrides'][$num])) {
-            $oItem['status'] = $_SESSION['order_status_overrides'][$num];
+
+// Apply session order status & driver overrides and resolve driver names
+foreach ($orders as &$oItem) {
+    $oid = strval($oItem['id'] ?? '');
+    $num = strval($oItem['order_number'] ?? $oItem['orderNumber'] ?? '');
+    if (!empty($_SESSION['order_status_overrides'][$oid])) {
+        $oItem['status'] = $_SESSION['order_status_overrides'][$oid];
+    } elseif (!empty($_SESSION['order_status_overrides'][$num])) {
+        $oItem['status'] = $_SESSION['order_status_overrides'][$num];
+    }
+
+    if (!empty($_SESSION['order_driver_overrides'][$oid])) {
+        $oItem['delivery_boy_name'] = $_SESSION['order_driver_overrides'][$oid];
+    } elseif (!empty($_SESSION['order_driver_overrides'][$num])) {
+        $oItem['delivery_boy_name'] = $_SESSION['order_driver_overrides'][$num];
+    }
+
+    // If still missing delivery boy name but delivery_boy_id is present, look up in $drivers list or database
+    $curDriver = $oItem['delivery_boy_name'] ?? $oItem['deliveryBoyName'] ?? null;
+    $dbId = $oItem['delivery_boy_id'] ?? $oItem['deliveryBoyId'] ?? null;
+    if ((empty($curDriver) || $curDriver === 'Unassigned') && !empty($dbId)) {
+        foreach ($drivers as $drItem) {
+            if (($drItem['user_id'] ?? null) == $dbId || ($drItem['id'] ?? null) == $dbId) {
+                $oItem['delivery_boy_name'] = $drItem['name'];
+                $oItem['deliveryBoyName'] = $drItem['name'];
+                break;
+            }
+        }
+        if (empty($oItem['delivery_boy_name']) || $oItem['delivery_boy_name'] === 'Unassigned') {
+            $lookedUp = getDriverNameById($dbId);
+            if ($lookedUp) {
+                $oItem['delivery_boy_name'] = $lookedUp;
+                $oItem['deliveryBoyName'] = $lookedUp;
+            }
         }
     }
-    unset($oItem);
 }
+unset($oItem);
 
 // STRICT TENANT ISOLATION: When logged in as Laundry Owner, never show other shops' orders!
 if ($isOwner) {
@@ -392,7 +363,15 @@ $viewMode = $_GET['view'] ?? 'table';
                 $amt = floatval($o['total_amount'] ?? $o['amount'] ?? 0);
                 $payMethod = $o['payment_method'] ?? $o['paymentMethod'] ?? 'COD';
                 $payStatus = $o['payment_status'] ?? $o['paymentStatus'] ?? 'PAID';
-                $driver = $o['delivery_boy_name'] ?? $o['deliveryBoyName'] ?? ($o['delivery_boy']['name'] ?? ($o['delivery_partner']['user']['name'] ?? 'Unassigned'));
+                $driver = !empty($o['delivery_boy_name']) && $o['delivery_boy_name'] !== 'Unassigned' 
+                    ? $o['delivery_boy_name'] 
+                    : (!empty($o['deliveryBoyName']) && $o['deliveryBoyName'] !== 'Unassigned' 
+                        ? $o['deliveryBoyName'] 
+                        : ($o['delivery_boy']['name'] ?? ($o['delivery_partner']['user']['name'] ?? 'Unassigned')));
+                if (($driver === 'Unassigned' || empty($driver)) && !empty($o['delivery_boy_id'])) {
+                    $foundDriver = getDriverNameById($o['delivery_boy_id']);
+                    if ($foundDriver) $driver = $foundDriver;
+                }
                 $status = strtoupper($o['status'] ?? 'PENDING');
                 $created = $o['created_at'] ?? $o['createdAt'] ?? 'Today';
             ?>
@@ -413,50 +392,73 @@ $viewMode = $_GET['view'] ?? 'table';
                   <div style="font-size: 0.72rem; color: var(--text-muted);"><?= htmlspecialchars($payMethod) ?> (<?= htmlspecialchars($payStatus) ?>)</div>
                 </td>
                 <td>
-                  <?php if ($driver !== 'Unassigned'): ?>
-                    <span style="font-weight: 700; font-size: 0.82rem; color: #0284C7;">🛵 <?= htmlspecialchars($driver) ?></span>
+                  <?php if (!empty($driver) && $driver !== 'Unassigned'): ?>
+                    <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+                      <span style="font-weight: 700; font-size: 0.82rem; color: #0284C7; background: rgba(2, 132, 199, 0.08); padding: 0.25rem 0.55rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.3rem;">
+                        🛵 <?= htmlspecialchars($driver) ?>
+                      </span>
+                      <button type="button" onclick="openAssignModal('<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>')" title="Change Driver" class="btn btn-secondary btn-sm" style="padding: 0.2rem 0.45rem; font-size: 0.7rem; color: var(--text-muted); border-radius: 5px;">
+                        Change
+                      </button>
+                    </div>
                   <?php else: ?>
-                    <button type="button" onclick="openAssignModal('<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>')" class="btn btn-secondary btn-sm" style="color: #F59E0B; font-size: 0.75rem;">
+                    <button type="button" onclick="openAssignModal('<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>')" class="btn btn-secondary btn-sm" style="color: #F59E0B; border: 1px dashed rgba(245, 158, 11, 0.5); font-size: 0.75rem; font-weight: 700; background: rgba(245, 158, 11, 0.05); padding: 0.35rem 0.65rem;">
                       + Assign Driver
                     </button>
                   <?php endif; ?>
                 </td>
                 <td>
-                  <span class="badge" style="background: <?= $status === 'DELIVERED' ? '#D1FAE5' : ($status === 'OUT_FOR_DELIVERY' ? '#E0F2FE' : '#FEF3C7') ?>; color: <?= $status === 'DELIVERED' ? '#059669' : ($status === 'OUT_FOR_DELIVERY' ? '#0284C7' : '#D97706') ?>; font-weight: 800;">
+                  <span class="badge" style="background: <?= $status === 'DELIVERED' ? '#D1FAE5' : ($status === 'OUT_FOR_DELIVERY' ? '#E0F2FE' : ($status === 'CANCELLED' ? '#FEE2E2' : '#FEF3C7')) ?>; color: <?= $status === 'DELIVERED' ? '#059669' : ($status === 'OUT_FOR_DELIVERY' ? '#0284C7' : ($status === 'CANCELLED' ? '#DC2626' : '#D97706')) ?>; font-weight: 800;">
                     <?= $status ?>
                   </span>
                 </td>
                 <td>
                   <div style="display: flex; gap: 0.35rem; align-items: center; white-space: nowrap;">
-                    <button type="button" onclick="viewOrderDetails(<?= htmlspecialchars(json_encode($o)) ?>)" class="btn btn-secondary btn-sm">
+                    <button type="button" onclick="viewOrderDetails(<?= htmlspecialchars(json_encode($o)) ?>)" class="btn btn-secondary btn-sm" title="Inspect Order Details" style="padding: 0.3rem 0.5rem;">
                       <i data-lucide="eye" style="width: 14px; height: 14px;"></i>
                     </button>
 
-                    <!-- Quick Status Progression -->
+                    <!-- Direct Action Status Selector (Change directly from row) -->
+                    <form method="POST" action="" style="display: inline-block; margin: 0;">
+                      <input type="hidden" name="action" value="status">
+                      <input type="hidden" name="order_id" value="<?= htmlspecialchars($ordId) ?>">
+                      <input type="hidden" name="order_number" value="<?= htmlspecialchars($num) ?>">
+                      <select name="status" data-original="<?= $status ?>" onchange="handleDirectStatusChange(this, '<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>', '<?= htmlspecialchars($driver) ?>')" class="form-control form-control-sm" style="font-size: 0.75rem; font-weight: 700; padding: 0.28rem 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); cursor: pointer;" title="Change Order Status Directly">
+                        <option value="PENDING" <?= $status === 'PENDING' ? 'selected' : '' ?>>⏳ Pending</option>
+                        <option value="CONFIRMED" <?= $status === 'CONFIRMED' ? 'selected' : '' ?>>✓ Confirmed</option>
+                        <option value="WASHING" <?= ($status === 'WASHING' || $status === 'PROCESSING') ? 'selected' : '' ?>>🔄 Washing</option>
+                        <option value="READY" <?= $status === 'READY' ? 'selected' : '' ?>>✨ Ready</option>
+                        <option value="OUT_FOR_DELIVERY" <?= $status === 'OUT_FOR_DELIVERY' ? 'selected' : '' ?>>🛵 Dispatched</option>
+                        <option value="DELIVERED" <?= $status === 'DELIVERED' ? 'selected' : '' ?>>🎉 Delivered</option>
+                        <option value="CANCELLED" <?= $status === 'CANCELLED' ? 'selected' : '' ?>>❌ Cancel</option>
+                      </select>
+                    </form>
+
+                    <!-- Contextual Flow Shortcut Button -->
                     <?php if ($status === 'PENDING' || $status === 'CONFIRMED'): ?>
                       <form method="POST" action="" style="display: inline;">
                         <input type="hidden" name="action" value="status">
                         <input type="hidden" name="order_id" value="<?= htmlspecialchars($ordId) ?>">
                         <input type="hidden" name="status" value="WASHING">
-                        <button type="submit" class="btn btn-primary btn-sm" style="background: #2563EB; border: none; font-size: 0.75rem;">Start Wash</button>
+                        <button type="submit" class="btn btn-primary btn-sm" style="background: #2563EB; border: none; font-size: 0.72rem; padding: 0.28rem 0.55rem;">Start Wash</button>
                       </form>
                     <?php elseif ($status === 'WASHING' || $status === 'PROCESSING'): ?>
                       <form method="POST" action="" style="display: inline;">
                         <input type="hidden" name="action" value="status">
                         <input type="hidden" name="order_id" value="<?= htmlspecialchars($ordId) ?>">
                         <input type="hidden" name="status" value="READY">
-                        <button type="submit" class="btn btn-primary btn-sm" style="background: #10B981; border: none; font-size: 0.75rem;">Mark Ready</button>
+                        <button type="submit" class="btn btn-primary btn-sm" style="background: #10B981; border: none; font-size: 0.72rem; padding: 0.28rem 0.55rem;">Mark Ready</button>
                       </form>
                     <?php elseif ($status === 'READY'): ?>
-                      <button type="button" onclick="openAssignModal('<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>')" class="btn btn-primary btn-sm" style="background: #0284C7; border: none; font-size: 0.75rem;">
+                      <button type="button" onclick="openAssignModal('<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>')" class="btn btn-primary btn-sm" style="background: #0284C7; border: none; font-size: 0.72rem; padding: 0.28rem 0.55rem;">
                         Dispatch 🛵
                       </button>
                     <?php elseif ($status === 'OUT_FOR_DELIVERY'): ?>
-                      <form method="POST" action="" style="display: inline;" onsubmit="return confirm('Confirm delivery of this order?');">
+                      <form method="POST" action="" style="display: inline;" onsubmit="return confirm('Confirm delivery of order #<?= htmlspecialchars($num) ?>?');">
                         <input type="hidden" name="action" value="status">
                         <input type="hidden" name="order_id" value="<?= htmlspecialchars($ordId) ?>">
                         <input type="hidden" name="status" value="DELIVERED">
-                        <button type="submit" class="btn btn-success btn-sm" style="font-size: 0.75rem;">Mark Delivered</button>
+                        <button type="submit" class="btn btn-success btn-sm" style="font-size: 0.72rem; padding: 0.28rem 0.55rem;">Mark Delivered</button>
                       </form>
                     <?php endif; ?>
                   </div>
@@ -481,7 +483,15 @@ $viewMode = $_GET['view'] ?? 'table';
           $cardAmt = floatval($o['total_amount'] ?? $o['amount'] ?? 0);
           $payMethod = $o['payment_method'] ?? $o['paymentMethod'] ?? 'Online (UPI)';
           $payStatus = strtoupper($o['payment_status'] ?? $o['paymentStatus'] ?? 'PAID');
-          $driver = $o['delivery_boy_name'] ?? $o['deliveryBoyName'] ?? ($o['delivery_boy']['name'] ?? ($o['delivery_partner']['user']['name'] ?? 'Unassigned'));
+          $driver = !empty($o['delivery_boy_name']) && $o['delivery_boy_name'] !== 'Unassigned' 
+              ? $o['delivery_boy_name'] 
+              : (!empty($o['deliveryBoyName']) && $o['deliveryBoyName'] !== 'Unassigned' 
+                  ? $o['deliveryBoyName'] 
+                  : ($o['delivery_boy']['name'] ?? ($o['delivery_partner']['user']['name'] ?? 'Unassigned')));
+          if (($driver === 'Unassigned' || empty($driver)) && !empty($o['delivery_boy_id'])) {
+              $foundDriver = getDriverNameById($o['delivery_boy_id']);
+              if ($foundDriver) $driver = $foundDriver;
+          }
           $itemsCount = !empty($o['items']) ? count($o['items']) : 1;
 
           // Status colors & icons
@@ -517,6 +527,7 @@ $viewMode = $_GET['view'] ?? 'table';
               <form method="POST" action="" style="display: inline-block; margin: 0; position: relative;">
                 <input type="hidden" name="action" value="status">
                 <input type="hidden" name="order_id" value="<?= htmlspecialchars($ordId) ?>">
+                <input type="hidden" name="order_number" value="<?= htmlspecialchars($num) ?>">
                 <select name="status" data-original="<?= $status ?>" onchange="handleStatusChange(this, '<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>', '<?= htmlspecialchars($driver) ?>')" style="background: <?= $statusBg ?>; color: <?= $statusColor ?>; padding: 0.25rem 1.4rem 0.25rem 0.65rem; border-radius: 20px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; border: none; appearance: none; -webkit-appearance: none; cursor: pointer; outline: none; position: relative; z-index: 2;" title="Change Order Status">
                   <option value="PENDING" <?= $status === 'PENDING' ? 'selected' : '' ?>>Pending</option>
                   <option value="CONFIRMED" <?= $status === 'CONFIRMED' ? 'selected' : '' ?>>Confirmed</option>
@@ -560,9 +571,18 @@ $viewMode = $_GET['view'] ?? 'table';
               <span style="font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(129, 98, 238, 0.08); color: var(--brand-purple); font-weight: 700;">
                 🧺 <?= $itemsCount ?> Garments
               </span>
-              <span style="font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(2, 132, 199, 0.08); color: #0284C7; font-weight: 700;">
-                🛵 <?= htmlspecialchars($driver) ?>
-              </span>
+              <?php if (!empty($driver) && $driver !== 'Unassigned'): ?>
+                <span style="font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(2, 132, 199, 0.08); color: #0284C7; font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;">
+                  🛵 <?= htmlspecialchars($driver) ?>
+                  <button type="button" onclick="openAssignModal('<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>')" style="background: none; border: none; padding: 0; cursor: pointer; color: var(--text-muted); display: inline-flex; align-items: center; margin-left: 2px;" title="Change Driver">
+                    <i data-lucide="edit-3" style="width: 11px; height: 11px;"></i>
+                  </button>
+                </span>
+              <?php else: ?>
+                <button type="button" onclick="openAssignModal('<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>')" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(245, 158, 11, 0.08); color: #D97706; font-weight: 700; border: 1px dashed rgba(245, 158, 11, 0.4); cursor: pointer;">
+                  + Assign Driver
+                </button>
+              <?php endif; ?>
             </div>
           </div>
 
@@ -641,6 +661,7 @@ $viewMode = $_GET['view'] ?? 'table';
     <form method="POST" action="">
       <input type="hidden" name="action" value="assign_driver">
       <input type="hidden" id="assignOrderId" name="order_id" value="">
+      <input type="hidden" id="assignOrderNumHidden" name="order_number" value="">
       
       <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
         Dispatching Order <strong id="assignOrderNumText"></strong> for doorstep customer delivery.
@@ -653,7 +674,7 @@ $viewMode = $_GET['view'] ?? 'table';
           <?php if (!empty($drivers)): ?>
             <?php foreach ($drivers as $dr): ?>
               <?php 
-                $drId = htmlspecialchars($dr['id'] ?? $dr['user_id'] ?? '');
+                $drId = htmlspecialchars($dr['user_id'] ?? $dr['id'] ?? '');
                 $drName = htmlspecialchars($dr['name'] ?? '');
                 $drVeh = htmlspecialchars($dr['vehicle_number'] ?? $dr['vehicleNumber'] ?? $dr['vehicle_type'] ?? $dr['vehicleType'] ?? 'Scooter');
               ?>
@@ -862,6 +883,8 @@ $viewMode = $_GET['view'] ?? 'table';
 
   function openAssignModal(orderId, orderNum) {
     document.getElementById('assignOrderId').value = orderId;
+    const numEl = document.getElementById('assignOrderNumHidden');
+    if (numEl) numEl.value = orderNum;
     document.getElementById('assignOrderNumText').innerText = orderNum;
     openModal('assignDriverModal');
   }
@@ -872,6 +895,23 @@ $viewMode = $_GET['view'] ?? 'table';
       selectEl.value = selectEl.getAttribute('data-original') || 'READY';
       openAssignModal(orderId, orderNum);
       return false;
+    }
+    selectEl.form.submit();
+  }
+
+  function handleDirectStatusChange(selectEl, orderId, orderNum, driver) {
+    const val = selectEl.value;
+    if (val === 'OUT_FOR_DELIVERY' && (!driver || driver === 'Unassigned' || driver.trim() === '')) {
+      alert("⚠️ Please assign a delivery partner before marking this order as Dispatched.");
+      selectEl.value = selectEl.getAttribute('data-original') || 'READY';
+      openAssignModal(orderId, orderNum);
+      return false;
+    }
+    if (val === 'CANCELLED') {
+      if (!confirm("Are you sure you want to cancel order #" + orderNum + "?")) {
+        selectEl.value = selectEl.getAttribute('data-original') || 'PENDING';
+        return false;
+      }
     }
     selectEl.form.submit();
   }

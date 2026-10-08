@@ -61,7 +61,6 @@ export const DEFAULT_BANNERS = (Array.isArray(bannersJson) && bannersJson.length
     subtitle: 'Special festive laundry & dry clean offer',
     tag: 'ACTIVE',
     tagColor: '#10B981',
-    localAsset: require('../../../assets/myimages/admin_banner_super_clean.png'),
     image: '/uploads/banners/banner_30_1791351874.png',
   },
   {
@@ -70,7 +69,6 @@ export const DEFAULT_BANNERS = (Array.isArray(bannersJson) && bannersJson.length
     subtitle: 'Use code FIRST30 on your order',
     tag: 'ACTIVE',
     tagColor: '#10B981',
-    localAsset: require('../../../assets/myimages/admin_banner_dry_clean.jpg'),
     image: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80',
   },
   {
@@ -79,46 +77,21 @@ export const DEFAULT_BANNERS = (Array.isArray(bannersJson) && bannersJson.length
     subtitle: 'Doorstep pickup & next-day delivery',
     tag: 'ACTIVE',
     tagColor: '#10B981',
-    localAsset: require('../../../assets/myimages/admin_banner_wash_fold.jpg'),
     image: 'https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=800&q=80',
   },
-]).map((b: any, idx: number) => {
-  const bId = String(b.id || '');
-  const imgStr = String(b.image || b.url || '');
-  const titleStr = String(b.title || '').toLowerCase();
-  if (bId === '1' || imgStr.includes('banner_30_1791351874') || titleStr.includes('super clean')) {
-    return { ...b, localAsset: require('../../../assets/myimages/admin_banner_super_clean.png') };
-  }
-  if (bId === '2' || titleStr.includes('dry clean')) {
-    return { ...b, localAsset: require('../../../assets/myimages/admin_banner_dry_clean.jpg') };
-  }
-  if (bId === '3' || titleStr.includes('wash & fold') || titleStr.includes('express')) {
-    return { ...b, localAsset: require('../../../assets/myimages/admin_banner_wash_fold.jpg') };
-  }
-  return { ...b, localAsset: BANNER_FALLBACKS[idx % BANNER_FALLBACKS.length] };
-});
+]);
 
 const SafeBannerImage = ({ banner, index = 0, style, cardWidth, cardHeight }: any) => {
-  const fallbackAsset = BANNER_FALLBACKS[index % BANNER_FALLBACKS.length];
+  const fallbackAsset = banner?.localAsset || BANNER_FALLBACKS[index % BANNER_FALLBACKS.length];
 
   const getSource = () => {
-    if (banner?.localAsset) {
-      return banner.localAsset;
-    }
-    const bId = String(banner?.id || '');
-    const raw = String(banner?.image || banner?.image_url || banner?.url || '').trim();
-    if (bId === '1' || raw.includes('banner_30_1791351874') || (banner?.title && banner.title.toLowerCase().includes('super clean'))) {
-      return require('../../../assets/myimages/admin_banner_super_clean.png');
-    }
-    if (bId === '2' || (banner?.title && banner.title.toLowerCase().includes('dry clean'))) {
-      return require('../../../assets/myimages/admin_banner_dry_clean.jpg');
-    }
-    if (bId === '3' || (banner?.title && (banner.title.toLowerCase().includes('wash & fold') || banner.title.toLowerCase().includes('express')))) {
-      return require('../../../assets/myimages/admin_banner_wash_fold.jpg');
-    }
+    const raw = String(banner?.image || banner?.image_url || banner?.url || banner?.banner_url || '').trim();
     if (raw.length > 0) {
       const uri = resolveImageUrl(raw);
       if (uri) return { uri };
+    }
+    if (banner?.localAsset) {
+      return banner.localAsset;
     }
     return fallbackAsset;
   };
@@ -127,7 +100,7 @@ const SafeBannerImage = ({ banner, index = 0, style, cardWidth, cardHeight }: an
 
   useEffect(() => {
     setSrc(getSource());
-  }, [banner?.image, banner?.image_url, banner?.url, banner?.localAsset, banner?.title, banner?.id, index]);
+  }, [banner?.image, banner?.image_url, banner?.url, banner?.banner_url, banner?.localAsset, index]);
 
   return (
     <Image
@@ -578,15 +551,28 @@ export const HomeScreen = ({ navigation }: any) => {
       }));
       setNearbyShops(processedNearby);
 
-      // Fetch global banners uploaded by admin
+      // Fetch global banners uploaded by admin / laundry owner
       try {
         const bannersRes = await apiClient.get('/banners');
         const list = bannersRes.data?.data;
         if (Array.isArray(list) && list.length > 0) {
-          setBanners(list);
+          const merged = [...list];
+          if (Array.isArray(bannersJson)) {
+            for (const bj of bannersJson) {
+              if (!merged.some((m: any) => String(m.id) === String(bj.id))) {
+                merged.push(bj);
+              }
+            }
+          }
+          setBanners(merged);
+        } else if (Array.isArray(bannersJson) && bannersJson.length > 0) {
+          setBanners(bannersJson);
         }
       } catch (err) {
         console.warn('Failed to fetch banners', err);
+        if (Array.isArray(bannersJson) && bannersJson.length > 0) {
+          setBanners(bannersJson);
+        }
       }
 
     } catch (e: any) {

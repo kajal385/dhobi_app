@@ -116,4 +116,50 @@ class Order extends Model
     {
         return $this->hasMany(OrderItem::class, 'order_id');
     }
+
+    protected $appends = ['delivery_boy_name', 'deliveryBoyName', 'customer_name', 'shop_name'];
+
+    public function getDeliveryBoyNameAttribute()
+    {
+        if ($this->relationLoaded('deliveryBoyUser') && $this->deliveryBoyUser) {
+            return $this->deliveryBoyUser->name;
+        }
+        if ($this->relationLoaded('deliveryPartner') && $this->deliveryPartner) {
+            $partner = $this->deliveryPartner;
+            if ($partner->relationLoaded('user') && $partner->user) {
+                return $partner->user->name;
+            }
+            if (!empty($partner->name)) {
+                return $partner->name;
+            }
+        }
+        if (!empty($this->delivery_boy_id)) {
+            $user = User::find($this->delivery_boy_id);
+            if ($user) return $user->name;
+            $dbBoy = DeliveryBoy::with('user')->find($this->delivery_boy_id);
+            if ($dbBoy && $dbBoy->user) return $dbBoy->user->name;
+        }
+        return 'Unassigned';
+    }
+
+    public function getDeliveryBoyNameCamelAttribute()
+    {
+        return $this->getDeliveryBoyNameAttribute();
+    }
+
+    public function getCustomerNameAttribute()
+    {
+        if ($this->relationLoaded('customer') && $this->customer) {
+            return $this->customer->name;
+        }
+        return 'Customer';
+    }
+
+    public function getShopNameAttribute()
+    {
+        if ($this->relationLoaded('laundryShop') && $this->laundryShop) {
+            return $this->laundryShop->name;
+        }
+        return 'Laundry Shop';
+    }
 }

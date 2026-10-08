@@ -29,12 +29,18 @@ export const resolveImageUrl = (path?: string | null): string => {
     return trimmed.replace(/^https?:\/\/[^/]+\/dhobi_backend\/public/, BASE_URL);
   }
 
-  // If already a full http:// or https:// external URL (e.g. unsplash, mixkit)
+  // If already a full http:// or https:// external URL (e.g. unsplash, mixkit, or remote host)
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
   }
 
   const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+
+  // Banners uploaded via Admin Web Panel are hosted on ADMIN_BASE_URL
+  if (cleanPath.startsWith('/uploads/banners/')) {
+    return `${ADMIN_BASE_URL}${cleanPath}`;
+  }
+
   return `${BASE_URL}${cleanPath}`;
 };
 

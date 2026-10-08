@@ -1096,9 +1096,11 @@ class AdminDashboardController extends Controller
 
             if ($request->filled('logo_url')) {
                 $shop->logo_url = $this->processDocumentMedia($request->input('logo_url'), 'logo', $shop->id);
+                $shop->logo = $shop->logo_url;
             }
             if ($request->filled('cover_url')) {
                 $shop->cover_url = $this->processDocumentMedia($request->input('cover_url'), 'cover', $shop->id);
+                $shop->cover_image = $shop->cover_url;
             }
             if ($request->filled('id_proof_photo')) {
                 $shop->id_proof_photo = $this->processDocumentMedia($request->input('id_proof_photo'), 'id_proof', $shop->id);
@@ -1207,6 +1209,29 @@ class AdminDashboardController extends Controller
                 $owner->save();
             }
 
+            // Sync compliance documents in laundry_documents table
+            try {
+                $docMap = [
+                    'aadhaar'         => ['path' => $shop->id_proof_photo, 'num' => $shop->id_proof_number],
+                    'trade_license'   => ['path' => $shop->business_proof_photo, 'num' => $shop->business_proof_number],
+                    'bank_cheque'     => ['path' => $shop->bank_proof_photo, 'num' => $shop->bank_account],
+                    'store_signboard' => ['path' => $shop->shop_board_photo, 'num' => null],
+                ];
+                foreach ($docMap as $type => $info) {
+                    if (!empty($info['path'])) {
+                        LaundryDocument::updateOrCreate(
+                            ['laundry_id' => $shop->id, 'document_type' => $type],
+                            [
+                                'document_number'     => $info['num'],
+                                'file_path'           => $info['path'],
+                                'verification_status' => $shop->verification_status ?? 'APPROVED',
+                                'uploaded_at'         => now(),
+                            ]
+                        );
+                    }
+                }
+            } catch (\Throwable $dt) {}
+
             return response()->json([
                 'success' => true,
                 'message' => 'Laundry shop and owner details updated successfully in database.',
@@ -1284,7 +1309,16 @@ class AdminDashboardController extends Controller
      */
     public function orders(Request $request)
     {
-        $query = Order::with(['customer', 'laundryShop', 'deliveryPartner', 'statusHistory', 'items']);
+        $query = Order::with(['customer', 'laundryShop', 'deliveryPartner.user', 'deliveryBoyUser', 'statusHistory', 'items']);
+
+        if ($request->filled('search')) {
+            $s = '%' . $request->input('search') . '%';
+            $query->where(function ($q) use ($s) {
+                $q->where('order_number', 'like', $s)
+                  ->orWhere('id', 'like', $s)
+                  ->orWhere('pickup_address', 'like', $s);
+            });
+        }
 
         if ($request->filled('status') && $request->input('status') !== 'ALL' && $request->input('status') !== 'all') {
             $query->where('status', strtoupper($request->input('status')));

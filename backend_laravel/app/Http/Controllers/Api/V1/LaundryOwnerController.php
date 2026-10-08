@@ -364,15 +364,17 @@ class LaundryOwnerController extends Controller
         }
         $order->save();
 
-        DB::table('order_status_history')->insert([
-            'order_id'   => $order->id,
-            'status'     => $status,
-            'updated_by' => auth()->id() ?? $order->shop_id ?? 1,
-            'user_role'  => 'laundry_owner',
-            'notes'      => $notes,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        try {
+            DB::table('order_status_history')->insert([
+                'order_id'   => $order->id,
+                'status'     => $status,
+                'updated_by' => auth()->id() ?: null,
+                'user_role'  => 'laundry_owner',
+                'notes'      => $notes,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Throwable $th) {}
 
         $isCancelled = in_array($status, ['CANCELLED', 'REJECTED', 'CANCEL']);
         $message = $isCancelled
@@ -429,15 +431,17 @@ class LaundryOwnerController extends Controller
             // Ignore duplicate assignment errors safely
         }
 
-        DB::table('order_status_history')->insert([
-            'order_id'   => $order->id,
-            'status'     => $newStatus,
-            'updated_by' => auth()->id() ?? 1,
-            'user_role'  => 'laundry_owner',
-            'notes'      => 'Assigned to delivery agent #' . $dbId,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        try {
+            DB::table('order_status_history')->insert([
+                'order_id'   => $order->id,
+                'status'     => $newStatus,
+                'updated_by' => auth()->id() ?: null,
+                'user_role'  => 'laundry_owner',
+                'notes'      => 'Assigned to delivery agent #' . $dbId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Throwable $th) {}
 
         return response()->json([
             'success' => true,
@@ -712,10 +716,12 @@ class LaundryOwnerController extends Controller
         if ($request->filled('logo_url')) {
             $logoUrl = $this->processDocumentMedia($request->input('logo_url'), 'logo', $shop->id);
             $shopUpdates['logo_url'] = $logoUrl ?: $request->input('logo_url');
+            $shopUpdates['logo'] = $shopUpdates['logo_url'];
         }
         if ($request->filled('cover_url')) {
             $coverUrl = $this->processDocumentMedia($request->input('cover_url'), 'cover', $shop->id);
             $shopUpdates['cover_url'] = $coverUrl ?: $request->input('cover_url');
+            $shopUpdates['cover_image'] = $shopUpdates['cover_url'];
         }
         if ($request->filled('id_proof_photo')) {
             $idProofPhoto = $this->processDocumentMedia($request->input('id_proof_photo'), 'id_proof', $shop->id);
@@ -774,6 +780,29 @@ class LaundryOwnerController extends Controller
                 $owner->update($userUpdates);
             }
         }
+
+        // Sync compliance documents in laundry_documents table
+        try {
+            $docMap = [
+                'aadhaar'         => ['path' => $shop->id_proof_photo, 'num' => $shop->id_proof_number],
+                'trade_license'   => ['path' => $shop->business_proof_photo, 'num' => $shop->business_proof_number],
+                'bank_cheque'     => ['path' => $shop->bank_proof_photo, 'num' => $shop->bank_account],
+                'store_signboard' => ['path' => $shop->shop_board_photo, 'num' => null],
+            ];
+            foreach ($docMap as $type => $info) {
+                if (!empty($info['path'])) {
+                    LaundryDocument::updateOrCreate(
+                        ['laundry_id' => $shop->id, 'document_type' => $type],
+                        [
+                            'document_number'     => $info['num'],
+                            'file_path'           => $info['path'],
+                            'verification_status' => $shop->verification_status ?? 'APPROVED',
+                            'uploaded_at'         => now(),
+                        ]
+                    );
+                }
+            }
+        } catch (\Throwable $dt) {}
 
         $shop->refresh();
 

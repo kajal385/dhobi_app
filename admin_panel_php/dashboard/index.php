@@ -2,6 +2,7 @@
 $pageTitle = 'Executive Dashboard';
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/api-client.php';
+require_once __DIR__ . '/../includes/db.php';
 
 $isOwner = isLaundryOwner();
 $shopId = currentShopId() ?: '30';
@@ -11,19 +12,40 @@ $myOwnerName = $currentUser['name'] ?? 'Partner Owner';
 
 // Fetch live dashboard statistics from Laravel backend
 $dashRes = apiGet('/admin/stats');
-$d = $dashRes['data'] ?? [];
+$resData = $dashRes['data'] ?? [];
+$d = (isset($resData['data']) && is_array($resData['data'])) ? $resData['data'] : $resData;
 
-// Dynamic Platform Metric Values (For Admin)
-$totalCustomers = $d['totalCustomers'] ?? $d['stats']['customers'] ?? 0;
-$totalOwners = $d['totalLaundryOwners'] ?? $d['stats']['laundryOwners'] ?? 0;
-$totalDelivery = $d['totalDeliveryBoys'] ?? $d['stats']['deliveryBoys'] ?? 0;
-$totalShops = $d['totalLaundryShops'] ?? $d['stats']['laundryShops'] ?? 0;
-$totalOrders = $d['totalOrders'] ?? $d['stats']['platformOrders'] ?? 0;
-$totalRevenue = $d['totalRevenue'] ?? $d['stats']['revenue'] ?? 0;
-$adminCommission = $d['adminCommission'] ?? $d['stats']['commission'] ?? 0;
-$totalRefunds = $d['totalRefunds'] ?? $d['stats']['refunds'] ?? 0;
-$todayOrders = $d['todayOrders'] ?? $d['stats']['todayOrders'] ?? 0;
-$todayRevenue = $d['todayRevenue'] ?? $d['stats']['todayRevenue'] ?? 0;
+$db = function_exists('getDb') ? getDb() : null;
+if (empty($d) && $db) {
+    try {
+        $totalCustomers = (int) $db->query("SELECT COUNT(*) FROM users WHERE role = 'customer'")->fetchColumn();
+        $totalOwners    = (int) $db->query("SELECT COUNT(*) FROM users WHERE role = 'laundry_owner'")->fetchColumn();
+        $totalDelivery  = (int) $db->query("SELECT COUNT(*) FROM delivery_boys")->fetchColumn();
+        $totalShops     = (int) $db->query("SELECT COUNT(*) FROM laundry_shops")->fetchColumn();
+        $totalOrders    = (int) $db->query("SELECT COUNT(*) FROM orders")->fetchColumn();
+        $totalRevenue   = (float) $db->query("SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE status NOT IN ('CANCELLED', 'REJECTED')")->fetchColumn();
+        $adminCommission= round($totalRevenue * 0.15, 2);
+        $totalRefunds   = 0;
+        try { $totalRefunds = (float) $db->query("SELECT COALESCE(SUM(amount), 0) FROM refunds")->fetchColumn(); } catch (\Throwable $e) {}
+        $todayOrders    = (int) $db->query("SELECT COUNT(*) FROM orders WHERE DATE(created_at) = CURDATE()")->fetchColumn();
+        $todayRevenue   = (float) $db->query("SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE DATE(created_at) = CURDATE() AND status NOT IN ('CANCELLED', 'REJECTED')")->fetchColumn();
+    } catch (\Throwable $t) {
+        $totalCustomers = $totalOwners = $totalDelivery = $totalShops = $totalOrders = 0;
+        $totalRevenue = $adminCommission = $totalRefunds = $todayOrders = $todayRevenue = 0;
+    }
+} else {
+    // Dynamic Platform Metric Values (For Admin)
+    $totalCustomers = $d['totalCustomers'] ?? $d['stats']['customers'] ?? 0;
+    $totalOwners = $d['totalLaundryOwners'] ?? $d['stats']['laundryOwners'] ?? 0;
+    $totalDelivery = $d['totalDeliveryBoys'] ?? $d['stats']['deliveryBoys'] ?? 0;
+    $totalShops = $d['totalLaundryShops'] ?? $d['stats']['laundryShops'] ?? 0;
+    $totalOrders = $d['totalOrders'] ?? $d['stats']['platformOrders'] ?? 0;
+    $totalRevenue = $d['totalRevenue'] ?? $d['stats']['revenue'] ?? 0;
+    $adminCommission = $d['adminCommission'] ?? $d['stats']['commission'] ?? 0;
+    $totalRefunds = $d['totalRefunds'] ?? $d['stats']['refunds'] ?? 0;
+    $todayOrders = $d['todayOrders'] ?? $d['stats']['todayOrders'] ?? 0;
+    $todayRevenue = $d['todayRevenue'] ?? $d['stats']['todayRevenue'] ?? 0;
+}
 
 $cities = $d['cities'] ?? $d['topCities'] ?? [
     ['city' => 'Pune', 'orders' => $totalOrders, 'revenue' => '₹' . number_format($totalRevenue), 'commission' => '₹' . number_format($adminCommission), 'shopsCount' => $totalShops, 'customers' => $totalCustomers]
@@ -53,6 +75,9 @@ $orderEndpoint = $isOwner ? '/owner/orders' : '/admin/orders';
 $params = $isOwner && $shopId ? ['shop_id' => $shopId] : [];
 $ordersRes = apiGet($orderEndpoint, $params);
 $ownerShopOrders = apiExtractList($ordersRes);
+if (empty($ownerShopOrders) && function_exists('fetchOrdersFromDb')) {
+    $ownerShopOrders = fetchOrdersFromDb($isOwner && $shopId ? $shopId : null);
+}
 
 // Apply any order status overrides saved in session
 if (!empty($_SESSION['order_status_overrides'])) {

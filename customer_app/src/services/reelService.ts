@@ -76,11 +76,11 @@ export const reelService = {
       const response = await client.get('/reels');
       const items = response.data?.data;
       if (Array.isArray(items) && items.length > 0) {
-        // Merge: local reels first, followed by remote reels not already included
-        const merged: Reel[] = [...localReels];
-        for (const remote of items) {
-          if (!merged.some(m => m.id === remote.id || m.video_url === remote.video_url)) {
-            merged.push(remote);
+        // Prioritize live backend reels first, followed by local reels not already included
+        const merged: Reel[] = [...items];
+        for (const loc of localReels) {
+          if (!merged.some(m => String(m.id) === String(loc.id) || m.video_url === loc.video_url)) {
+            merged.push(loc);
           }
         }
         return merged;

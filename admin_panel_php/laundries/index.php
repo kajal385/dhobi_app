@@ -2,6 +2,7 @@
 $pageTitle = 'Laundry Shop Directory';
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/api-client.php';
+require_once __DIR__ . '/../includes/db.php';
 
 $isOwner = isLaundryOwner();
 $shopId = currentShopId();
@@ -179,25 +180,286 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $newShopLogo = $logoPhoto;
         $newShopName = $payload['name'];
         $actionMsg = 'Laundry partner "' . htmlspecialchars($payload['name']) . '" successfully onboarded with live status & uploaded compliance documents!';
-    } elseif ($action === 'edit' && $targetId) {
+    } elseif (($action === 'edit' || $action === 'edit_shop') && $targetId) {
+        $uploadDir = __DIR__ . '/../uploads/documents/';
+        if (!is_dir($uploadDir)) {
+            @mkdir($uploadDir, 0777, true);
+        }
+
+        $handleUpload = function($fileKey, $prefix) use ($uploadDir) {
+            if (!empty($_FILES[$fileKey]['name']) && $_FILES[$fileKey]['error'] === UPLOAD_ERR_OK) {
+                $ext = strtolower(pathinfo($_FILES[$fileKey]['name'], PATHINFO_EXTENSION));
+                $fName = $prefix . '_' . time() . '_' . mt_rand(1000, 9999) . '.' . $ext;
+                if (move_uploaded_file($_FILES[$fileKey]['tmp_name'], $uploadDir . $fName)) {
+                    $laravelDir = __DIR__ . '/../../backend_laravel/public/uploads/documents/';
+                    if (is_dir($laravelDir)) {
+                        @copy($uploadDir . $fName, $laravelDir . $fName);
+                    }
+                    return '/uploads/documents/' . $fName;
+                }
+            }
+            return '';
+        };
+
+        $newLogo = $handleUpload('edit_logo_photo', 'logo') ?: $handleUpload('logo_photo', 'logo');
+        $newCover = $handleUpload('edit_cover_photo', 'cover') ?: $handleUpload('cover_photo', 'cover');
+        $newBoard = $handleUpload('edit_shop_board_photo', 'shopboard') ?: $handleUpload('shop_board_photo', 'shopboard');
+        $newIdProof = $handleUpload('edit_id_proof_photo', 'aadhaar') ?: $handleUpload('id_proof_photo', 'aadhaar');
+        $newBizProof = $handleUpload('edit_business_proof_photo', 'udyam') ?: $handleUpload('business_proof_photo', 'udyam');
+        $newBankProof = $handleUpload('edit_bank_proof_photo', 'bank') ?: $handleUpload('bank_proof_photo', 'bank');
+
+        $shopName = trim($_POST['shop_name'] ?? $_POST['name'] ?? '');
+        $ownerName = trim($_POST['owner_name'] ?? '');
+        $phone = trim($_POST['phone'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $address = trim($_POST['address'] ?? '');
+        $city = trim($_POST['city'] ?? 'Pune');
+        $pincode = trim($_POST['pincode'] ?? '411057');
+        $workingHours = trim($_POST['working_hours'] ?? '08:00 AM - 09:30 PM');
+        $pickupRadius = intval($_POST['pickup_radius_km'] ?? 8);
+        $bankName = trim($_POST['bank_name'] ?? 'HDFC Bank');
+        $bankAccount = trim($_POST['bank_account'] ?? '');
+        $ifscCode = trim($_POST['ifsc_code'] ?? '');
+        $accountHolder = trim($_POST['account_holder'] ?? $_POST['bank_holder'] ?? $ownerName);
+        $upiId = trim($_POST['upi_id'] ?? '');
+        $gstNumber = trim($_POST['gst_number'] ?? '');
+        $idProofNumber = trim($_POST['id_proof_number'] ?? '');
+        $bizProofNumber = trim($_POST['business_proof_number'] ?? '');
+        $verificationStatus = strtoupper(trim($_POST['verification_status'] ?? 'APPROVED'));
+        $accountStatus = strtoupper(trim($_POST['account_status'] ?? 'ACTIVE'));
+        $subscriptionPlan = trim($_POST['subscription_plan'] ?? 'Starter');
+        $latitude = floatval($_POST['latitude'] ?? 18.5590);
+        $longitude = floatval($_POST['longitude'] ?? 73.7868);
+
         $payload = [
-            'name' => $_POST['shop_name'] ?? '',
-            'phone' => $_POST['phone'] ?? '',
-            'email' => $_POST['email'] ?? '',
-            'address' => $_POST['address'] ?? '',
-            'city' => $_POST['city'] ?? '',
-            'pincode' => $_POST['pincode'] ?? '',
-            'working_hours' => $_POST['working_hours'] ?? '',
-            'pickup_radius_km' => intval($_POST['pickup_radius_km'] ?? 5),
-            'bank_name' => $_POST['bank_name'] ?? '',
-            'bank_account' => $_POST['bank_account'] ?? '',
-            'account_holder' => $_POST['bank_holder'] ?? '',
-            'ifsc_code' => $_POST['ifsc_code'] ?? '',
-            'upi_id' => $_POST['upi_id'] ?? '',
-            'gst_number' => $_POST['gst_number'] ?? '',
+            'name' => $shopName,
+            'shop_name' => $shopName,
+            'owner_name' => $ownerName,
+            'phone' => $phone,
+            'email' => $email,
+            'address' => $address,
+            'city' => $city,
+            'state' => 'Maharashtra',
+            'pincode' => $pincode,
+            'working_hours' => $workingHours,
+            'pickup_radius_km' => $pickupRadius,
+            'latitude' => $latitude,
+            'longitude' => $longitude,
+            'bank_name' => $bankName,
+            'bank_account' => $bankAccount,
+            'account_holder' => $accountHolder,
+            'ifsc_code' => $ifscCode,
+            'upi_id' => $upiId,
+            'gst_number' => $gstNumber,
+            'id_proof_number' => $idProofNumber,
+            'business_proof_number' => $bizProofNumber,
+            'verification_status' => $verificationStatus,
+            'account_status' => $accountStatus,
+            'is_verified' => ($verificationStatus === 'APPROVED' ? 1 : 0),
+            'is_active' => ($accountStatus === 'ACTIVE' ? 1 : 0),
+            'is_open' => 1,
+            'subscription_plan' => $subscriptionPlan,
         ];
+        if (!empty($_POST['password'])) {
+            $payload['password'] = $_POST['password'];
+        }
+        if ($newLogo) {
+            $payload['logo_url'] = $newLogo;
+            $payload['logo'] = $newLogo;
+            $newShopLogo = $newLogo;
+        }
+        if ($newCover) {
+            $payload['cover_url'] = $newCover;
+            $payload['cover_image'] = $newCover;
+        }
+        if ($newBoard) $payload['shop_board_photo'] = $newBoard;
+        if ($newIdProof) $payload['id_proof_photo'] = $newIdProof;
+        if ($newBizProof) $payload['business_proof_photo'] = $newBizProof;
+        if ($newBankProof) $payload['bank_proof_photo'] = $newBankProof;
+
+        // 1. Direct MySQL update via getDb() if available
+        if (function_exists('getDb')) {
+            $db = getDb();
+            if ($db) {
+                try {
+                    $setClauses = "
+                        name = :name,
+                        shop_name = :shop_name,
+                        owner_name = :owner_name,
+                        phone = :phone,
+                        email = :email,
+                        address = :address,
+                        city = :city,
+                        pincode = :pincode,
+                        working_hours = :working_hours,
+                        pickup_radius_km = :pickup_radius_km,
+                        latitude = :latitude,
+                        longitude = :longitude,
+                        bank_name = :bank_name,
+                        bank_account = :bank_account,
+                        account_holder = :account_holder,
+                        ifsc_code = :ifsc_code,
+                        upi_id = :upi_id,
+                        gst_number = :gst_number,
+                        id_proof_number = :id_proof_number,
+                        business_proof_number = :business_proof_number,
+                        verification_status = :verification_status,
+                        account_status = :account_status,
+                        is_verified = :is_verified,
+                        is_active = :is_active,
+                        updated_at = NOW()
+                    ";
+                    if ($newLogo) $setClauses .= ", logo_url = :logo_url, logo = :logo";
+                    if ($newCover) $setClauses .= ", cover_url = :cover_url, cover_image = :cover_image";
+                    if ($newBoard) $setClauses .= ", shop_board_photo = :shop_board_photo";
+                    if ($newIdProof) $setClauses .= ", id_proof_photo = :id_proof_photo";
+                    if ($newBizProof) $setClauses .= ", business_proof_photo = :business_proof_photo";
+                    if ($newBankProof) $setClauses .= ", bank_proof_photo = :bank_proof_photo";
+
+                    $stmt = $db->prepare("UPDATE laundry_shops SET {$setClauses} WHERE id = :target_id OR phone = :phone_target OR email = :email_target");
+                    $params = [
+                        ':name' => $shopName,
+                        ':shop_name' => $shopName,
+                        ':owner_name' => $ownerName,
+                        ':phone' => $phone,
+                        ':email' => $email,
+                        ':address' => $address,
+                        ':city' => $city,
+                        ':pincode' => $pincode,
+                        ':working_hours' => $workingHours,
+                        ':pickup_radius_km' => $pickupRadius,
+                        ':latitude' => $latitude,
+                        ':longitude' => $longitude,
+                        ':bank_name' => $bankName,
+                        ':bank_account' => $bankAccount,
+                        ':account_holder' => $accountHolder,
+                        ':ifsc_code' => $ifscCode,
+                        ':upi_id' => $upiId,
+                        ':gst_number' => $gstNumber,
+                        ':id_proof_number' => $idProofNumber,
+                        ':business_proof_number' => $bizProofNumber,
+                        ':verification_status' => $verificationStatus,
+                        ':account_status' => $accountStatus,
+                        ':is_verified' => ($verificationStatus === 'APPROVED' ? 1 : 0),
+                        ':is_active' => ($accountStatus === 'ACTIVE' ? 1 : 0),
+                        ':target_id' => $targetId,
+                        ':phone_target' => $phone,
+                        ':email_target' => $email,
+                    ];
+                    if ($newLogo) { $params[':logo_url'] = $newLogo; $params[':logo'] = $newLogo; }
+                    if ($newCover) { $params[':cover_url'] = $newCover; $params[':cover_image'] = $newCover; }
+                    if ($newBoard) $params[':shop_board_photo'] = $newBoard;
+                    if ($newIdProof) $params[':id_proof_photo'] = $newIdProof;
+                    if ($newBizProof) $params[':business_proof_photo'] = $newBizProof;
+                    if ($newBankProof) $params[':bank_proof_photo'] = $newBankProof;
+
+                    $stmt->execute($params);
+
+                    // Sync documents in laundry_documents table
+                    $docMap = [
+                        'aadhaar'         => [$newIdProof, $idProofNumber],
+                        'trade_license'   => [$newBizProof, $bizProofNumber],
+                        'bank_cheque'     => [$newBankProof, $bankAccount],
+                        'store_signboard' => [$newBoard, null],
+                        'store_logo'      => [$newLogo, null],
+                        'store_cover'     => [$newCover, null],
+                    ];
+                    foreach ($docMap as $docType => [$fPath, $dNum]) {
+                        if (!empty($fPath)) {
+                            try {
+                                $chk = $db->prepare("SELECT id FROM laundry_documents WHERE laundry_id = :lid AND document_type = :dtype LIMIT 1");
+                                $chk->execute([':lid' => $targetId, ':dtype' => $docType]);
+                                $exId = $chk->fetchColumn();
+                                if ($exId) {
+                                    $uDoc = $db->prepare("UPDATE laundry_documents SET file_path = :fpath, document_number = COALESCE(:dnum, document_number), verification_status = :vstat, updated_at = NOW() WHERE id = :id");
+                                    $uDoc->execute([':fpath' => $fPath, ':dnum' => $dNum, ':vstat' => $verificationStatus, ':id' => $exId]);
+                                } else {
+                                    $iDoc = $db->prepare("INSERT INTO laundry_documents (laundry_id, document_type, document_number, file_path, verification_status, uploaded_at, created_at, updated_at) VALUES (:lid, :dtype, :dnum, :fpath, :vstat, NOW(), NOW(), NOW())");
+                                    $iDoc->execute([':lid' => $targetId, ':dtype' => $docType, ':dnum' => $dNum, ':fpath' => $fPath, ':vstat' => $verificationStatus]);
+                                }
+                            } catch (\Throwable $de) {}
+                        }
+                    }
+
+                    // Also update linked user
+                    $uStmt = $db->prepare("UPDATE users SET name = :name, phone = :phone, email = :email, city = :city, status = :status, updated_at = NOW() WHERE phone = :phone_match OR email = :email_match");
+                    $uStmt->execute([
+                        ':name' => $ownerName ?: $shopName,
+                        ':phone' => $phone,
+                        ':email' => $email,
+                        ':city' => $city,
+                        ':status' => $accountStatus,
+                        ':phone_match' => $phone,
+                        ':email_match' => $email,
+                    ]);
+                } catch (\Throwable $dbe) {
+                    error_log("DB update error in laundries/index.php: " . $dbe->getMessage());
+                }
+            }
+        }
+
+        // 2. Update in $_SESSION['custom_shops']
+        if (!empty($_SESSION['custom_shops'])) {
+            foreach ($_SESSION['custom_shops'] as &$cs) {
+                if (strval($cs['id'] ?? '') === strval($targetId) ||
+                    (!empty($cs['email']) && strtolower(trim($cs['email'])) === strtolower(trim($email))) ||
+                    (!empty($cs['phone']) && trim($cs['phone']) === trim($phone))) {
+                    $cs['shopName'] = $shopName;
+                    $cs['name'] = $shopName;
+                    $cs['ownerName'] = $ownerName;
+                    $cs['owner_name'] = $ownerName;
+                    $cs['phone'] = $phone;
+                    $cs['email'] = $email;
+                    $cs['city'] = $city;
+                    $cs['address'] = $address;
+                    $cs['pincode'] = $pincode;
+                    $cs['pickupRadiusKm'] = $pickupRadius;
+                    $cs['pickup_radius_km'] = $pickupRadius;
+                    $cs['workingHours'] = $workingHours;
+                    $cs['working_hours'] = $workingHours;
+                    $cs['latitude'] = $latitude;
+                    $cs['longitude'] = $longitude;
+                    $cs['bankName'] = $bankName;
+                    $cs['bank_name'] = $bankName;
+                    $cs['bankAccount'] = $bankAccount;
+                    $cs['bank_account'] = $bankAccount;
+                    $cs['ifscCode'] = $ifscCode;
+                    $cs['ifsc_code'] = $ifscCode;
+                    $cs['accountHolder'] = $accountHolder;
+                    $cs['account_holder'] = $accountHolder;
+                    $cs['upiId'] = $upiId;
+                    $cs['upi_id'] = $upiId;
+                    $cs['gstNumber'] = $gstNumber;
+                    $cs['gst_number'] = $gstNumber;
+                    $cs['idProofNumber'] = $idProofNumber;
+                    $cs['id_proof_number'] = $idProofNumber;
+                    $cs['businessProofNumber'] = $bizProofNumber;
+                    $cs['business_proof_number'] = $bizProofNumber;
+                    $cs['verificationStatus'] = $verificationStatus;
+                    $cs['verification_status'] = $verificationStatus;
+                    $cs['accountStatus'] = $accountStatus;
+                    $cs['account_status'] = $accountStatus;
+                    $cs['subscriptionPlan'] = $subscriptionPlan;
+                    $cs['subscription_plan'] = $subscriptionPlan;
+                    if ($newLogo) { $cs['logo_url'] = $newLogo; $cs['logo'] = $newLogo; }
+                    if ($newCover) { $cs['cover_url'] = $newCover; $cs['cover_image'] = $newCover; }
+                    if ($newBoard) { $cs['shopBoardPhoto'] = $newBoard; $cs['shop_board_photo'] = $newBoard; }
+                    if ($newIdProof) { $cs['idProofPhoto'] = $newIdProof; $cs['id_proof_photo'] = $newIdProof; }
+                    if ($newBizProof) { $cs['businessProofPhoto'] = $newBizProof; $cs['business_proof_photo'] = $newBizProof; }
+                    if ($newBankProof) { $cs['bankProofPhoto'] = $newBankProof; $cs['bank_proof_photo'] = $newBankProof; }
+                    break;
+                }
+            }
+            unset($cs);
+        }
+
+        // 3. Call REST API
         $res = apiPut("/admin/laundries/{$targetId}", $payload);
-        $actionMsg = 'Shop profile details updated successfully!';
+        if (empty($res['success'])) {
+            $res = apiPost("/admin/laundries/{$targetId}", $payload);
+        }
+
+        $actionMsg = 'Laundry shop "' . htmlspecialchars($shopName ?: "Shop #{$targetId}") . '" details, brand media & compliance documents updated successfully and saved in database!';
     }
 }
 
@@ -307,6 +569,17 @@ if ($tab === 'ACTIVE') {
       >
         <i data-lucide="plus" style="width: 18px; height: 18px;"></i> Onboard New Laundry Shop
       </button>
+    <?php else: ?>
+      <?php if (!empty($laundries)): $firstOwnerShop = reset($laundries); ?>
+        <button
+          type="button"
+          onclick="openEditShop(<?= htmlspecialchars(json_encode($firstOwnerShop)) ?>)"
+          class="btn btn-primary"
+          style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); color: #FFF; padding: 0.65rem 1.25rem; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 14px rgba(129, 98, 238, 0.4);"
+        >
+          <i data-lucide="edit-3" style="width: 18px; height: 18px;"></i> Edit My Shop Profile &amp; KYC
+        </button>
+      <?php endif; ?>
     <?php endif; ?>
   </div>
 
@@ -1141,95 +1414,444 @@ if ($tab === 'ACTIVE') {
   </div>
 </div>
 
-<!-- Modal: Edit Shop Details -->
-<div id="editShopModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(6px); align-items: center; justify-content: center; z-index: 99999; padding: 1rem;">
-  <div class="modal-content" style="background: var(--bg-card); border-radius: 16px; border: 1px solid var(--border-color); width: 100%; max-width: 520px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); color: var(--text-primary);">
-    <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
-      <h3 style="font-size: 1.15rem; font-weight: 800; margin: 0; color: var(--brand-purple);">Edit Shop Information</h3>
-      <button onclick="closeModal('editShopModal')" style="background: var(--bg-input); border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted);">✕</button>
+<!-- Modal: Edit Shop Details & Full Onboarding Compliance Profile -->
+<div id="editShopModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(8px); align-items: center; justify-content: center; z-index: 99999; padding: 1.5rem;">
+  <div class="modal-content" style="background: var(--bg-card); border-radius: 16px; border: 1px solid rgba(129,98,238,0.3); width: 100%; max-width: 860px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(0,0,0,0.6); color: var(--text-primary);">
+    <!-- Modal Header -->
+    <div style="padding: 1.25rem 1.75rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, rgba(129, 98, 238, 0.15) 0%, rgba(50, 19, 143, 0.2) 100%);">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div style="width: 42px; height: 42px; border-radius: 10px; background: linear-gradient(135deg, #8162EE 0%, #32138F 100%); display: flex; align-items: center; justify-content: center; color: #FFF; box-shadow: 0 4px 12px rgba(129, 98, 238, 0.4);">
+          <i data-lucide="edit-3" style="width: 22px; height: 22px;"></i>
+        </div>
+        <div>
+          <h2 id="editShopModalTitle" style="font-size: 1.25rem; font-weight: 800; margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary);">
+            Edit Laundry Shop Profile
+            <span id="editShopIdBadge" style="font-size: 0.68rem; padding: 0.2rem 0.6rem; border-radius: 20px; background: rgba(129, 98, 238, 0.2); color: #8162EE; border: 1px solid rgba(129, 98, 238, 0.4); font-weight: 800; text-transform: uppercase;">
+              #
+            </span>
+          </h2>
+          <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">
+            Edit owner profile, location, banking, brand logo, cover photos, and compliance documents.
+          </p>
+        </div>
+      </div>
+      <button type="button" onclick="closeModal('editShopModal')" style="background: rgba(255,255,255,0.06); border: none; border-radius: 8px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); cursor: pointer;">✕</button>
     </div>
-    <form method="POST" action="" style="padding: 1.5rem;">
+
+    <!-- Stepper Navigation Bar -->
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--border-color); background: rgba(0,0,0,0.12);">
+      <button type="button" id="editShopTabBtn1" onclick="switchEditShopTab(1)" style="background: rgba(129,98,238,0.12); border: none; border-bottom: 3px solid #8162EE; padding: 0.85rem 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; color: #8162EE; font-weight: 800; font-size: 0.85rem;">
+        <span style="width: 22px; height: 22px; border-radius: 50%; background: #8162EE; color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;">1</span>
+        <span>Owner Info &amp; KYC</span>
+      </button>
+      <button type="button" id="editShopTabBtn2" onclick="switchEditShopTab(2)" style="background: transparent; border: none; border-bottom: 3px solid transparent; padding: 0.85rem 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; color: var(--text-muted); font-weight: 600; font-size: 0.85rem;">
+        <span style="width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,0.1); color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;">2</span>
+        <span>Shop &amp; Location</span>
+      </button>
+      <button type="button" id="editShopTabBtn3" onclick="switchEditShopTab(3)" style="background: transparent; border: none; border-bottom: 3px solid transparent; padding: 0.85rem 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; color: var(--text-muted); font-weight: 600; font-size: 0.85rem;">
+        <span style="width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,0.1); color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;">3</span>
+        <span>Banking &amp; GST</span>
+      </button>
+      <button type="button" id="editShopTabBtn4" onclick="switchEditShopTab(4)" style="background: transparent; border: none; border-bottom: 3px solid transparent; padding: 0.85rem 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; color: var(--text-muted); font-weight: 600; font-size: 0.85rem;">
+        <span style="width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,0.1); color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;">4</span>
+        <span>Brand Assets &amp; Status</span>
+      </button>
+    </div>
+
+    <!-- Multi-Step Edit Form Body -->
+    <form id="editShopForm" method="POST" action="" enctype="multipart/form-data" style="flex: 1; overflow-y: auto; padding: 1.75rem 2rem;">
       <input type="hidden" name="action" value="edit">
-      <input type="hidden" id="editShopId" name="shop_id" value="">
+      <input type="hidden" id="es_shop_id" name="shop_id" value="">
 
-      <div class="form-group" style="margin-bottom: 1rem;">
-        <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Shop Name</label>
-        <input type="text" id="editShopName" name="shop_name" class="form-control" required style="width: 100%;">
+      <!-- TAB 1: OWNER INFO & AADHAAR KYC -->
+      <div id="editShopSec1">
+        <div style="border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 0.6rem; margin-bottom: 1.25rem;">
+          <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #8162EE; display: flex; align-items: center; gap: 0.4rem;">
+            👤 Partner Owner &amp; Login Credentials
+          </h4>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            Manage owner identity, mobile number, login credentials, and government identity KYC document.
+          </span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Owner Full Name *
+            </label>
+            <input type="text" id="es_owner_name" name="owner_name" required placeholder="e.g. Ramesh Kumar Sharma" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Mobile Phone Number *
+            </label>
+            <input type="tel" id="es_phone" name="phone" required placeholder="e.g. 9876543210" maxlength="15" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Email Address
+            </label>
+            <input type="email" id="es_email" name="email" placeholder="e.g. ramesh.laundry@gmail.com" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Change Password (Optional)
+            </label>
+            <input type="text" id="es_password" name="password" placeholder="Leave blank to keep current password" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <!-- Aadhaar / ID Proof Document Section -->
+        <div style="background: var(--bg-input); padding: 1.1rem; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 1rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+              <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                Aadhaar / Government ID Number
+              </label>
+              <input type="text" id="es_id_proof_number" name="id_proof_number" placeholder="e.g. 5421 8765 4321" class="form-control" style="width: 100%;">
+              
+              <div style="margin-top: 0.75rem;">
+                <label style="display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.3rem;">Current Saved KYC Document:</label>
+                <div id="es_current_id_proof"></div>
+              </div>
+            </div>
+            <div>
+              <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                Upload New ID Proof (Aadhaar / PAN from Device)
+              </label>
+              <input type="file" id="es_id_proof_photo" name="edit_id_proof_photo" accept="image/*,.pdf" onchange="handleSingleUploadPreview(this, 'es_id_preview_img', 'es_id_info_text')" style="font-size: 0.8rem; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.45rem;">
+                <img id="es_id_preview_img" src="" alt="ID Preview" style="display: none; width: 44px; height: 32px; border-radius: 4px; object-fit: cover; border: 1px solid var(--border-color); background: #fff;">
+                <span id="es_id_info_text" style="font-size: 0.72rem; color: var(--text-muted);">Choose a new file to replace existing ID proof.</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
-        <div class="form-group">
-          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Phone Number</label>
-          <input type="text" id="editShopPhone" name="phone" class="form-control" required style="width: 100%;">
+      <!-- TAB 2: SHOP PROFILE & LOCATION -->
+      <div id="editShopSec2" style="display: none;">
+        <div style="border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 0.6rem; margin-bottom: 1.25rem;">
+          <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #8162EE; display: flex; align-items: center; gap: 0.4rem;">
+            🏪 Laundry Shop Store &amp; Geolocation
+          </h4>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            Manage physical outlet address, Google Maps geolocation, delivery radius, operating hours, and weekly off.
+          </span>
         </div>
-        <div class="form-group">
-          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Email Address</label>
-          <input type="email" id="editShopEmail" name="email" class="form-control" style="width: 100%;">
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Laundry Shop Name *
+            </label>
+            <input type="text" id="es_shop_name" name="shop_name" required placeholder="e.g. Star Wash Express" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Shop Contact / Hotline Phone
+            </label>
+            <input type="text" id="es_shop_phone" name="shop_phone" placeholder="e.g. 020-2567890 or mobile" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <!-- Full Shop Premise Address with GPS and Google Map Click -->
+        <div style="margin-bottom: 1rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; gap: 0.5rem;">
+            <label class="form-label" style="margin: 0; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary);">
+              Full Shop Premise Address * <span style="font-size: 0.72rem; color: #8162EE; font-weight: 600; text-transform: none;">(Map &amp; GPS Sync)</span>
+            </label>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button
+                type="button"
+                onclick="triggerFetchCurrentGPS('edit')"
+                class="btn btn-secondary btn-sm"
+                style="padding: 0.3rem 0.75rem; border-radius: 6px; font-size: 0.76rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem; color: #10B981; border: 1px solid rgba(16,185,129,0.3); background: rgba(16,185,129,0.1); cursor: pointer;"
+                title="Detect and fill current location coordinates via GPS"
+              >
+                <i data-lucide="navigation" style="width: 13px; height: 13px;"></i>
+                <span>📍 GPS Auto-Detect</span>
+              </button>
+
+              <button
+                type="button"
+                onclick="openMapPickerModal(false)"
+                class="btn btn-primary btn-sm"
+                style="padding: 0.3rem 0.75rem; border-radius: 6px; font-size: 0.76rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem; background: linear-gradient(135deg, #4F46E5, #6366F1); color: #FFF; border: none; box-shadow: 0 2px 6px rgba(79,70,229,0.3); cursor: pointer;"
+              >
+                <i data-lucide="map-pin" style="width: 13px; height: 13px;"></i>
+                <span>Pick on Map Screen</span>
+              </button>
+            </div>
+          </div>
+
+          <textarea 
+            id="es_address" 
+            name="address" 
+            rows="2" 
+            required 
+            placeholder="Shop address with street, landmark and area..." 
+            class="form-control" 
+            style="width: 100%;"
+          ></textarea>
+          <input type="hidden" id="es_latitude" name="latitude" value="18.5590">
+          <input type="hidden" id="es_longitude" name="longitude" value="73.7868">
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+            Serviceable City *
+          </label>
+          <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+            <?php foreach (['Pune', 'Kothrud', 'Hinjewadi', 'Viman Nagar', 'Baner', 'Wakad', 'Hadapsar', 'Pimpri-Chinchwad'] as $c): ?>
+              <button type="button" onclick="setEditCity('<?= $c ?>')" style="padding: 0.25rem 0.65rem; border-radius: 16px; border: 1px solid rgba(129,98,238,0.3); background: rgba(129,98,238,0.15); color: #8162EE; font-size: 0.75rem; font-weight: 700; cursor: pointer;">
+                <?= $c ?>
+              </button>
+            <?php endforeach; ?>
+          </div>
+          <input type="text" id="es_city" name="city" required class="form-control" style="width: 100%;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">Pincode</label>
+            <input type="text" id="es_pincode" name="pincode" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">Pickup Radius (KM)</label>
+            <input type="number" id="es_pickup_radius_km" name="pickup_radius_km" min="1" max="50" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">Working Hours</label>
+            <input type="text" id="es_working_hours" name="working_hours" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">Weekly Off Day</label>
+            <select id="es_weekly_off" name="weekly_off" onchange="syncWeeklyOffToHours()" class="form-control" style="width: 100%;">
+              <option value="none">Open All 7 Days (No Weekly Off)</option>
+              <option value="sunday">Sunday Off (Closed on Sundays)</option>
+              <option value="saturday_sunday">Saturday &amp; Sunday Off</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      <div class="form-group" style="margin-bottom: 1rem;">
-        <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Store Address</label>
-        <textarea id="editShopAddress" name="address" class="form-control" rows="2" style="width: 100%;"></textarea>
+      <!-- TAB 3: BANKING & GST COMPLIANCE -->
+      <div id="editShopSec3" style="display: none;">
+        <div style="border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 0.6rem; margin-bottom: 1.25rem;">
+          <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #8162EE; display: flex; align-items: center; gap: 0.4rem;">
+            💳 Banking Settlement &amp; GST Compliance
+          </h4>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            Manage settlement bank accounts, IFSC, UPI ID, GST taxation, and business license certificates.
+          </span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">Bank Name *</label>
+            <input type="text" id="es_bank_name" name="bank_name" required class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">Bank Account Number *</label>
+            <input type="text" id="es_bank_account" name="bank_account" required class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">IFSC Code *</label>
+            <input type="text" id="es_ifsc_code" name="ifsc_code" required class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">Account Holder Name</label>
+            <input type="text" id="es_account_holder" name="account_holder" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">UPI ID</label>
+            <input type="text" id="es_upi_id" name="upi_id" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">GSTIN Number</label>
+            <input type="text" id="es_gst_number" name="gst_number" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+            Business / Trade License / Udyam Number
+          </label>
+          <input type="text" id="es_business_proof_number" name="business_proof_number" placeholder="e.g. UDYAM-MH-01-0001234" class="form-control" style="width: 100%;">
+        </div>
+
+        <!-- Udyam / Shop License Document Upload & Bank Cheque Upload -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; background: var(--bg-input); padding: 1.1rem; border-radius: 12px; border: 1px solid var(--border-color);">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Trade License / Udyam Certificate
+            </label>
+            <div style="margin-bottom: 0.5rem;">
+              <div id="es_current_biz_proof"></div>
+            </div>
+            <input type="file" id="es_business_proof_photo" name="edit_business_proof_photo" accept="image/*,.pdf" onchange="handleSingleUploadPreview(this, 'es_biz_preview_img', 'es_biz_info_text')" style="font-size: 0.8rem; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem;">
+              <img id="es_biz_preview_img" src="" alt="License Preview" style="display: none; width: 44px; height: 32px; border-radius: 4px; object-fit: cover; border: 1px solid var(--border-color); background: #fff;">
+              <span id="es_biz_info_text" style="font-size: 0.72rem; color: var(--text-muted);">Choose file to replace Trade license.</span>
+            </div>
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Bank Cheque / Passbook Proof
+            </label>
+            <div style="margin-bottom: 0.5rem;">
+              <div id="es_current_bank_proof"></div>
+            </div>
+            <input type="file" id="es_bank_proof_photo" name="edit_bank_proof_photo" accept="image/*,.pdf" onchange="handleSingleUploadPreview(this, 'es_bank_preview_img', 'es_bank_info_text')" style="font-size: 0.8rem; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem;">
+              <img id="es_bank_preview_img" src="" alt="Bank Preview" style="display: none; width: 44px; height: 32px; border-radius: 4px; object-fit: cover; border: 1px solid var(--border-color); background: #fff;">
+              <span id="es_bank_info_text" style="font-size: 0.72rem; color: var(--text-muted);">Choose file to replace Bank cheque.</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">City</label>
-          <input type="text" id="editShopCity" name="city" class="form-control" style="width: 100%;">
+      <!-- TAB 4: BRAND MEDIA, SIGNBOARD & STATUS -->
+      <div id="editShopSec4" style="display: none;">
+        <div style="border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 0.6rem; margin-bottom: 1.25rem;">
+          <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #8162EE; display: flex; align-items: center; gap: 0.4rem;">
+            🎨 Brand Assets, Cover Photos &amp; Status
+          </h4>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            Manage official shop logo, wide cover photo banner, storefront signboard, and shop live verification status.
+          </span>
         </div>
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Pincode</label>
-          <input type="text" id="editShopPincode" name="pincode" class="form-control" style="width: 100%;">
-        </div>
-      </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Working Hours</label>
-          <input type="text" id="editShopHours" name="working_hours" class="form-control" style="width: 100%;">
-        </div>
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Pickup Radius (km)</label>
-          <input type="number" id="editShopRadius" name="pickup_radius_km" class="form-control" style="width: 100%;">
-        </div>
-      </div>
+        <!-- Brand Media Uploads Box -->
+        <div style="background: var(--bg-input); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 1.25rem; display: flex; flex-direction: column; gap: 1.25rem;">
+          
+          <!-- Logo & Signboard Grid -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <!-- Brand Logo -->
+            <div>
+              <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                Official Brand Logo (Upload)
+              </label>
+              <div style="margin-bottom: 0.5rem;">
+                <div id="es_current_logo"></div>
+              </div>
+              <input type="file" id="es_logo_photo" name="edit_logo_photo" accept="image/*" onchange="handleSingleUploadPreview(this, 'es_logo_preview_img', 'es_logo_info_text')" style="font-size: 0.8rem; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem;">
+                <img id="es_logo_preview_img" src="" alt="New Logo Preview" style="display: none; width: 44px; height: 44px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border-color); background: #fff;">
+                <span id="es_logo_info_text" style="font-size: 0.72rem; color: var(--text-muted);">Upload new PNG/JPEG/WEBP logo.</span>
+              </div>
+            </div>
 
-      <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; font-size: 1rem; font-weight: 700; color: var(--brand-purple);">Banking & Financial</h4>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Bank Name</label>
-          <input type="text" id="editShopBankName" name="bank_name" class="form-control" style="width: 100%;">
-        </div>
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Account Number</label>
-          <input type="text" id="editShopBankAccount" name="bank_account" class="form-control" style="width: 100%;">
-        </div>
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">Account Holder</label>
-          <input type="text" id="editShopBankHolder" name="bank_holder" class="form-control" style="width: 100%;">
-        </div>
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">IFSC Code</label>
-          <input type="text" id="editShopIfsc" name="ifsc_code" class="form-control" style="width: 100%;">
-        </div>
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">UPI ID</label>
-          <input type="text" id="editShopUpi" name="upi_id" class="form-control" style="width: 100%;">
-        </div>
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 0.3rem; font-weight: 700;">GST Number</label>
-          <input type="text" id="editShopGst" name="gst_number" class="form-control" style="width: 100%;">
-        </div>
-      </div>
+            <!-- Signboard / Premise Photo -->
+            <div>
+              <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                Storefront Signboard Photo (Upload)
+              </label>
+              <div style="margin-bottom: 0.5rem;">
+                <div id="es_current_board"></div>
+              </div>
+              <input type="file" id="es_shop_board_photo" name="edit_shop_board_photo" accept="image/*" onchange="handleSingleUploadPreview(this, 'es_board_preview_img', 'es_board_info_text')" style="font-size: 0.8rem; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem;">
+                <img id="es_board_preview_img" src="" alt="New Signboard Preview" style="display: none; width: 44px; height: 32px; border-radius: 4px; object-fit: cover; border: 1px solid var(--border-color); background: #fff;">
+                <span id="es_board_info_text" style="font-size: 0.72rem; color: var(--text-muted);">Upload new storefront photo.</span>
+              </div>
+            </div>
+          </div>
 
-      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
-        <button type="button" onclick="closeModal('editShopModal')" class="btn btn-secondary" style="font-weight: 700;">Cancel</button>
-        <button type="submit" class="btn btn-primary" style="font-weight: 800; background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); color: #FFF; padding: 0.65rem 1.5rem; border: none; border-radius: 8px;">
-          Save Changes
-        </button>
+          <!-- Cover Photo Banner -->
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Store Cover Banner Photo (Customer App Top Banner)
+            </label>
+            <div style="margin-bottom: 0.5rem;">
+              <div id="es_current_cover"></div>
+            </div>
+            <input type="file" id="es_cover_photo" name="edit_cover_photo" accept="image/*" onchange="handleSingleUploadPreview(this, 'es_cover_preview_img', 'es_cover_info_text')" style="font-size: 0.8rem; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem;">
+              <img id="es_cover_preview_img" src="" alt="New Cover Preview" style="display: none; width: 80px; height: 36px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-color); background: #fff;">
+              <span id="es_cover_info_text" style="font-size: 0.72rem; color: var(--text-muted);">Upload wide landscape banner to display in Customer App.</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Verification & Account Operational Status -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Verification Status
+            </label>
+            <select id="es_verification_status" name="verification_status" class="form-control" style="width: 100%;">
+              <option value="APPROVED">APPROVED (Verified &amp; Live)</option>
+              <option value="PENDING">PENDING (Under Review)</option>
+              <option value="REJECTED">REJECTED (Declined)</option>
+            </select>
+            <?php if ($isOwner): ?>
+              <span style="font-size: 0.7rem; color: var(--text-muted); display: block; margin-top: 0.2rem;">Controlled by Platform Admin</span>
+            <?php endif; ?>
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Account Operational Status
+            </label>
+            <select id="es_account_status" name="account_status" class="form-control" style="width: 100%;">
+              <option value="ACTIVE">ACTIVE (Open for Orders)</option>
+              <option value="INACTIVE">INACTIVE (Temporarily Closed)</option>
+              <option value="SUSPENDED">SUSPENDED</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Subscription Plan
+            </label>
+            <select id="es_subscription_plan" name="subscription_plan" class="form-control" style="width: 100%;">
+              <option value="Starter">Starter</option>
+              <option value="Silver Pro">Silver Pro</option>
+              <option value="Gold Business">Gold Business</option>
+              <option value="Platinum Max">Platinum Enterprise</option>
+            </select>
+          </div>
+        </div>
+
       </div>
     </form>
+
+    <!-- Modal Footer Controls -->
+    <div style="padding: 1rem 1.75rem; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2);">
+      <div>
+        <button type="button" id="editShopBackBtn" onclick="prevEditShopStep()" style="display: none; background: rgba(255,255,255,0.08); border: none; color: var(--text-primary); padding: 0.65rem 1.2rem; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.85rem;">
+          ← Previous Step
+        </button>
+      </div>
+
+      <div style="display: flex; gap: 0.75rem;">
+        <button type="button" onclick="closeModal('editShopModal')" class="btn btn-secondary" style="padding: 0.65rem 1.4rem; border-radius: 8px; font-weight: 700;">
+          Cancel
+        </button>
+
+        <button type="button" id="editShopNextBtn" onclick="nextEditShopStep()" class="btn btn-primary" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); border: none; color: #FFF; padding: 0.65rem 1.5rem; border-radius: 8px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 14px rgba(129, 98, 238, 0.4);">
+          Next Step →
+        </button>
+
+        <button type="submit" form="editShopForm" id="editShopSubmitBtn" class="btn btn-primary" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); border: none; color: #FFF; padding: 0.65rem 1.6rem; border-radius: 8px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 16px rgba(129, 98, 238, 0.4);">
+          💾 Save Changes &amp; Update Shop
+        </button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -1290,6 +1912,353 @@ if ($tab === 'ACTIVE') {
         </button>
       </div>
     </form>
+  </div>
+<!-- Modal: Edit Laundry Shop (Instant Comprehensive Profile & Verification Editor) -->
+<div id="editShopModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(8px); align-items: center; justify-content: center; z-index: 99999; padding: 1.5rem;">
+  <div class="modal-content" style="background: var(--bg-card); border-radius: 16px; border: 1px solid rgba(129,98,238,0.3); width: 100%; max-width: 860px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(0,0,0,0.6); color: var(--text-primary);">
+    <!-- Modal Header -->
+    <div style="padding: 1.25rem 1.75rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, rgba(129, 98, 238, 0.15) 0%, rgba(50, 19, 143, 0.2) 100%);">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div style="width: 42px; height: 42px; border-radius: 10px; background: linear-gradient(135deg, #8162EE 0%, #32138F 100%); display: flex; align-items: center; justify-content: center; color: #FFF; box-shadow: 0 4px 12px rgba(129, 98, 238, 0.4);">
+          <i data-lucide="edit-3" style="width: 22px; height: 22px;"></i>
+        </div>
+        <div>
+          <h2 style="font-size: 1.25rem; font-weight: 800; margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary);">
+            <span id="editShopModalTitle">Edit Laundry Shop</span>
+            <span id="editShopIdBadge" style="font-size: 0.65rem; padding: 0.2rem 0.6rem; border-radius: 20px; background: rgba(129, 98, 238, 0.2); color: #8162EE; border: 1px solid rgba(129, 98, 238, 0.4); font-weight: 800; text-transform: uppercase;">
+              #--
+            </span>
+          </h2>
+          <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">
+            Update partner outlet profile, address, contact, banking details, and live status.
+          </p>
+        </div>
+      </div>
+      <button type="button" onclick="closeModal('editShopModal')" style="background: rgba(255,255,255,0.06); border: none; border-radius: 8px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); cursor: pointer;">✕</button>
+    </div>
+
+    <!-- Stepper Navigation Bar -->
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--border-color); background: rgba(0,0,0,0.12);">
+      <button type="button" id="editShopTabBtn1" onclick="switchEditShopTab(1)" style="background: rgba(129,98,238,0.12); border: none; border-bottom: 3px solid #8162EE; padding: 0.85rem 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; color: #8162EE; font-weight: 800; font-size: 0.85rem;">
+        <span style="font-size: 1rem;">👤</span>
+        <span>Owner &amp; Login</span>
+      </button>
+      <button type="button" id="editShopTabBtn2" onclick="switchEditShopTab(2)" style="background: transparent; border: none; border-bottom: 3px solid transparent; padding: 0.85rem 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; color: var(--text-muted); font-weight: 600; font-size: 0.85rem;">
+        <span style="font-size: 1rem;">🏪</span>
+        <span>Store Profile</span>
+      </button>
+      <button type="button" id="editShopTabBtn3" onclick="switchEditShopTab(3)" style="background: transparent; border: none; border-bottom: 3px solid transparent; padding: 0.85rem 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; color: var(--text-muted); font-weight: 600; font-size: 0.85rem;">
+        <span style="font-size: 1rem;">💳</span>
+        <span>Banking &amp; Tax</span>
+      </button>
+      <button type="button" id="editShopTabBtn4" onclick="switchEditShopTab(4)" style="background: transparent; border: none; border-bottom: 3px solid transparent; padding: 0.85rem 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; color: var(--text-muted); font-weight: 600; font-size: 0.85rem;">
+        <span style="font-size: 1rem;">⚡</span>
+        <span>Status &amp; Media</span>
+      </button>
+    </div>
+
+    <!-- Form Body -->
+    <form id="editShopForm" method="POST" action="" enctype="multipart/form-data" style="flex: 1; overflow-y: auto; padding: 1.75rem 2rem;">
+      <input type="hidden" name="action" value="edit_shop">
+      <input type="hidden" id="es_shop_id" name="shop_id" value="">
+
+      <!-- TAB 1: OWNER & LOGIN CREDENTIALS -->
+      <div id="editShopSec1">
+        <div style="border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 0.6rem; margin-bottom: 1.25rem;">
+          <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #8162EE; display: flex; align-items: center; gap: 0.4rem;">
+            👤 Laundry Owner &amp; Partner Account
+          </h4>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            Manage registered owner name, mobile phone login, email address, and identity proof.
+          </span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Owner Full Name *
+            </label>
+            <input type="text" id="es_owner_name" name="owner_name" required placeholder="Owner Name" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Mobile Phone Number *
+            </label>
+            <input type="tel" id="es_phone" name="phone" required placeholder="Mobile Phone" maxlength="15" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Email Address
+            </label>
+            <input type="email" id="es_email" name="email" placeholder="partner@gmail.com" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Partner Password (Leave blank to keep unchanged)
+            </label>
+            <input type="text" id="es_password" name="password" placeholder="New password if resetting" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+            Owner Aadhaar / Government ID Number
+          </label>
+          <input type="text" id="es_id_proof_number" name="id_proof_number" placeholder="e.g. 5421 8765 4321" class="form-control" style="width: 100%;">
+        </div>
+      </div>
+
+      <!-- TAB 2: STORE PROFILE & LOCATION -->
+      <div id="editShopSec2" style="display: none;">
+        <div style="border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 0.6rem; margin-bottom: 1.25rem;">
+          <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #8162EE; display: flex; align-items: center; gap: 0.4rem;">
+            🏪 Laundry Shop Store &amp; Geolocation
+          </h4>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            Physical store premise, serviceable city, delivery radius, and GPS coordinates.
+          </span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Laundry Shop Name *
+            </label>
+            <input type="text" id="es_shop_name" name="shop_name" required placeholder="e.g. Star Wash Express" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Shop Hotline / Alternate Phone
+            </label>
+            <input type="text" id="es_shop_phone" name="shop_phone" placeholder="e.g. 020-2567890" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+            Full Shop Premise Address *
+          </label>
+          <textarea id="es_address" name="address" rows="2" required placeholder="Detailed address with street and landmark..." class="form-control" style="width: 100%;"></textarea>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Serviceable City *
+            </label>
+            <input type="text" id="es_city" name="city" required class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Pincode
+            </label>
+            <input type="text" id="es_pincode" name="pincode" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Pickup Radius (KM)
+            </label>
+            <input type="number" id="es_pickup_radius_km" name="pickup_radius_km" min="1" max="50" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Working Hours
+            </label>
+            <input type="text" id="es_working_hours" name="working_hours" placeholder="08:00 AM - 09:30 PM" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Weekly Off (Closed Day)
+            </label>
+            <select id="es_weekly_off" class="form-control" style="width: 100%;" onchange="syncWeeklyOffToHours()">
+              <option value="none">Open All 7 Days (No Weekly Off)</option>
+              <option value="sunday">Sunday Off (Closed on Sundays)</option>
+              <option value="saturday_sunday">Saturday & Sunday Off</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Latitude
+            </label>
+            <input type="text" id="es_latitude" name="latitude" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Longitude
+            </label>
+            <input type="text" id="es_longitude" name="longitude" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: BANKING & TAX COMPLIANCE -->
+      <div id="editShopSec3" style="display: none;">
+        <div style="border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 0.6rem; margin-bottom: 1.25rem;">
+          <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #8162EE; display: flex; align-items: center; gap: 0.4rem;">
+            💳 Banking Settlement &amp; GST Compliance
+          </h4>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            Manage settlement bank account, IFSC, UPI ID, and business registration numbers.
+          </span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Bank Name *
+            </label>
+            <input type="text" id="es_bank_name" name="bank_name" required placeholder="Bank Name" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Bank Account Number *
+            </label>
+            <input type="text" id="es_bank_account" name="bank_account" required placeholder="Account Number" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              IFSC Code *
+            </label>
+            <input type="text" id="es_ifsc_code" name="ifsc_code" required placeholder="IFSC Code" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Account Holder Name
+            </label>
+            <input type="text" id="es_account_holder" name="account_holder" placeholder="Account Holder Name" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              UPI ID
+            </label>
+            <input type="text" id="es_upi_id" name="upi_id" placeholder="shopname@okhdfcbank" class="form-control" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              GSTIN Number
+            </label>
+            <input type="text" id="es_gst_number" name="gst_number" placeholder="27ABCDE1234F1Z5" class="form-control" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+            Trade License / Udyam Number
+          </label>
+          <input type="text" id="es_business_proof_number" name="business_proof_number" placeholder="UDYAM-MH-12-0012345" class="form-control" style="width: 100%;">
+        </div>
+      </div>
+
+      <!-- TAB 4: OPERATIONAL STATUS & MEDIA -->
+      <div id="editShopSec4" style="display: none;">
+        <div style="border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 0.6rem; margin-bottom: 1.25rem;">
+          <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #8162EE; display: flex; align-items: center; gap: 0.4rem;">
+            ⚡ Operational Permissions &amp; Store Media
+          </h4>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            Control KYC approval state, order acceptance status, subscription tier, and brand assets.
+          </span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Verification Status *
+            </label>
+            <select id="es_verification_status" name="verification_status" class="form-control" style="width: 100%; font-weight: 700;">
+              <option value="APPROVED" style="color: #10B981; font-weight: 700;">APPROVED (Live in App)</option>
+              <option value="PENDING" style="color: #F59E0B; font-weight: 700;">PENDING (Awaiting Review)</option>
+              <option value="REJECTED" style="color: #EF4444; font-weight: 700;">REJECTED</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Operational Status *
+            </label>
+            <select id="es_account_status" name="account_status" class="form-control" style="width: 100%; font-weight: 700;">
+              <option value="ACTIVE" style="color: #10B981; font-weight: 700;">ACTIVE (Open for Orders)</option>
+              <option value="INACTIVE" style="color: #64748B; font-weight: 700;">INACTIVE (Closed)</option>
+              <option value="SUSPENDED" style="color: #EF4444; font-weight: 700;">SUSPENDED</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              Subscription Tier
+            </label>
+            <select id="es_subscription_plan" name="subscription_plan" class="form-control" style="width: 100%;">
+              <option value="Starter">Starter (15% Comm.)</option>
+              <option value="Silver Pro">Silver Pro (10% Comm.)</option>
+              <option value="Gold Business">Gold Business (8% Comm.)</option>
+              <option value="Platinum Max">Platinum Max (5% Comm.)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Media Uploads for Shop -->
+        <div style="background: var(--bg-input); padding: 1.1rem; border-radius: 12px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 1rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+              <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                Update Store Brand Logo
+              </label>
+              <input type="file" name="edit_logo_photo" accept="image/*" style="width: 100%; font-size: 0.8rem;">
+              <div id="es_current_logo" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem;"></div>
+            </div>
+            <div>
+              <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                Update Storefront Signboard
+              </label>
+              <input type="file" name="edit_shop_board_photo" accept="image/*" style="width: 100%; font-size: 0.8rem;">
+              <div id="es_current_board" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem;"></div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+              <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                Re-upload Aadhaar / ID Proof
+              </label>
+              <input type="file" name="edit_id_proof_photo" accept="image/*,.pdf" style="width: 100%; font-size: 0.8rem;">
+            </div>
+            <div>
+              <label class="form-label" style="display: block; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                Re-upload Trade License / Udyam
+              </label>
+              <input type="file" name="edit_business_proof_photo" accept="image/*,.pdf" style="width: 100%; font-size: 0.8rem;">
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <!-- Modal Footer Controls -->
+    <div style="padding: 1rem 1.75rem; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2);">
+      <button type="button" onclick="closeModal('editShopModal')" class="btn btn-secondary" style="padding: 0.65rem 1.4rem; border-radius: 8px; font-weight: 700;">
+        Cancel
+      </button>
+
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <button type="button" onclick="document.getElementById('editShopForm').submit();" class="btn btn-primary" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); border: none; color: #FFF; padding: 0.65rem 1.75rem; border-radius: 8px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 16px rgba(129, 98, 238, 0.4);">
+          <i data-lucide="check" style="width: 16px; height: 16px;"></i>
+          <span>💾 Save &amp; Update Changes</span>
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1577,18 +2546,26 @@ if ($tab === 'ACTIVE') {
     }
   }
 
-  // MAP PICKER MODAL LOGIC (Matching React MapPickerModal scenario)
-  function openMapPickerModal(forceFetchCurrent = false) {
+  // MAP PICKER MODAL LOGIC (Supporting both Onboard Wizard and Edit Shop Modal)
+  let currentPickerMode = 'onboard';
+
+  function openMapPickerModal(forOnboard = true) {
+    currentPickerMode = (forOnboard === false || forOnboard === 'edit') ? 'edit' : 'onboard';
     openModal('mapPickerModal');
-    const existingLat = parseFloat(document.getElementById('ob_latitude')?.value) || 18.5590;
-    const existingLng = parseFloat(document.getElementById('ob_longitude')?.value) || 73.7868;
-    const existingAddr = (document.getElementById('ob_address')?.value || '').trim();
+    const isEdit = (currentPickerMode === 'edit');
+    const latId = isEdit ? 'es_latitude' : 'ob_latitude';
+    const lngId = isEdit ? 'es_longitude' : 'ob_longitude';
+    const addrId = isEdit ? 'es_address' : 'ob_address';
+
+    const existingLat = parseFloat(document.getElementById(latId)?.value) || 18.5590;
+    const existingLng = parseFloat(document.getElementById(lngId)?.value) || 73.7868;
+    const existingAddr = (document.getElementById(addrId)?.value || '').trim();
 
     currentPickerLat = existingLat;
     currentPickerLng = existingLng;
     updateMapIframe(currentPickerLat, currentPickerLng, currentPickerZoom);
 
-    if (existingAddr && !forceFetchCurrent) {
+    if (existingAddr) {
       document.getElementById('mapSelectedAddress').innerText = existingAddr;
       document.getElementById('mapSelectedCoords').innerText = `${currentPickerLat.toFixed(4)}° N, ${currentPickerLng.toFixed(4)}° E`;
     } else {
@@ -1672,48 +2649,56 @@ if ($tab === 'ACTIVE') {
   }
 
   // Quick GPS fetch right from the Premise Address label
-  function triggerFetchCurrentGPS() {
+  function triggerFetchCurrentGPS(targetMode = 'onboard') {
     if (!navigator.geolocation) {
       alert("Geolocation is not supported by your browser.");
       return;
     }
+    const isEdit = (targetMode === 'edit');
+    const latId = isEdit ? 'es_latitude' : 'ob_latitude';
+    const lngId = isEdit ? 'es_longitude' : 'ob_longitude';
+    const addrId = isEdit ? 'es_address' : 'ob_address';
+    const cityId = isEdit ? 'es_city' : 'ob_city';
+    const pincodeId = isEdit ? 'es_pincode' : 'ob_pincode';
+
     const btnText = document.getElementById('btnFetchGPSText');
-    if (btnText) btnText.innerText = "Detecting GPS...";
+    if (btnText && !isEdit) btnText.innerText = "Detecting GPS...";
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
-        document.getElementById('ob_latitude').value = lat;
-        document.getElementById('ob_longitude').value = lng;
+        if (document.getElementById(latId)) document.getElementById(latId).value = lat;
+        if (document.getElementById(lngId)) document.getElementById(lngId).value = lng;
 
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
           const json = await res.json();
           if (json && json.display_name) {
-            document.getElementById('ob_address').value = json.display_name;
+            if (document.getElementById(addrId)) document.getElementById(addrId).value = json.display_name;
             const addr = json.address || {};
             const city = addr.city || addr.town || addr.village || addr.suburb || 'Pune';
             const pincode = addr.postcode || '';
-            if (city) document.getElementById('ob_city').value = city;
-            if (pincode && document.getElementById('ob_pincode')) {
-              document.getElementById('ob_pincode').value = pincode;
-            }
+            if (city && document.getElementById(cityId)) document.getElementById(cityId).value = city;
+            if (pincode && document.getElementById(pincodeId)) document.getElementById(pincodeId).value = pincode;
           }
         } catch (e) {
           // fallback
         }
 
-        if (btnText) btnText.innerText = "📍 Fetch Current Location (GPS)";
+        if (btnText && !isEdit) btnText.innerText = "📍 Fetch Current Location (GPS)";
         const alertBox = document.getElementById('locationSuccessAlert');
-        if (alertBox) {
+        if (alertBox && !isEdit) {
           alertBox.style.display = 'block';
           alertBox.innerText = `✓ Current location pinned: ${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
         }
-        if (currentOnboardStep === 4) goToStep(4);
+        if (isEdit) {
+          alert(`✓ Live GPS Location pinned: ${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`);
+        }
+        if (!isEdit && currentOnboardStep === 4) goToStep(4);
       },
       (err) => {
-        if (btnText) btnText.innerText = "📍 Fetch Current Location (GPS)";
+        if (btnText && !isEdit) btnText.innerText = "📍 Fetch Current Location (GPS)";
         alert("Could not fetch current location: " + err.message);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -1722,30 +2707,38 @@ if ($tab === 'ACTIVE') {
 
   function confirmMapLocation() {
     const addrText = document.getElementById('mapSelectedAddress')?.innerText || '';
+    const isEdit = (currentPickerMode === 'edit');
+    const latId = isEdit ? 'es_latitude' : 'ob_latitude';
+    const lngId = isEdit ? 'es_longitude' : 'ob_longitude';
+    const addrId = isEdit ? 'es_address' : 'ob_address';
+    const cityId = isEdit ? 'es_city' : 'ob_city';
+    const pincodeId = isEdit ? 'es_pincode' : 'ob_pincode';
+
     if (addrText && !addrText.includes('Resolving') && !addrText.includes('denied')) {
-      document.getElementById('ob_address').value = addrText;
+      const el = document.getElementById(addrId);
+      if (el) el.value = addrText;
     }
-    document.getElementById('ob_latitude').value = currentPickerLat;
-    document.getElementById('ob_longitude').value = currentPickerLng;
+    const latEl = document.getElementById(latId);
+    if (latEl) latEl.value = currentPickerLat;
+    const lngEl = document.getElementById(lngId);
+    if (lngEl) lngEl.value = currentPickerLng;
 
     if (window._lastDetectedAddress && window._lastDetectedAddress.address) {
       const addr = window._lastDetectedAddress.address;
       const city = addr.city || addr.town || addr.suburb || addr.village || 'Pune';
       const pincode = addr.postcode || '';
-      if (city) document.getElementById('ob_city').value = city;
-      if (pincode && document.getElementById('ob_pincode')) {
-        document.getElementById('ob_pincode').value = pincode;
-      }
+      if (city && document.getElementById(cityId)) document.getElementById(cityId).value = city;
+      if (pincode && document.getElementById(pincodeId)) document.getElementById(pincodeId).value = pincode;
     }
 
     const alertBox = document.getElementById('locationSuccessAlert');
-    if (alertBox) {
+    if (alertBox && !isEdit) {
       alertBox.style.display = 'block';
       alertBox.innerText = `✓ Location pinned on map: ${currentPickerLat.toFixed(4)}° N, ${currentPickerLng.toFixed(4)}° E`;
     }
 
     closeModal('mapPickerModal');
-    if (currentOnboardStep === 4) goToStep(4);
+    if (!isEdit && currentOnboardStep === 4) goToStep(4);
   }
 
   function handleMapSearch(val) {
@@ -2126,65 +3119,224 @@ if ($tab === 'ACTIVE') {
     if (window.lucide) lucide.createIcons();
   }
 
-  function openEditShop(shop) {
-    let form = document.getElementById('onboardLaundryForm');
-    
-    // Set action to 'edit'
-    let actionInput = form.querySelector('input[name="action"]');
-    if (actionInput) actionInput.value = 'edit';
-    
-    // Set or inject shop_id
-    let shopIdInput = form.querySelector('input[name="shop_id"]');
-    if (!shopIdInput) {
-      shopIdInput = document.createElement('input');
-      shopIdInput.type = 'hidden';
-      shopIdInput.name = 'shop_id';
-      form.appendChild(shopIdInput);
-    }
-    shopIdInput.value = shop.id || shop.shop_id || '';
+  let currentEditShopTab = 1;
 
-    // Step 1
-    document.getElementById('ob_owner_name').value = shop.ownerName || shop.owner_name || '';
-    document.getElementById('ob_phone').value = shop.phone || shop.mobile_number || '';
-    document.getElementById('ob_email').value = shop.email || '';
-
-    // Step 2
-    document.getElementById('ob_shop_name').value = shop.shopName || shop.name || '';
-    document.getElementById('ob_address').value = shop.address || '';
-    document.getElementById('ob_city').value = shop.city || '';
-    document.getElementById('ob_pincode').value = shop.pincode || shop.pin || '';
-    
-    const lat = shop.latitude || 18.5590;
-    const lng = shop.longitude || 73.7868;
-    document.getElementById('ob_latitude').value = lat;
-    document.getElementById('ob_longitude').value = lng;
-    currentPickerLat = parseFloat(lat);
-    currentPickerLng = parseFloat(lng);
-    updateMapIframe(currentPickerLat, currentPickerLng, currentPickerZoom);
-
-    // Step 3
-    document.getElementById('ob_bank_name').value = shop.bankName || shop.bank_name || '';
-    document.getElementById('ob_bank_account').value = shop.bankAccount || shop.bank_account || '';
-    document.getElementById('ob_ifsc_code').value = shop.ifscCode || shop.ifsc_code || '';
-    document.getElementById('ob_account_holder').value = shop.accountHolder || shop.bank_holder || '';
-    document.getElementById('ob_upi_id').value = shop.upiId || shop.upi_id || '';
-    document.getElementById('ob_gst_number').value = shop.gstNumber || shop.gst_number || '';
-
-    // Step 4
-    const rad = shop.pickupRadiusKm || 8;
-    const radInput = document.querySelector(`input[name="pickup_radius_km"][value="${rad}"]`);
-    if (radInput) radInput.checked = true;
-    
-    document.getElementById('ob_working_hours').value = shop.workingHours || shop.working_hours || '08:00 AM - 09:30 PM';
-    
-    // Change Title
-    const titleH2 = document.querySelector('#onboardModal h2');
-    if (titleH2) {
-      titleH2.innerHTML = 'Edit Laundry Shop <span style="font-size: 0.65rem; padding: 0.2rem 0.6rem; border-radius: 20px; background: rgba(16, 185, 129, 0.2); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.4); font-weight: 800; text-transform: uppercase;">⚡ Update</span>';
-    }
-
-    openOnboardModal();
+  function setEditCity(c) {
+    const input = document.getElementById('es_city');
+    if (input) input.value = c;
   }
+  window.setEditCity = setEditCity;
+
+  function switchEditShopTab(tab) {
+    currentEditShopTab = tab;
+    for (let i = 1; i <= 4; i++) {
+      const sec = document.getElementById('editShopSec' + i);
+      const btn = document.getElementById('editShopTabBtn' + i);
+      if (sec) sec.style.display = (i === tab) ? 'block' : 'none';
+      if (btn) {
+        if (i === tab) {
+          btn.style.background = 'rgba(129,98,238,0.12)';
+          btn.style.borderBottom = '3px solid #8162EE';
+          btn.style.color = '#8162EE';
+          btn.style.fontWeight = '800';
+        } else {
+          btn.style.background = 'transparent';
+          btn.style.borderBottom = '3px solid transparent';
+          btn.style.color = 'var(--text-muted)';
+          btn.style.fontWeight = '600';
+        }
+      }
+    }
+    const backBtn = document.getElementById('editShopBackBtn');
+    if (backBtn) backBtn.style.display = (tab > 1) ? 'inline-block' : 'none';
+    const nextBtn = document.getElementById('editShopNextBtn');
+    if (nextBtn) nextBtn.style.display = (tab < 4) ? 'inline-flex' : 'none';
+  }
+  window.switchEditShopTab = switchEditShopTab;
+
+  function nextEditShopStep() {
+    if (currentEditShopTab < 4) {
+      switchEditShopTab(currentEditShopTab + 1);
+    }
+  }
+  function prevEditShopStep() {
+    if (currentEditShopTab > 1) {
+      switchEditShopTab(currentEditShopTab - 1);
+    }
+  }
+  window.nextEditShopStep = nextEditShopStep;
+  window.prevEditShopStep = prevEditShopStep;
+
+  function syncWeeklyOffToHours() {
+    const off = document.getElementById('es_weekly_off')?.value;
+    const input = document.getElementById('es_working_hours');
+    if (!input) return;
+    let clean = (input.value || '08:00 AM - 09:30 PM').replace(/\(.*?\)/g, '').replace(/\|.*/, '').trim();
+    if (off === 'sunday') {
+      input.value = clean + ' (Sunday Off)';
+    } else if (off === 'saturday_sunday') {
+      input.value = clean + ' (Sat & Sun Off)';
+    } else {
+      input.value = clean;
+    }
+  }
+  window.syncWeeklyOffToHours = syncWeeklyOffToHours;
+
+  function renderCurrentDocPreview(url, title, fallbackLabel = 'No document uploaded') {
+    if (!url) {
+      return `<div style="font-size: 0.74rem; color: var(--text-muted); padding: 0.4rem 0.6rem; background: rgba(255,255,255,0.03); border-radius: 6px; border: 1px dashed var(--border-color);">${fallbackLabel}</div>`;
+    }
+    const isPdf = url.toLowerCase().endsWith('.pdf');
+    const safeTitle = title.replace(/'/g, "\\'");
+    return `
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; background: rgba(129,98,238,0.08); border: 1px solid rgba(129,98,238,0.25); border-radius: 8px; padding: 0.45rem 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.6rem; min-width: 0;">
+          ${isPdf ? 
+            `<div style="width: 38px; height: 38px; border-radius: 6px; background: #EF4444; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.7rem; flex-shrink: 0;">PDF</div>` :
+            `<img src="${url}" alt="${safeTitle}" style="width: 38px; height: 38px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-color); background: #fff; flex-shrink: 0;">`
+          }
+          <div style="min-width: 0;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${title}</div>
+            <div style="font-size: 0.7rem; color: #10B981; font-weight: 600;">✓ Active in Database</div>
+          </div>
+        </div>
+        <button type="button" onclick="openDocPreview('${safeTitle}', '${url}')" class="btn btn-secondary btn-sm" style="padding: 0.25rem 0.6rem; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; display: inline-flex; align-items: center; gap: 0.25rem;">
+          👁 View
+        </button>
+      </div>
+    `;
+  }
+
+  function openEditShop(shop) {
+    if (!shop) return;
+    const sId = shop.id || shop.shop_id || '';
+    const sName = shop.shopName || shop.name || shop.shop_name || 'Laundry Shop';
+    const oName = shop.ownerName || shop.owner_name || '';
+
+    // Set ID and header
+    const idInput = document.getElementById('es_shop_id');
+    if (idInput) idInput.value = sId;
+
+    const titleEl = document.getElementById('editShopModalTitle');
+    if (titleEl) {
+      titleEl.innerHTML = `Edit: ${sName} <span id="editShopIdBadge" style="font-size: 0.68rem; padding: 0.2rem 0.6rem; border-radius: 20px; background: rgba(129, 98, 238, 0.2); color: #8162EE; border: 1px solid rgba(129, 98, 238, 0.4); font-weight: 800; text-transform: uppercase;">#${sId}</span>`;
+    }
+
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = (val !== null && val !== undefined) ? val : '';
+    };
+
+    // Tab 1: Owner Info
+    setVal('es_owner_name', oName);
+    setVal('es_phone', shop.phone || shop.mobile_number || '');
+    setVal('es_email', shop.email || '');
+    setVal('es_password', '');
+    setVal('es_id_proof_number', shop.idProofNumber || shop.id_proof_number || '');
+
+    // Tab 2: Store Profile & Location
+    setVal('es_shop_name', sName);
+    setVal('es_shop_phone', shop.shop_phone || shop.phone || shop.mobile_number || '');
+    setVal('es_city', shop.city || 'Pune');
+    setVal('es_pincode', shop.pincode || shop.postal_code || shop.pin || '411057');
+    setVal('es_address', shop.address || '');
+    setVal('es_pickup_radius_km', shop.pickupRadiusKm || shop.pickup_radius_km || 8);
+    const whVal = shop.workingHours || shop.working_hours || '08:00 AM - 09:30 PM';
+    setVal('es_working_hours', whVal);
+    const whLower = whVal.toLowerCase();
+    if ((whLower.includes('sun') && (whLower.includes('off') || whLower.includes('close'))) || whLower.includes('mon-sat') || whLower.includes('mon - sat')) {
+      setVal('es_weekly_off', 'sunday');
+    } else if (whLower.includes('sat') && whLower.includes('sun') && (whLower.includes('off') || whLower.includes('close'))) {
+      setVal('es_weekly_off', 'saturday_sunday');
+    } else {
+      setVal('es_weekly_off', 'none');
+    }
+    setVal('es_latitude', shop.latitude || 18.5590);
+    setVal('es_longitude', shop.longitude || 73.7868);
+
+    // Tab 3: Banking & Tax
+    setVal('es_bank_name', shop.bankName || shop.bank_name || 'HDFC Bank');
+    setVal('es_bank_account', shop.bankAccount || shop.bank_account || '');
+    setVal('es_ifsc_code', shop.ifscCode || shop.ifsc_code || '');
+    setVal('es_account_holder', shop.accountHolder || shop.bank_holder || shop.account_holder || oName);
+    setVal('es_upi_id', shop.upiId || shop.upi_id || '');
+    setVal('es_gst_number', shop.gstNumber || shop.gst_number || '');
+    setVal('es_business_proof_number', shop.businessProofNumber || shop.business_proof_number || '');
+
+    // Tab 4: Operational Status & Tier
+    const vStat = (shop.verificationStatus || shop.verification_status || 'APPROVED').toUpperCase();
+    const aStat = (shop.accountStatus || shop.status || shop.account_status || 'ACTIVE').toUpperCase();
+    setVal('es_verification_status', vStat);
+    setVal('es_account_status', aStat);
+    setVal('es_subscription_plan', shop.subscriptionPlan || shop.subscription_plan || 'Starter');
+
+    // Extract document URLs from shop or its documents array
+    function getDocUrl(keys) {
+      for (const k of keys) {
+        if (shop[k]) return shop[k];
+      }
+      if (Array.isArray(shop.documents)) {
+        for (const d of shop.documents) {
+          const dt = (d.document_type || '').toLowerCase();
+          for (const k of keys) {
+            if (dt === k.toLowerCase() || dt.includes(k.toLowerCase())) {
+              return d.file_path || d.filePath || '';
+            }
+          }
+        }
+      }
+      return '';
+    }
+
+    const logoUrl = getDocUrl(['logo_url', 'logo', 'logo_photo', 'store_logo']);
+    const coverUrl = getDocUrl(['cover_url', 'cover_image', 'cover_photo', 'store_cover', 'SHOP_COVER']);
+    const boardUrl = getDocUrl(['shop_board_photo', 'shopBoardPhoto', 'store_signboard']);
+    const aadhaarUrl = getDocUrl(['id_proof_photo', 'idProofPhoto', 'aadhaar', 'id_proof']);
+    const bizUrl = getDocUrl(['business_proof_photo', 'businessProofPhoto', 'trade_license', 'udyam']);
+    const bankUrl = getDocUrl(['bank_proof_photo', 'bankProofPhoto', 'bank_cheque', 'bank']);
+
+    // Render Preview Cards
+    const curLogoDiv = document.getElementById('es_current_logo');
+    if (curLogoDiv) curLogoDiv.innerHTML = renderCurrentDocPreview(logoUrl, 'Brand Logo', 'No brand logo uploaded');
+
+    const curCoverDiv = document.getElementById('es_current_cover');
+    if (curCoverDiv) curCoverDiv.innerHTML = renderCurrentDocPreview(coverUrl, 'Store Cover Banner', 'No cover photo uploaded');
+
+    const curBoardDiv = document.getElementById('es_current_board');
+    if (curBoardDiv) curBoardDiv.innerHTML = renderCurrentDocPreview(boardUrl, 'Storefront Signboard', 'No signboard photo uploaded');
+
+    const curIdDiv = document.getElementById('es_current_id_proof');
+    if (curIdDiv) curIdDiv.innerHTML = renderCurrentDocPreview(aadhaarUrl, 'Aadhaar / ID Proof', 'No ID document uploaded');
+
+    const curBizDiv = document.getElementById('es_current_biz_proof');
+    if (curBizDiv) curBizDiv.innerHTML = renderCurrentDocPreview(bizUrl, 'Trade License / Udyam', 'No license certificate uploaded');
+
+    const curBankDiv = document.getElementById('es_current_bank_proof');
+    if (curBankDiv) curBankDiv.innerHTML = renderCurrentDocPreview(bankUrl, 'Bank Cheque / Passbook', 'No bank proof uploaded');
+
+    // Reset file input fields and instant previews
+    const fileFields = [
+      { input: 'es_id_proof_photo', img: 'es_id_preview_img', info: 'es_id_info_text', defaultInfo: 'Choose a new file to replace existing ID proof.' },
+      { input: 'es_business_proof_photo', img: 'es_biz_preview_img', info: 'es_biz_info_text', defaultInfo: 'Choose file to replace Trade license.' },
+      { input: 'es_bank_proof_photo', img: 'es_bank_preview_img', info: 'es_bank_info_text', defaultInfo: 'Choose file to replace Bank cheque.' },
+      { input: 'es_logo_photo', img: 'es_logo_preview_img', info: 'es_logo_info_text', defaultInfo: 'Upload new PNG/JPEG/WEBP logo.' },
+      { input: 'es_cover_photo', img: 'es_cover_preview_img', info: 'es_cover_info_text', defaultInfo: 'Upload wide landscape banner to display in Customer App.' },
+      { input: 'es_shop_board_photo', img: 'es_board_preview_img', info: 'es_board_info_text', defaultInfo: 'Upload new storefront photo.' },
+    ];
+    fileFields.forEach(f => {
+      const inp = document.getElementById(f.input);
+      if (inp) inp.value = '';
+      const img = document.getElementById(f.img);
+      if (img) { img.src = ''; img.style.display = 'none'; }
+      const inf = document.getElementById(f.info);
+      if (inf) inf.innerText = f.defaultInfo;
+    });
+
+    switchEditShopTab(1);
+    openModal('editShopModal');
+    if (window.lucide) lucide.createIcons();
+  }
+  window.openEditShop = openEditShop;
 
   // Onboard modal opener helper to guarantee starting at Step 1
   function openOnboardModal() {

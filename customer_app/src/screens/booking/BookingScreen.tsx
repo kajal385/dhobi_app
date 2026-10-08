@@ -21,7 +21,7 @@ import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
 import { addOrder } from '../../store/orderSlice';
 import { orderService } from '../../services/orderService';
 import { addressService } from '../../services/addressService';
-import { DEFAULT_SHOPS } from '../../services/shopService';
+import { DEFAULT_SHOPS, shopService } from '../../services/shopService';
 import { Address } from '../../types';
 import { useFocusEffect } from '@react-navigation/native';
 import Toast from 'react-native-toast-message';
@@ -77,6 +77,84 @@ const TIME_SLOTS = [
   '5:00 PM - 7:00 PM',
   '7:00 PM - 9:00 PM',
 ];
+
+// Helper: Parse slot start time for a given date
+const parseSlotStartTime = (slot: string, date: Date): Date => {
+  const [startPart] = (slot || '').split('-');
+  const timeStr = (startPart || '').trim();
+  const match = timeStr.match(/(\d+)(?::(\d+))?\s*(AM|PM)/i);
+  const result = new Date(date);
+  if (!match) return result;
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2] ? parseInt(match[2], 10) : 0;
+  const meridiem = (match[3] || 'AM').toUpperCase();
+  if (meridiem === 'PM' && hours < 12) hours += 12;
+  if (meridiem === 'AM' && hours === 12) hours = 0;
+  result.setHours(hours, minutes, 0, 0);
+  return result;
+};
+
+// Helper: Check if two dates are same calendar day
+const isSameCalendarDay = (d1: Date, d2: Date): boolean => {
+  if (!d1 || !d2) return false;
+  return d1.getFullYear() === d2.getFullYear() &&
+         d1.getMonth() === d2.getMonth() &&
+         d1.getDate() === d2.getDate();
+};
+
+// Helper: Check if slot has already passed for the selected date
+const isSlotPast = (slot: string, selectedDate: Date): boolean => {
+  if (!slot || !selectedDate) return false;
+  const now = new Date();
+  const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const selectedOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).getTime();
+
+  if (selectedOnly < todayOnly) {
+    return true; // Any past date slot is past
+  }
+  if (selectedOnly > todayOnly) {
+    return false; // Future dates are never past
+  }
+  // For today, check if current time is past slot start time
+  const slotStart = parseSlotStartTime(slot, selectedDate);
+  return now.getTime() >= slotStart.getTime();
+};
+
+// Helper: Parse shop's closed days from working_hours (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+const getClosedDaysFromShop = (shopObj: any): number[] => {
+  if (!shopObj) return [];
+  if (Array.isArray(shopObj.closed_days)) {
+    const dayMap: Record<string, number> = {
+      sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2,
+      wednesday: 3, wed: 3, thursday: 4, thu: 4, friday: 5, fri: 5,
+      saturday: 6, sat: 6
+    };
+    return shopObj.closed_days
+      .map((d: any) => typeof d === 'number' ? d : dayMap[String(d).toLowerCase()])
+      .filter((n: any) => typeof n === 'number' && !isNaN(n));
+  }
+  const wh = (shopObj.working_hours || shopObj.workingHours || '').toLowerCase();
+  const closed = new Set<number>();
+  if ((wh.includes('sun') && (wh.includes('off') || wh.includes('close'))) || wh.includes('mon-sat') || wh.includes('mon - sat')) {
+    closed.add(0); // Sunday
+  }
+  if (wh.includes('sat') && (wh.includes('off') || wh.includes('close')) && !wh.includes('mon-sat') && !wh.includes('mon - sat')) {
+    closed.add(6); // Saturday
+  }
+  return Array.from(closed);
+};
+
+// Helper: Find next nearest date that is open
+const findNextOpenDate = (startDate: Date, closedDayNumbers: number[]): Date => {
+  let curr = new Date(startDate);
+  for (let i = 0; i < 14; i++) {
+    if (!closedDayNumbers.includes(curr.getDay())) {
+      return curr;
+    }
+    curr.setDate(curr.getDate() + 1);
+  }
+  return startDate;
+};
 
 const PAYMENT_METHODS = [
   { key: 'google_pay', label: 'Google Pay', image: require('../../../assets/myimages/pay_gpay.png'), subText: 'example@okicici' },
@@ -156,7 +234,7 @@ const BookingScreenInner = ({ navigation, route }: any) => {
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
   const [pickupDate, setPickupDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<string>(TIME_SLOTS[1]); // 11 AM - 1 PM
+  const [selectedSlot, setSelectedSlot] = useState<string>(TIME_SLOTS[0]);
 
   // Step 5: Payment method selection
   const [paymentMethod, setPaymentMethod] = useState<string>('google_pay');
@@ -183,9 +261,68 @@ const BookingScreenInner = ({ navigation, route }: any) => {
   // ── Shop Info (component-level so step 1, 3, 6 can access them) ─────────────────
   const targetShopId = Number(route.params?.shopId || route.params?.shop_id || (route.params?.shop?.id) || 44);
   const targetShop = route.params?.shop || route.params?.reorderShop || DEFAULT_SHOPS.find(s => s.id === targetShopId) || DEFAULT_SHOPS[0];
-  const targetShopName = route.params?.shopName || route.params?.shop_name || (targetShop as any)?.name || 'Star Wash Ultra Premium';
-  const targetOwnerName = route.params?.ownerName || route.params?.owner_name || (targetShop as any)?.owner_name || (targetShop as any)?.ownerName || 'Ashish Bhosale';
-  const targetShopAddress = route.params?.shopLocation || route.params?.shop_location || route.params?.shop_address || route.params?.location || (targetShop as any)?.address || (targetShop as any)?.location || 'Tathawade,pune';
+  const [shopDetails, setShopDetails] = useState<any>(targetShop);
+  const targetShopName = shopDetails?.name || shopDetails?.shop_name || route.params?.shopName || (targetShop as any)?.name || 'Star Wash Ultra Premium';
+  const targetOwnerName = shopDetails?.owner_name || shopDetails?.ownerName || route.params?.ownerName || (targetShop as any)?.owner_name || 'Ashish Bhosale';
+  const targetShopAddress = shopDetails?.address || shopDetails?.location || route.params?.shopLocation || (targetShop as any)?.address || 'Tathawade,pune';
+
+  // Closed Days parsing (e.g. [0] for Sunday Off)
+  const closedDays = React.useMemo(() => getClosedDaysFromShop(shopDetails), [shopDetails]);
+
+  // Generate upcoming next 10 days for horizontal strip
+  const upcomingDays = React.useMemo(() => {
+    const days = [];
+    const now = new Date();
+    for (let i = 0; i < 10; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      const isClosed = closedDays.includes(d.getDay());
+      days.push({
+        date: d,
+        isToday: i === 0,
+        isClosed,
+        dayName: i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short' }),
+        dayNumber: d.getDate(),
+        monthName: d.toLocaleDateString('en-US', { month: 'short' }),
+      });
+    }
+    return days;
+  }, [closedDays]);
+
+  // Fetch live shop profile to sync working hours and weekly off days
+  React.useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const profile = await shopService.getShopProfile(targetShopId);
+        if (isMounted && profile?.shop) {
+          setShopDetails(profile.shop);
+        }
+      } catch (err) {
+        // Fallback to targetShop
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [targetShopId]);
+
+  // Auto-advance pickup date if current date is a closed day
+  React.useEffect(() => {
+    if (closedDays.includes(pickupDate.getDay())) {
+      const nextOpen = findNextOpenDate(pickupDate, closedDays);
+      setPickupDate(nextOpen);
+    }
+  }, [closedDays]);
+
+  // Auto-select first upcoming enabled slot when pickupDate changes
+  React.useEffect(() => {
+    if (isSlotPast(selectedSlot, pickupDate)) {
+      const firstUpcoming = TIME_SLOTS.find(s => !isSlotPast(s, pickupDate));
+      if (firstUpcoming) {
+        setSelectedSlot(firstUpcoming);
+      } else {
+        setSelectedSlot('');
+      }
+    }
+  }, [pickupDate]);
 
   React.useEffect(() => {
     loadAddresses();
@@ -841,18 +978,95 @@ const BookingScreenInner = ({ navigation, route }: any) => {
             </View>
           </TouchableOpacity>
 
-          {/* Pickup Date */}
-          <Text style={[styles.sectionHeading, { color: colors.text }]}>Pickups Date</Text>
+          {/* Pickup Date Header & Schedule Status */}
+          <View style={styles.dateHeaderRow}>
+            <Text style={[styles.sectionHeading, { color: colors.text, marginTop: 0, marginBottom: 0 }]}>Pickups Date</Text>
+            {closedDays.includes(0) && (
+              <View style={styles.offPill}>
+                <Text style={styles.offPillText}>Sundays Closed</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Schedule Info Notice */}
+          {closedDays.length > 0 && (
+            <View style={[styles.shopScheduleNotice, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2', borderColor: isDark ? '#7F1D1D' : '#FCA5A5' }]}>
+              <Text style={{ fontSize: 14 }}>🗓️</Text>
+              <Text style={[styles.shopScheduleNoticeText, { color: isDark ? '#FCA5A5' : '#B91C1C' }]}>
+                {targetShopName} is closed on {closedDays.map(d => d === 0 ? 'Sundays' : d === 6 ? 'Saturdays' : 'Mondays').join(', ')}. Off dates are disabled below.
+              </Text>
+            </View>
+          )}
+
+          {/* Horizontal 10-Day Selector Strip */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.daysScrollContainer}>
+            {upcomingDays.map((item, idx) => {
+              const isSelected = isSameCalendarDay(item.date, pickupDate);
+              return (
+                <TouchableOpacity
+                  key={idx}
+                  disabled={item.isClosed}
+                  onPress={() => setPickupDate(item.date)}
+                  activeOpacity={0.75}
+                  style={[
+                    styles.dayChip,
+                    {
+                      backgroundColor: item.isClosed
+                        ? (isDark ? '#1C1B28' : '#F3F4F6')
+                        : isSelected
+                          ? '#5B52E8'
+                          : colors.card,
+                      borderColor: item.isClosed
+                        ? (isDark ? '#2E2D40' : '#E5E7EB')
+                        : isSelected
+                          ? '#5B52E8'
+                          : colors.border,
+                      opacity: item.isClosed ? 0.45 : 1,
+                    }
+                  ]}
+                >
+                  <Text style={[
+                    styles.dayChipDayName,
+                    { color: item.isClosed ? (isDark ? '#6B7280' : '#9CA3AF') : isSelected ? '#FFFFFF' : colors.textSecondary }
+                  ]}>
+                    {item.dayName}
+                  </Text>
+                  <Text style={[
+                    styles.dayChipDayNum,
+                    { color: item.isClosed ? (isDark ? '#6B7280' : '#9CA3AF') : isSelected ? '#FFFFFF' : colors.text }
+                  ]}>
+                    {item.dayNumber}
+                  </Text>
+                  <Text style={[
+                    styles.dayChipMonth,
+                    { color: item.isClosed ? (isDark ? '#6B7280' : '#9CA3AF') : isSelected ? '#E0E7FF' : colors.textLight }
+                  ]}>
+                    {item.monthName}
+                  </Text>
+                  {item.isClosed ? (
+                    <View style={styles.chipClosedBadge}>
+                      <Text style={styles.chipClosedBadgeText}>OFF</Text>
+                    </View>
+                  ) : isSelected ? (
+                    <View style={styles.chipSelectedDot} />
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Selected Date Summary & Calendar Modal Button */}
           <TouchableOpacity
-            style={[styles.dateSelectorBtn, { backgroundColor: colors.card }]}
+            style={[styles.dateSelectorBtn, { backgroundColor: colors.card, marginTop: SPACING.xs }]}
             onPress={() => setShowDatePicker(true)}
           >
             <Text style={{ fontSize: 20, marginRight: 8 }}>📅</Text>
             <Text style={[styles.dateSelectorText, { color: colors.text }]}>
-              {pickupDate.toDateString() === new Date().toDateString() ? 'Today, ' : ''}
-              {pickupDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+              {isSameCalendarDay(pickupDate, new Date()) ? 'Today, ' : ''}
+              {pickupDate.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
             </Text>
-            <Text style={{ fontSize: 14, color: colors.textSecondary, marginLeft: 8 }}>▼</Text>
+            <Text style={{ fontSize: 12, color: '#5B52E8', fontWeight: '700', marginRight: 4 }}>Change Date</Text>
+            <Text style={{ fontSize: 14, color: colors.textSecondary }}>▼</Text>
           </TouchableOpacity>
 
           {showDatePicker && (
@@ -864,36 +1078,84 @@ const BookingScreenInner = ({ navigation, route }: any) => {
               onChange={(event, date) => {
                 setShowDatePicker(false);
                 if (date) {
+                  if (closedDays.includes(date.getDay())) {
+                    const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+                    Toast.show({
+                      type: 'error',
+                      text1: 'Laundry Closed',
+                      text2: `${targetShopName} is closed on ${dayName}s. Please choose an open day.`,
+                    });
+                    return;
+                  }
                   setPickupDate(date);
                 }
               }}
             />
           )}
 
-          {/* Pickup Time Slots */}
-          <Text style={[styles.sectionHeading, { color: colors.text }]}>Pickups Time Slot</Text>
+          {/* Pickup Time Slots Header */}
+          <View style={styles.slotsHeaderRow}>
+            <Text style={[styles.sectionHeading, { color: colors.text, marginTop: 0, marginBottom: 0 }]}>Pickups Time Slot</Text>
+            {isSameCalendarDay(pickupDate, new Date()) && (
+              <Text style={{ fontSize: 12, color: colors.textSecondary }}>Past slots disabled for today</Text>
+            )}
+          </View>
+
+          {/* Notice if all slots for today have ended */}
+          {isSameCalendarDay(pickupDate, new Date()) && TIME_SLOTS.every(s => isSlotPast(s, pickupDate)) && (
+            <View style={[styles.shopScheduleNotice, { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.12)' : '#FFFBEB', borderColor: isDark ? '#92400E' : '#FCD34D' }]}>
+              <Text style={{ fontSize: 14 }}>⏰</Text>
+              <Text style={[styles.shopScheduleNoticeText, { color: isDark ? '#FCD34D' : '#B45309' }]}>
+                All pickup slots for today have ended. Please select tomorrow's date above for pickup.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.slotsContainer}>
             {TIME_SLOTS.map(slot => {
-              const isSelected = selectedSlot === slot;
+              const isPast = isSlotPast(slot, pickupDate);
+              const isSelected = selectedSlot === slot && !isPast;
               return (
                 <TouchableOpacity
                   key={slot}
+                  disabled={isPast}
                   onPress={() => setSelectedSlot(slot)}
+                  activeOpacity={0.8}
                   style={[
                     styles.slotSelectBtn,
                     {
-                      backgroundColor: isSelected ? '#F0EEFF' : colors.card,
-                      borderColor: isSelected ? '#5B52E8' : colors.border,
-                      borderWidth: isSelected ? 1.5 : 1,
+                      backgroundColor: isPast
+                        ? (isDark ? '#1C1B29' : '#F1F1F5')
+                        : isSelected
+                          ? '#F0EEFF'
+                          : colors.card,
+                      borderColor: isPast
+                        ? (isDark ? '#2E2D40' : '#E2E2E8')
+                        : isSelected
+                          ? '#5B52E8'
+                          : colors.border,
+                      borderWidth: isSelected ? 1.8 : 1,
+                      opacity: isPast ? 0.45 : 1,
                     }
                   ]}
                 >
                   <Text style={[
                     styles.slotSelectText,
-                    { color: isSelected ? '#321D8C' : colors.text, fontWeight: isSelected ? '700' : '500' }
+                    {
+                      color: isPast
+                        ? (isDark ? '#7E7C94' : '#9E9E9E')
+                        : isSelected
+                          ? '#321D8C'
+                          : colors.text,
+                      fontWeight: isSelected ? '700' : '500',
+                      textDecorationLine: isPast ? 'line-through' : 'none',
+                    }
                   ]}>
                     {slot}
                   </Text>
+                  {isPast && (
+                    <Text style={styles.slotEndedBadgeText}>✕ Ended</Text>
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -901,7 +1163,38 @@ const BookingScreenInner = ({ navigation, route }: any) => {
         </ScrollView>
 
         <View style={styles.bottomCtaContainer}>
-          <TouchableOpacity activeOpacity={0.85} onPress={() => setStep(5)} style={styles.gradientBtnWrapper}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => {
+              if (!selectedAddress) {
+                Toast.show({
+                  type: 'error',
+                  text1: 'Address Required',
+                  text2: 'Please select a pickup address to continue.',
+                });
+                return;
+              }
+              if (closedDays.includes(pickupDate.getDay())) {
+                const dayName = pickupDate.toLocaleDateString('en-US', { weekday: 'long' });
+                Toast.show({
+                  type: 'error',
+                  text1: 'Laundry Closed',
+                  text2: `${targetShopName} is closed on ${dayName}s. Please select an open date.`,
+                });
+                return;
+              }
+              if (!selectedSlot || isSlotPast(selectedSlot, pickupDate)) {
+                Toast.show({
+                  type: 'error',
+                  text1: 'Time Slot Required',
+                  text2: 'Please select an available upcoming pickup time slot.',
+                });
+                return;
+              }
+              setStep(5);
+            }}
+            style={styles.gradientBtnWrapper}
+          >
             <LinearGradient
               colors={['#6C5CE7', '#FF7675']}
               start={{ x: 0, y: 0 }}
@@ -1638,6 +1931,102 @@ const styles = StyleSheet.create({
   },
 
   // STEP 4 styles (Pickup details)
+  dateHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: SPACING.md,
+    marginBottom: SPACING.xs,
+  },
+  slotsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: SPACING.md,
+    marginBottom: SPACING.xs,
+  },
+  offPill: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  offPillText: {
+    color: '#DC2626',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  shopScheduleNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
+  shopScheduleNoticeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 16,
+  },
+  daysScrollContainer: {
+    gap: 8,
+    paddingVertical: 4,
+    marginBottom: SPACING.sm,
+  },
+  dayChip: {
+    width: 64,
+    height: 78,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  dayChipDayName: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  dayChipDayNum: {
+    fontSize: 17,
+    fontWeight: '800',
+    marginVertical: 1,
+  },
+  dayChipMonth: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  chipClosedBadge: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    marginTop: 2,
+  },
+  chipClosedBadgeText: {
+    color: '#DC2626',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  chipSelectedDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#FFFFFF',
+    marginTop: 2,
+  },
+  slotEndedBadgeText: {
+    color: '#EF4444',
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+  },
   addressReviewBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1663,12 +2052,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 16,
     padding: SPACING.lg,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
   },
   dateSelectorText: {
     flex: 1,
     marginLeft: SPACING.md,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   slotsContainer: {

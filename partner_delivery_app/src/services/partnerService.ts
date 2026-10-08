@@ -247,7 +247,14 @@ export const partnerService = {
   updateOwnerProfile: async (shopData: any) => {
     try {
       const shopId = shopData.id || shopData.shop_id;
-      // Use the same API as Web Panel
+      try {
+        const ownerRes = await apiClient.post('/owner/profile', shopData);
+        if (ownerRes.data?.success) {
+          return ownerRes.data;
+        }
+      } catch (innerErr) {
+        // Fallback to admin route
+      }
       const res = await apiClient.put(`/admin/laundries/${shopId}`, shopData);
       return res.data;
     } catch (err: any) {
@@ -262,13 +269,13 @@ export const partnerService = {
   getOwnerDashboard: async (shopId?: number): Promise<OwnerDashboardStats> => {
     try {
       const res = await apiClient.get('/owner/dashboard', { params: { shop_id: shopId } });
-      return res.data.data;
+      return res.data?.data || res.data;
     } catch {
       return {
-        totalOrders: 142,
-        pendingOrders: 8,
-        completedOrders: 134,
-        totalEarnings: 45200,
+        totalOrders: 0,
+        pendingOrders: 0,
+        completedOrders: 0,
+        totalEarnings: 0,
       };
     }
   },
@@ -291,12 +298,26 @@ export const partnerService = {
     }
   },
 
-  updateOrderStatus: async (orderId: number, status: string, notes?: string, cancellation_reason?: string) => {
+  updateOrderStatus: async (orderId: number | string, status: string, notes?: string, cancellation_reason?: string) => {
     try {
-      const res = await apiClient.put(`/owner/orders/${orderId}/status`, { status, notes, cancellation_reason });
+      const res = await apiClient.post(`/owner/orders/${orderId}/status`, { status, notes, cancellation_reason });
       return res.data;
     } catch (err: any) {
-      return { success: true, message: 'Status updated locally' };
+      if (err?.response?.data) return err.response.data;
+      return { success: false, message: err?.message || 'Failed to update order status' };
+    }
+  },
+
+  assignDeliveryBoy: async (orderId: number | string, deliveryBoyId: number | string, assignmentType = 'delivery') => {
+    try {
+      const res = await apiClient.post(`/owner/orders/${orderId}/assign-delivery`, {
+        delivery_boy_id: deliveryBoyId,
+        assignment_type: assignmentType,
+      });
+      return res.data;
+    } catch (err: any) {
+      if (err?.response?.data) return err.response.data;
+      return { success: false, message: err?.message || 'Failed to assign delivery boy' };
     }
   },
 
@@ -342,13 +363,11 @@ export const partnerService = {
     try {
       const res = await apiClient.post('/delivery/login', { phone, otp });
       return res.data;
-    } catch {
+    } catch (err: any) {
+      if (err?.response?.data) return err.response.data;
       return {
-        success: true,
-        data: {
-          token: 'mock-delivery-token',
-          driver: { id: 101, name: 'Rajesh Kumar', phone, vehicle_type: 'Bike' },
-        },
+        success: false,
+        message: 'Invalid credentials or network connection error',
       };
     }
   },
@@ -357,28 +376,9 @@ export const partnerService = {
     try {
       const params = driverId ? { driver_id: driverId } : {};
       const res = await apiClient.get('/delivery/assignments', { params });
-      return res.data.data;
+      return res.data?.data || res.data || [];
     } catch {
-      return [
-        {
-          id: 1,
-          order_id: 1001,
-          assignment_type: 'pickup',
-          status: 'assigned',
-          customer_name: 'Rahul Sharma',
-          customer_phone: '+91 9876543210',
-          pickup_address: 'Flat 402, Sunshine Apartments, Baner, Pune',
-        },
-        {
-          id: 2,
-          order_id: 1002,
-          assignment_type: 'delivery',
-          status: 'en_route',
-          customer_name: 'Priya Patel',
-          customer_phone: '+91 9823012345',
-          delivery_address: 'Building B, IT Park, Hinjewadi, Pune',
-        },
-      ];
+      return [];
     }
   },
 

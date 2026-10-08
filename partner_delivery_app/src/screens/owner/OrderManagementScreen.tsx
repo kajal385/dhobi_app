@@ -392,7 +392,7 @@ export const OrderManagementScreen = () => {
 
   const handleAssignDeliveryBoy = async (boy: any) => {
     if (!selectedOrder) return;
-    const orderId = selectedOrder.numericId;
+    const orderId = selectedOrder.numericId || (typeof selectedOrder.id === 'string' ? selectedOrder.id.replace(/\D/g, '') : selectedOrder.id) || selectedOrder.id;
     const deliveryBoyId = boy.id;
     const boyName = boy.name;
 

@@ -18,8 +18,58 @@ import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
 import Toast from 'react-native-toast-message';
 import { reelService, Reel } from '../../services/reelService';
 import { BASE_URL, resolveImageUrl } from '../../constants/config';
-
 const { width, height } = Dimensions.get('window');
+
+const LOCAL_VIDEOS: Record<string, any> = {
+  'vid_44_1791365128.mp4': require('../../../assets/myvideos/vid_44_1791365128.mp4'),
+  'vid_30_1791363480.mp4': require('../../../assets/myvideos/vid_30_1791363480.mp4'),
+  'vid_30_1791358743.mp4': require('../../../assets/myvideos/vid_30_1791358743.mp4'),
+  'vid_30_1791363091.mp4': require('../../../assets/myvideos/vid_30_1791363091.mp4'),
+};
+
+const ReelVideoPlayer = ({
+  videoUrl,
+  posterUrl,
+  isPaused,
+}: {
+  videoUrl: string;
+  posterUrl: string;
+  isPaused: boolean;
+}) => {
+  const filename = videoUrl.split('/').pop()?.split('?')[0] || '';
+  const resolvedVideoUri = resolveImageUrl(videoUrl);
+  const resolvedPosterUri = resolveImageUrl(posterUrl);
+  const initialSource = LOCAL_VIDEOS[filename] || (resolvedVideoUri ? { uri: resolvedVideoUri } : LOCAL_VIDEOS['vid_44_1791365128.mp4']);
+  const [source, setSource] = useState<any>(initialSource);
+
+  useEffect(() => {
+    const fName = videoUrl.split('/').pop()?.split('?')[0] || '';
+    const uri = resolveImageUrl(videoUrl);
+    setSource(LOCAL_VIDEOS[fName] || (uri ? { uri } : LOCAL_VIDEOS['vid_44_1791365128.mp4']));
+  }, [videoUrl]);
+
+  return (
+    <Video
+      source={source}
+      poster={resolvedPosterUri || undefined}
+      posterResizeMode="cover"
+      style={StyleSheet.absoluteFill}
+      resizeMode="cover"
+      repeat={true}
+      paused={isPaused}
+      muted={false}
+      playInBackground={false}
+      playWhenInactive={false}
+      ignoreSilentSwitch="ignore"
+      onError={() => {
+        // If remote URL fails, fallback to bundled video
+        if (source?.uri) {
+          setSource(LOCAL_VIDEOS['vid_44_1791365128.mp4']);
+        }
+      }}
+    />
+  );
+};
 
 export const ReelsScreen = ({ navigation }: any) => {
   const isFocused = useIsFocused();
@@ -112,19 +162,10 @@ export const ReelsScreen = ({ navigation }: any) => {
     return (
       <View style={[styles.reelContainer, { backgroundColor: '#000' }]}>
         {hasVideo ? (
-          <Video
-            source={{ uri: fullVideoUrl }}
-            poster={resolvedPoster}
-            posterResizeMode="cover"
-            style={StyleSheet.absoluteFill}
-            resizeMode="cover"
-            repeat={true}
-            paused={!isCurrent}
-            muted={false}
-            playInBackground={false}
-            playWhenInactive={false}
-            ignoreSilentSwitch="ignore"
-            onError={(e: any) => console.log('Video error:', e)}
+          <ReelVideoPlayer
+            videoUrl={fullVideoUrl}
+            posterUrl={resolvedPoster}
+            isPaused={!isCurrent}
           />
         ) : (
           <Image

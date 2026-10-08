@@ -95,33 +95,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Fetch Latest State
+$db = getDb();
+
 $catRes = apiGet('/categories', $shopIdQuery);
-if ($catRes['success'] && !empty($catRes['data'])) {
+if (!empty($catRes['data'])) {
     $categories = $catRes['data'];
+} elseif ($db) {
+    try {
+        $st = $db->prepare("SELECT * FROM categories" . ($isOwner && $shopId ? " WHERE shop_id = :sid OR shop_id IS NULL" : "") . " ORDER BY name ASC");
+        if ($isOwner && $shopId) $st->execute([':sid' => $shopId]);
+        else $st->execute();
+        $categories = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (\Throwable $t) {}
 }
 
-if ($srvRes['success'] && !empty($srvRes['data'])) {
+$srvRes = apiGet('/admin/shop-services', $shopIdQuery);
+if (!empty($srvRes['data'])) {
     $services = $srvRes['data'];
+} elseif ($db) {
+    try {
+        $st = $db->prepare("SELECT s.*, COALESCE(c.name, 'General') as category_name, COALESCE(ls.name, 'Laundry Shop') as shopName 
+                            FROM shop_services s 
+                            LEFT JOIN categories c ON s.category_id = c.id 
+                            LEFT JOIN laundry_shops ls ON s.shop_id = ls.id " . 
+                            ($isOwner && $shopId ? " WHERE s.shop_id = :sid" : "") . 
+                            " ORDER BY s.id DESC");
+        if ($isOwner && $shopId) $st->execute([':sid' => $shopId]);
+        else $st->execute();
+        $services = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (\Throwable $t) {}
 }
 
-if (empty($services)) {
-    $allDefaultServices = [
-        ['id'=>'1','shop_id'=>'30','shopName'=>'My Laundry Shop','name'=>'Wash & Fold','price'=>80,'unit'=>'kg','category'=>'Regular Wash','status'=>'ACTIVE'],
-        ['id'=>'2','shop_id'=>'30','shopName'=>'My Laundry Shop','name'=>'Dry Cleaning','price'=>199,'unit'=>'piece','category'=>'Dry Clean','status'=>'ACTIVE'],
-        ['id'=>'3','shop_id'=>'30','shopName'=>'My Laundry Shop','name'=>'Steam Press','price'=>40,'unit'=>'piece','category'=>'Ironing','status'=>'ACTIVE'],
-        ['id'=>'4','shop_id'=>'44','shopName'=>'Star Wash Ultra Premium','name'=>'Express Premium Silk Care','price'=>299,'unit'=>'piece','category'=>'Specialty','status'=>'ACTIVE'],
-        ['id'=>'5','shop_id'=>'44','shopName'=>'Star Wash Ultra Premium','name'=>'Designer Suit Dry Clean','price'=>450,'unit'=>'suit','category'=>'Dry Clean','status'=>'ACTIVE'],
-        ['id'=>'6','shop_id'=>'44','shopName'=>'Star Wash Ultra Premium','name'=>'Ozone Anti-Bacterial Wash','price'=>120,'unit'=>'kg','category'=>'Regular Wash','status'=>'ACTIVE']
-    ];
-    if ($isOwner) {
-        $services = array_values(array_filter($allDefaultServices, fn($s) => strval($s['shop_id'] ?? '') === strval($shopId) || empty($s['shop_id'])));
-    } else {
-        $services = $allDefaultServices;
-    }
-} else {
-    if ($isOwner) {
-        $services = array_values(array_filter($services, fn($s) => strval($s['shop_id'] ?? '') === strval($shopId) || empty($s['shop_id'])));
-    }
+if ($isOwner && $shopId && !empty($services)) {
+    $services = array_values(array_filter($services, fn($s) => strval($s['shop_id'] ?? '') === strval($shopId) || empty($s['shop_id'])));
 }
 ?>
 

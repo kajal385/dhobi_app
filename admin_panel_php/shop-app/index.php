@@ -117,7 +117,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $bannerTag = htmlspecialchars(trim($_POST['banner_tag'] ?? 'ACTIVE'));
                 $bannerTagColor = htmlspecialchars(trim($_POST['banner_tag_color'] ?? '#10B981'));
                 $bannerPath = '/uploads/banners/' . $fname;
-                $bannerUrl = (defined('ADMIN_BASE_URL') ? ADMIN_BASE_URL : '') . $bannerPath;
+                $adminBase = defined('ADMIN_BASE_URL') ? ADMIN_BASE_URL : 'https://dhobi-admin.bizz-manager.com';
+                $bannerUrl = rtrim($adminBase, '/') . $bannerPath;
                 $insertedId = null;
 
                 // Sync with DB
@@ -125,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($db) {
                     try {
                         $stmt = $db->prepare("INSERT INTO banners (shop_id, title, image, is_active) VALUES (?, ?, ?, ?)");
-                        $stmt->execute([$targetShopId, $bannerTitle, $bannerPath, 1]);
+                        $stmt->execute([$targetShopId, $bannerTitle, $bannerUrl, 1]);
                         $insertedId = $db->lastInsertId();
                     } catch (\Throwable $e) {}
                 }
@@ -139,18 +140,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'tag'      => $bannerTag,
                     'tagColor' => $bannerTagColor,
                     'url'      => $bannerUrl,
-                    'image'    => $bannerPath,
+                    'image'    => $bannerUrl,
                     'active'   => true,
                     'added'    => date('d M Y')
                 ];
 
-                // Auto-sync image to customer app assets
+                // Auto-sync image to customer app assets and backend public uploads (if accessible locally)
                 $appAssetDir = __DIR__ . '/../../customer_app/assets/myimages/';
                 if (is_dir($appAssetDir)) {
                     @copy($uploadDir . $fname, $appAssetDir . $fname);
                 }
+                $backendBannerDir = __DIR__ . '/../../backend_laravel/public/uploads/banners/';
+                if (!is_dir($backendBannerDir)) @mkdir($backendBannerDir, 0777, true);
+                @copy($uploadDir . $fname, $backendBannerDir . $fname);
 
-                // Update banners.json
+                // Live API sync to remote backend
+                try {
+                    apiPost('/banners', [
+                        'title' => $bannerTitle,
+                        'subtitle' => $bannerSubtitle,
+                        'tag' => $bannerTag,
+                        'tagColor' => $bannerTagColor,
+                        'image' => $bannerUrl,
+                        'shop_id' => $targetShopId,
+                        'link' => 'booking',
+                        'is_active' => 1
+                    ]);
+                } catch (\Throwable $e) {}
+
+                // Update banners.json if file exists
                 $jsonPath = __DIR__ . '/../../customer_app/src/constants/banners.json';
                 $allBanners = [];
                 if (file_exists($jsonPath)) {
@@ -183,16 +201,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!is_dir($uploadDir)) @mkdir($uploadDir, 0777, true);
 
         $newFname = null;
+        $adminBase = defined('ADMIN_BASE_URL') ? ADMIN_BASE_URL : 'https://dhobi-admin.bizz-manager.com';
+        $bannerUrl = null;
         if (!empty($_FILES['banner_image']['name']) && $_FILES['banner_image']['error'] === UPLOAD_ERR_OK) {
             $ext = strtolower(pathinfo($_FILES['banner_image']['name'], PATHINFO_EXTENSION));
             $newFname = 'banner_' . time() . '.' . $ext;
             if (move_uploaded_file($_FILES['banner_image']['tmp_name'], $uploadDir . $newFname)) {
+                $bannerUrl = rtrim($adminBase, '/') . '/uploads/banners/' . $newFname;
                 $appAssetDir = __DIR__ . '/../../customer_app/assets/myimages/';
                 if (is_dir($appAssetDir)) {
                     @copy($uploadDir . $newFname, $appAssetDir . $newFname);
                 }
-            } else {
-                $newFname = null;
+                $backendBannerDir = __DIR__ . '/../../backend_laravel/public/uploads/banners/';
+                if (!is_dir($backendBannerDir)) @mkdir($backendBannerDir, 0777, true);
+                @copy($uploadDir . $newFname, $backendBannerDir . $newFname);
             }
         }
 
@@ -200,15 +222,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db = getDb();
         if ($db && $bid) {
             try {
-                if ($newFname) {
-                    $bannerPath = '/uploads/banners/' . $newFname;
+                if ($bannerUrl) {
                     $stmt = $db->prepare("UPDATE banners SET title = ?, image = ? WHERE id = ?");
-                    $stmt->execute([$newTitle, $bannerPath, $bid]);
+                    $stmt->execute([$newTitle, $bannerUrl, $bid]);
                 } else {
                     $stmt = $db->prepare("UPDATE banners SET title = ? WHERE id = ?");
                     $stmt->execute([$newTitle, $bid]);
                 }
             } catch (\Throwable $e) {}
+        }
+
+        // Live API sync
+        try {
+            $updatePayload = [
+                'title' => $newTitle,
+                'subtitle' => $newSubtitle,
+                'tag' => $newTag,
+                'tagColor' => $newTagColor,
+            ];
+            if ($bannerUrl) {
+                $updatePayload['image'] = $bannerUrl;
+            }
+            apiPost('/banners/' . $bid, $updatePayload);
+        } catch (\Throwable $e) {}
+
+        // Update session
+        if (!empty($_SESSION['shop_banners'])) {
+            foreach ($_SESSION['shop_banners'] as $sId => &$bList) {
+                if (is_array($bList)) {
+                    foreach ($bList as &$sb) {
+                        if (strval($sb['id'] ?? '') === $bid) {
+                            $sb['title'] = $newTitle;
+                            $sb['subtitle'] = $newSubtitle;
+                            $sb['tag'] = $newTag;
+                            $sb['tagColor'] = $newTagColor;
+                            if ($bannerUrl) {
+                                $sb['image'] = $bannerUrl;
+                                $sb['url'] = $bannerUrl;
+                            }
+                        }
+                    }
+                    unset($sb);
+                }
+            }
+            unset($bList);
         }
 
         // Update banners.json
@@ -222,10 +279,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $b['subtitle'] = $newSubtitle;
                         $b['tag'] = $newTag;
                         $b['tagColor'] = $newTagColor;
-                        if ($newFname) {
-                            $bannerPath = '/uploads/banners/' . $newFname;
-                            $b['image'] = $bannerPath;
-                            $b['url'] = (defined('ADMIN_BASE_URL') ? ADMIN_BASE_URL : '') . $bannerPath;
+                        if ($bannerUrl) {
+                            $b['image'] = $bannerUrl;
+                            $b['url'] = $bannerUrl;
                         }
                     }
                 }
@@ -245,6 +301,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([$bid]);
                 } catch (\Throwable $e) {}
             }
+            try {
+                apiDelete('/banners/' . $bid);
+            } catch (\Throwable $e) {}
+
+            // Remove from session
+            if (!empty($_SESSION['shop_banners'])) {
+                foreach ($_SESSION['shop_banners'] as $sId => &$bList) {
+                    if (is_array($bList)) {
+                        $bList = array_values(array_filter($bList, fn($b) => strval($b['id'] ?? '') !== $bid));
+                    }
+                }
+                unset($bList);
+            }
+
             $jsonPath = __DIR__ . '/../../customer_app/src/constants/banners.json';
             if (file_exists($jsonPath)) {
                 $allBanners = json_decode(file_get_contents($jsonPath), true);
@@ -258,6 +328,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($act === 'toggle_banner') {
         $bid = strval($_POST['banner_id'] ?? '');
         if ($bid) {
+            $db = getDb();
+            if ($db) {
+                try {
+                    $stmt = $db->prepare("UPDATE banners SET is_active = NOT is_active WHERE id = ?");
+                    $stmt->execute([$bid]);
+                } catch (\Throwable $e) {}
+            }
+            try {
+                apiPost('/banners/' . $bid . '/status');
+            } catch (\Throwable $e) {}
+
+            // Toggle in session
+            if (!empty($_SESSION['shop_banners'])) {
+                foreach ($_SESSION['shop_banners'] as $sId => &$bList) {
+                    if (is_array($bList)) {
+                        foreach ($bList as &$sb) {
+                            if (strval($sb['id'] ?? '') === $bid) {
+                                $sb['active'] = !($sb['active'] ?? true);
+                            }
+                        }
+                        unset($sb);
+                    }
+                }
+                unset($bList);
+            }
+
             $jsonPath = __DIR__ . '/../../customer_app/src/constants/banners.json';
             if (file_exists($jsonPath)) {
                 $allBanners = json_decode(file_get_contents($jsonPath), true);
@@ -288,7 +384,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $appVideoDir = __DIR__ . '/../../customer_app/assets/myvideos/';
         if (!is_dir($appVideoDir)) @mkdir($appVideoDir, 0777, true);
 
-        $backendBaseUrl = defined('BACKEND_BASE_URL') ? BACKEND_BASE_URL : 'https://dhobi-api.bizz-manager.com/public';
+        $adminBase = defined('ADMIN_BASE_URL') ? ADMIN_BASE_URL : 'https://dhobi-admin.bizz-manager.com';
 
         // 1. Video upload
         if (!empty($_FILES['video_file']['name']) && $_FILES['video_file']['error'] === UPLOAD_ERR_OK) {
@@ -297,7 +393,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $vfname = 'vid_' . $targetShopId . '_' . time() . '.' . $ext;
             if (move_uploaded_file($_FILES['video_file']['tmp_name'], $uploadDir . $vfname)) {
                 @copy($uploadDir . $vfname, $appVideoDir . $vfname);
-                $finalVideoUrl = $backendBaseUrl . '/uploads/shop-media/' . $vfname;
+                $finalVideoUrl = rtrim($adminBase, '/') . '/uploads/shop-media/' . $vfname;
             }
         } elseif (!empty($videoUrlInput)) {
             $finalVideoUrl = $videoUrlInput;
@@ -308,12 +404,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $text = strtolower(pathinfo($_FILES['thumbnail_file']['name'], PATHINFO_EXTENSION));
             $tfname = 'thumb_' . $targetShopId . '_' . time() . '.' . $text;
             if (move_uploaded_file($_FILES['thumbnail_file']['tmp_name'], $uploadDir . $tfname)) {
-                $finalThumbUrl = $backendBaseUrl . '/uploads/shop-media/' . $tfname;
+                $finalThumbUrl = rtrim($adminBase, '/') . '/uploads/shop-media/' . $tfname;
             }
         }
         if (empty($finalThumbUrl)) {
             $finalThumbUrl = 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800&auto=format&fit=crop&q=80';
         }
+
+        // Live API sync
+        try {
+            apiPost('/reels', [
+                'shop_id'       => $targetShopId,
+                'video_url'     => $finalVideoUrl,
+                'thumbnail_url' => $finalThumbUrl,
+                'caption'       => $uploadShopName ?: $targetShopName,
+            ]);
+        } catch (\Throwable $e) {}
 
         if (!empty($finalVideoUrl)) {
             $reelId = 'vid_' . time() . '_' . rand(100, 999);
@@ -346,6 +452,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             array_unshift($currentReels, $newReel);
             @file_put_contents($reelsJsonPath, json_encode(array_values($currentReels), JSON_PRETTY_PRINT));
+
+            // Sync to backend_laravel public directory
+            $backendMediaDir = __DIR__ . '/../../backend_laravel/public/uploads/shop-media/';
+            if (!is_dir($backendMediaDir)) @mkdir($backendMediaDir, 0777, true);
+            if (!empty($vfname) && file_exists($uploadDir . $vfname)) {
+                @copy($uploadDir . $vfname, $backendMediaDir . $vfname);
+            }
+            if (!empty($tfname) && file_exists($uploadDir . $tfname)) {
+                @copy($uploadDir . $tfname, $backendMediaDir . $tfname);
+            }
+
+            // Sync to MySQL laundry_shops.shop_photos
+            $db = getDb();
+            if ($db && $targetShopId) {
+                try {
+                    $stmt = $db->prepare("SELECT shop_photos FROM laundry_shops WHERE id = ?");
+                    $stmt->execute([$targetShopId]);
+                    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                    $existingPhotos = [];
+                    if (!empty($row['shop_photos'])) {
+                        $decoded = json_decode($row['shop_photos'], true);
+                        if (is_array($decoded)) $existingPhotos = $decoded;
+                    }
+                    array_unshift($existingPhotos, [
+                        'url' => $finalVideoUrl,
+                        'thumbnail_url' => $finalThumbUrl,
+                        'caption' => $uploadShopName ?: $targetShopName,
+                        'type' => 'video'
+                    ]);
+                    $upStmt = $db->prepare("UPDATE laundry_shops SET shop_photos = ? WHERE id = ?");
+                    $upStmt->execute([json_encode($existingPhotos), $targetShopId]);
+                } catch (\Throwable $e) {}
+            }
 
             // Sync to session media for target shop
             if (!isset($_SESSION['shop_media'][$targetShopId])) $_SESSION['shop_media'][$targetShopId] = [];
@@ -455,6 +594,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $caption = htmlspecialchars(trim($_POST['media_caption'] ?? 'Facility Photo'));
                 $mediaUrl = (defined('ADMIN_BASE_URL') ? ADMIN_BASE_URL : '') . '/uploads/shop-media/' . $fname;
                 
+                // Auto-sync photo to backend public uploads and customer app
+                $backendMediaDir = __DIR__ . '/../../backend_laravel/public/uploads/shop-media/';
+                if (!is_dir($backendMediaDir)) @mkdir($backendMediaDir, 0777, true);
+                if (!empty($fname) && file_exists($uploadDir . $fname)) {
+                    @copy($uploadDir . $fname, $backendMediaDir . $fname);
+                }
+                $appAssetDir = __DIR__ . '/../../customer_app/assets/myimages/';
+                if (is_dir($appAssetDir) && !empty($fname) && file_exists($uploadDir . $fname)) {
+                    @copy($uploadDir . $fname, $appAssetDir . $fname);
+                }
+
+                // Sync to MySQL laundry_shops.shop_photos
+                $db = getDb();
+                if ($db && $targetShopId) {
+                    try {
+                        $stmt = $db->prepare("SELECT shop_photos FROM laundry_shops WHERE id = ?");
+                        $stmt->execute([$targetShopId]);
+                        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                        $photosList = [];
+                        if (!empty($row['shop_photos'])) {
+                            $decoded = json_decode($row['shop_photos'], true);
+                            if (is_array($decoded)) $photosList = $decoded;
+                        }
+                        array_unshift($photosList, [
+                            'url' => $mediaUrl,
+                            'caption' => $caption,
+                            'type' => 'photo'
+                        ]);
+                        $upStmt = $db->prepare("UPDATE laundry_shops SET shop_photos = ? WHERE id = ?");
+                        $upStmt->execute([json_encode($photosList), $targetShopId]);
+                    } catch (\Throwable $e) {}
+                }
+                
                 if (!isset($_SESSION['shop_media'][$targetShopId])) $_SESSION['shop_media'][$targetShopId] = [];
                 array_unshift($_SESSION['shop_media'][$targetShopId], [
                     'id'       => 'p_' . time(),
@@ -509,11 +681,129 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // A. BANNERS
 $allBanners = [];
+
+// 1. Fetch live banners from Laravel API
+try {
+    $bannersRes = apiGet('/banners');
+    $apiBanners = apiExtractList($bannersRes);
+    if (!empty($apiBanners)) {
+        foreach ($apiBanners as $ab) {
+            $abId = strval($ab['id'] ?? '');
+            $img = $ab['image'] ?? ($ab['url'] ?? '');
+            $fullImg = $img;
+            if ($fullImg && !str_starts_with($fullImg, 'http://') && !str_starts_with($fullImg, 'https://')) {
+                $fullImg = (defined('ADMIN_BASE_URL') ? ADMIN_BASE_URL : 'https://dhobi-admin.bizz-manager.com') . '/' . ltrim($fullImg, '/');
+            }
+            $targetSid = strval($ab['shop_id'] ?? $ab['shopId'] ?? '');
+            $sInfo = $targetSid ? findShopById($targetSid, $allShopsList) : null;
+            $allBanners[] = [
+                'id'       => $abId,
+                'shopId'   => $targetSid ?: '30',
+                'shopName' => $sInfo['name'] ?? ($ab['shop_name'] ?? $ab['shopName'] ?? 'All Laundry Shops'),
+                'title'    => $ab['title'] ?? 'Promotional Offer',
+                'subtitle' => $ab['subtitle'] ?? 'Special festive laundry & dry clean offer',
+                'tag'      => $ab['tag'] ?? 'ACTIVE',
+                'tagColor' => $ab['tagColor'] ?? $ab['tag_color'] ?? '#10B981',
+                'url'      => $fullImg,
+                'image'    => $fullImg,
+                'active'   => !isset($ab['is_active']) || !empty($ab['is_active']),
+                'added'    => date('d M Y')
+            ];
+        }
+    }
+} catch (\Throwable $e) {}
+
+// 2. Fetch directly from MySQL banners table if empty or to ensure complete records
+if ($db) {
+    try {
+        $st = $db->query("SELECT * FROM banners ORDER BY id DESC");
+        $dbBanners = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($dbBanners as $dbb) {
+            $dbbId = strval($dbb['id']);
+            if (!array_filter($allBanners, fn($b) => strval($b['id'] ?? '') === $dbbId)) {
+                $img = $dbb['image'] ?? '';
+                $fullImg = $img;
+                if ($fullImg && !str_starts_with($fullImg, 'http://') && !str_starts_with($fullImg, 'https://')) {
+                    $fullImg = (defined('ADMIN_BASE_URL') ? ADMIN_BASE_URL : 'https://dhobi-admin.bizz-manager.com') . '/' . ltrim($fullImg, '/');
+                }
+                $targetSid = strval($dbb['shop_id'] ?? '');
+                $sInfo = $targetSid ? findShopById($targetSid, $allShopsList) : null;
+                $allBanners[] = [
+                    'id'       => $dbbId,
+                    'shopId'   => $targetSid ?: '30',
+                    'shopName' => $sInfo['name'] ?? 'Laundry Partner',
+                    'title'    => $dbb['title'] ?? 'Promotional Offer',
+                    'subtitle' => $dbb['subtitle'] ?? 'Special festive laundry & dry clean offer',
+                    'tag'      => $dbb['tag'] ?? 'ACTIVE',
+                    'tagColor' => $dbb['tag_color'] ?? '#10B981',
+                    'url'      => $fullImg,
+                    'image'    => $fullImg,
+                    'active'   => !isset($dbb['is_active']) || !empty($dbb['is_active']),
+                    'added'    => !empty($dbb['created_at']) ? date('d M Y', strtotime($dbb['created_at'])) : date('d M Y')
+                ];
+            }
+        }
+    } catch (\Throwable $e) {}
+}
+
+// 3. Merge from session if any
+if (!empty($_SESSION['shop_banners'])) {
+    foreach ($_SESSION['shop_banners'] as $sId => $bList) {
+        if (is_array($bList)) {
+            foreach ($bList as $sb) {
+                if (!array_filter($allBanners, fn($b) => strval($b['id'] ?? '') === strval($sb['id'] ?? ''))) {
+                    $allBanners[] = $sb;
+                }
+            }
+        }
+    }
+}
+
+// 4. Merge from banners.json if file exists
 $jsonPath = __DIR__ . '/../../customer_app/src/constants/banners.json';
 if (file_exists($jsonPath)) {
     $decoded = json_decode(file_get_contents($jsonPath), true);
-    if (is_array($decoded)) $allBanners = $decoded;
+    if (is_array($decoded)) {
+        foreach ($decoded as $jb) {
+            if (!array_filter($allBanners, fn($b) => strval($b['id'] ?? '') === strval($jb['id'] ?? ''))) {
+                $allBanners[] = $jb;
+            }
+        }
+    }
 }
+
+// 5. Fallback defaults if still completely empty
+if (empty($allBanners)) {
+    $allBanners = [
+        [
+            'id'       => 'b_default_1',
+            'shopId'   => '30',
+            'shopName' => 'Star Wash Ultra Premium',
+            'title'    => 'Flat 30% OFF on First Dry Clean Order',
+            'subtitle' => 'Special festive laundry & dry clean offer',
+            'tag'      => 'SPECIAL OFFER',
+            'tagColor' => '#10B981',
+            'url'      => 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80',
+            'image'    => 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80',
+            'active'   => true,
+            'added'    => date('d M Y')
+        ],
+        [
+            'id'       => 'b_default_2',
+            'shopId'   => '30',
+            'shopName' => 'Star Wash Ultra Premium',
+            'title'    => 'Express 24-Hour Wash & Fold Service',
+            'subtitle' => 'Doorstep pickup & next-day delivery',
+            'tag'      => 'ACTIVE',
+            'tagColor' => '#8B5CF6',
+            'url'      => 'https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=800&q=80',
+            'image'    => 'https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=800&q=80',
+            'active'   => true,
+            'added'    => date('d M Y')
+        ]
+    ];
+}
+
 if ($isOwner) {
     // Laundry Owner: ONLY see self-uploaded banners
     $banners = array_values(array_filter($allBanners, function($b) use ($shopId) {
@@ -534,19 +824,114 @@ if ($isOwner) {
 
 // B. VIDEOS (REELS)
 $allReels = [];
+$adminBase = defined('ADMIN_BASE_URL') ? ADMIN_BASE_URL : 'https://dhobi-admin.bizz-manager.com';
+
+// 1. Fetch live reels from Laravel API
+try {
+    $reelsRes = apiGet('/reels');
+    $apiReels = apiExtractList($reelsRes);
+    if (!empty($apiReels)) {
+        foreach ($apiReels as $ar) {
+            $vUrl = $ar['video_url'] ?? '';
+            if ($vUrl && !str_starts_with($vUrl, 'http://') && !str_starts_with($vUrl, 'https://')) {
+                $vUrl = rtrim($adminBase, '/') . '/' . ltrim($vUrl, '/');
+            }
+            $tUrl = $ar['thumbnail_url'] ?? '';
+            if ($tUrl && !str_starts_with($tUrl, 'http://') && !str_starts_with($tUrl, 'https://')) {
+                $tUrl = rtrim($adminBase, '/') . '/' . ltrim($tUrl, '/');
+            }
+            $allReels[] = [
+                'id'            => strval($ar['id'] ?? uniqid('vid_')),
+                'shopId'        => strval($ar['shopId'] ?? $ar['shop_id'] ?? '44'),
+                'shopName'      => $ar['shopName'] ?? $ar['shop_name'] ?? 'Laundry Partner',
+                'ownerName'     => $ar['ownerName'] ?? $ar['owner_name'] ?? 'Shop Owner',
+                'location'      => $ar['location'] ?? $ar['city'] ?? 'Pune',
+                'video_url'     => $vUrl,
+                'thumbnail_url' => $tUrl ?: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800&auto=format&fit=crop&q=80',
+                'caption'       => $ar['caption'] ?? 'Shop Process Video',
+                'offer'         => $ar['offer'] ?? 'EXPRESS DELIVERY AVAILABLE',
+                'likes'         => intval($ar['likes'] ?? 85),
+                'shares'        => intval($ar['shares'] ?? 20),
+                'service'       => $ar['service'] ?? 'Eco Wash & Iron',
+                'bg'            => '#000000',
+                'isLiked'       => false,
+                'isSaved'       => false,
+                'isFollowing'   => false,
+                'added'         => date('d M Y')
+            ];
+        }
+    }
+} catch (\Throwable $e) {}
+
+// 2. Fetch directly from MySQL laundry_shops.shop_photos
+if ($db) {
+    try {
+        $st = $db->query("SELECT id, name, owner_name, city, address, shop_photos FROM laundry_shops WHERE shop_photos IS NOT NULL AND shop_photos != ''");
+        $shopRows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($shopRows as $sRow) {
+            $photos = json_decode($sRow['shop_photos'], true);
+            if (is_array($photos)) {
+                foreach ($photos as $pIdx => $pItem) {
+                    $pUrl = is_array($pItem) ? ($pItem['url'] ?? $pItem['video_url'] ?? '') : (string)$pItem;
+                    $clean = strtolower(explode('?', $pUrl)[0]);
+                    $isVideo = str_ends_with($clean, '.mp4') || str_ends_with($clean, '.mov') || str_ends_with($clean, '.webm') || (is_array($pItem) && ($pItem['type'] ?? '') === 'video');
+                    if ($isVideo && !empty($pUrl)) {
+                        if (!str_starts_with($pUrl, 'http://') && !str_starts_with($pUrl, 'https://')) {
+                            $pUrl = rtrim($adminBase, '/') . '/' . ltrim($pUrl, '/');
+                        }
+                        $pThumb = is_array($pItem) ? ($pItem['thumbnail_url'] ?? '') : '';
+                        if ($pThumb && !str_starts_with($pThumb, 'http://') && !str_starts_with($pThumb, 'https://')) {
+                            $pThumb = rtrim($adminBase, '/') . '/' . ltrim($pThumb, '/');
+                        }
+                        if (!array_filter($allReels, fn($r) => ($r['video_url'] ?? '') === $pUrl)) {
+                            $allReels[] = [
+                                'id'            => 'vid_db_' . $sRow['id'] . '_' . $pIdx,
+                                'shopId'        => strval($sRow['id']),
+                                'shopName'      => $sRow['name'] ?: 'Laundry Shop',
+                                'ownerName'     => $sRow['owner_name'] ?: 'Shop Owner',
+                                'location'      => $sRow['address'] ?: ($sRow['city'] ?: 'Pune'),
+                                'video_url'     => $pUrl,
+                                'thumbnail_url' => $pThumb ?: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800&auto=format&fit=crop&q=80',
+                                'caption'       => is_array($pItem) ? ($pItem['caption'] ?? $sRow['name']) : $sRow['name'],
+                                'offer'         => 'EXPRESS DELIVERY AVAILABLE',
+                                'likes'         => rand(40, 160),
+                                'shares'        => rand(10, 45),
+                                'service'       => 'Premium Wash & Iron',
+                                'bg'            => '#000000',
+                                'isLiked'       => false,
+                                'isSaved'       => false,
+                                'isFollowing'   => false,
+                                'added'         => date('d M Y')
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+    } catch (\Throwable $e) {}
+}
+
+// 3. Merge from reels.json if present
 if (file_exists($reelsJsonPath)) {
     $decoded = json_decode(file_get_contents($reelsJsonPath), true);
-    if (is_array($decoded)) $allReels = $decoded;
+    if (is_array($decoded)) {
+        foreach ($decoded as $dr) {
+            if (!array_filter($allReels, fn($r) => strval($r['id'] ?? '') === strval($dr['id'] ?? '') || ($r['video_url'] ?? '') === ($dr['video_url'] ?? ''))) {
+                $allReels[] = $dr;
+            }
+        }
+    }
 }
+
 if ($isOwner) {
-    // Laundry Owner: ONLY see videos uploaded for their own shop! NEVER other shops' videos!
+    // Laundry Owner: ONLY see videos uploaded for their own shop!
     $videos = array_values(array_filter($allReels, function($r) use ($shopId) {
         return strval($r['shopId'] ?? '') === strval($shopId);
     }));
 } else {
     // Super Admin:
     if ($selectedShopFilter === 'all') {
-        $videos = $allReels; // Overall view: every laundry owner's uploaded videos!
+        $videos = $allReels; // Overall view: all uploaded videos
     } else {
         $videos = array_values(array_filter($allReels, function($r) use ($selectedShopFilter) {
             return strval($r['shopId'] ?? '') === strval($selectedShopFilter);
@@ -555,39 +940,73 @@ if ($isOwner) {
 }
 
 // C. PHOTOS
-// Initialize default shop photos if empty
-if (!isset($_SESSION['shop_media']['30'])) {
-    $_SESSION['shop_media']['30'] = [
-        ['id' => 'm30_1', 'shopId' => '30', 'shopName' => 'My Laundry Shop', 'caption' => 'High-Capacity Industrial Washers', 'url' => 'https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=600&q=80', 'type' => 'photo', 'added' => date('d M Y')],
-        ['id' => 'm30_2', 'shopId' => '30', 'shopName' => 'My Laundry Shop', 'caption' => 'Steam Pressing & Folding Counter', 'url' => 'https://images.unsplash.com/photo-1582735689369-4fe89db7114c?auto=format&fit=crop&w=600&q=80', 'type' => 'photo', 'added' => date('d M Y')]
-    ];
-}
-if (!isset($_SESSION['shop_media']['44'])) {
-    $_SESSION['shop_media']['44'] = [
-        ['id' => 'm44_1', 'shopId' => '44', 'shopName' => 'Star Wash Ultra Premium', 'caption' => 'Hydro-Cleaning Units & Ozone Sanitizer', 'url' => 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=600&q=80', 'type' => 'photo', 'added' => date('d M Y')]
-    ];
-}
 $photos = [];
-if ($isOwner) {
-    // Laundry Owner: only photos uploaded for their shop
-    $photos = array_values(array_filter($_SESSION['shop_media'][$shopId] ?? [], fn($m) => ($m['type'] ?? '') === 'photo'));
-} else {
-    // Super Admin:
-    if ($selectedShopFilter === 'all') {
-        foreach ($_SESSION['shop_media'] as $sId => $mList) {
-            if (is_array($mList)) {
-                foreach ($mList as $item) {
-                    if (($item['type'] ?? '') === 'photo') {
-                        $sInfo = findShopById($sId, $allShopsList);
-                        $item['shopId']   = $sId;
-                        $item['shopName'] = $item['shopName'] ?? $sInfo['name'];
+
+// 1. Fetch from MySQL laundry_shops.shop_photos
+if ($db) {
+    try {
+        $st = $db->query("SELECT id, name, shop_photos FROM laundry_shops WHERE shop_photos IS NOT NULL AND shop_photos != ''");
+        $shopRows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($shopRows as $sRow) {
+            $pItems = json_decode($sRow['shop_photos'], true);
+            if (is_array($pItems)) {
+                foreach ($pItems as $idx => $p) {
+                    $pUrl = is_array($p) ? ($p['url'] ?? $p['image'] ?? '') : (string)$p;
+                    $clean = strtolower(explode('?', $pUrl)[0]);
+                    $isVideo = str_ends_with($clean, '.mp4') || str_ends_with($clean, '.mov') || str_ends_with($clean, '.webm') || (is_array($p) && ($p['type'] ?? '') === 'video');
+                    if (!$isVideo && !empty($pUrl)) {
+                        if (!str_starts_with($pUrl, 'http://') && !str_starts_with($pUrl, 'https://')) {
+                            $pUrl = rtrim($adminBase, '/') . '/' . ltrim($pUrl, '/');
+                        }
+                        $photos[] = [
+                            'id'       => 'p_' . $sRow['id'] . '_' . $idx,
+                            'shopId'   => strval($sRow['id']),
+                            'shopName' => $sRow['name'],
+                            'caption'  => is_array($p) ? ($p['caption'] ?? 'Facility Photo') : 'Facility Photo',
+                            'url'      => $pUrl,
+                            'type'     => 'photo',
+                            'added'    => date('d M Y')
+                        ];
+                    }
+                }
+            }
+        }
+    } catch (\Throwable $e) {}
+}
+
+// 2. Merge from session
+if (!empty($_SESSION['shop_media'])) {
+    foreach ($_SESSION['shop_media'] as $sId => $mList) {
+        if (is_array($mList)) {
+            foreach ($mList as $item) {
+                if (($item['type'] ?? '') === 'photo') {
+                    $sInfo = findShopById($sId, $allShopsList);
+                    $item['shopId']   = $sId;
+                    $item['shopName'] = $item['shopName'] ?? $sInfo['name'];
+                    if (!array_filter($photos, fn($p) => ($p['url'] ?? '') === ($item['url'] ?? ''))) {
                         $photos[] = $item;
                     }
                 }
             }
         }
-    } else {
-        $photos = array_values(array_filter($_SESSION['shop_media'][$selectedShopFilter] ?? [], fn($m) => ($m['type'] ?? '') === 'photo'));
+    }
+}
+
+// Fallback photos if empty
+if (empty($photos)) {
+    $photos = [
+        ['id' => 'm30_1', 'shopId' => '30', 'shopName' => 'My Laundry Shop', 'caption' => 'High-Capacity Industrial Washers', 'url' => 'https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=600&q=80', 'type' => 'photo', 'added' => date('d M Y')],
+        ['id' => 'm30_2', 'shopId' => '30', 'shopName' => 'My Laundry Shop', 'caption' => 'Steam Pressing & Folding Counter', 'url' => 'https://images.unsplash.com/photo-1582735689369-4fe89db7114c?auto=format&fit=crop&w=600&q=80', 'type' => 'photo', 'added' => date('d M Y')],
+        ['id' => 'm44_1', 'shopId' => '44', 'shopName' => 'Star Wash Ultra Premium', 'caption' => 'Hydro-Cleaning Units & Ozone Sanitizer', 'url' => 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=600&q=80', 'type' => 'photo', 'added' => date('d M Y')]
+    ];
+}
+
+// Filter photos
+if ($isOwner) {
+    $photos = array_values(array_filter($photos, fn($m) => strval($m['shopId'] ?? '') === strval($shopId)));
+} else {
+    if ($selectedShopFilter !== 'all') {
+        $photos = array_values(array_filter($photos, fn($m) => strval($m['shopId'] ?? '') === strval($selectedShopFilter)));
     }
 }
 
