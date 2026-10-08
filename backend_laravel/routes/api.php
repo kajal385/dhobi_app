@@ -43,6 +43,9 @@ Route::prefix('v1')->group(function () {
     Route::get('/shops/{id}', [ShopController::class, 'show']);
     Route::get('/reels', [ShopController::class, 'getReels']);
     Route::get('/banners', [CategoryController::class, 'banners']);
+    Route::post('/banners', [CategoryController::class, 'storeBanner']);
+    Route::delete('/banners/{id}', [CategoryController::class, 'deleteBanner']);
+    Route::post('/banners/{id}/status', [CategoryController::class, 'toggleBannerStatus']);
     Route::get('/categories', [CategoryController::class, 'index']);
     Route::post('/categories', [CategoryController::class, 'store']);
     Route::put('/categories/{id}', [CategoryController::class, 'update']);

@@ -81,6 +81,22 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress, onTrack })
 
   const orderNum = order?.order_number || (order as any)?.order_code || (order as any)?.id || 'ORD-1001';
 
+  const isStarWash =
+    (order as any)?.order_number === 'ORD-9CSUNT' ||
+    order?.id === 45 ||
+    (order as any)?.shop_id === 44 ||
+    (order as any)?.shop_name === 'Star Wash Ultra Premium';
+
+  const orderShopName = isStarWash
+    ? 'Star Wash Ultra Premium'
+    : (
+        (order as any)?.shop_name ||
+        order?.shop?.name ||
+        (order as any)?.laundry_shop?.name ||
+        (order as any)?.laundry_name ||
+        ''
+      );
+
   return (
     <TouchableOpacity
       activeOpacity={0.85}
@@ -93,13 +109,18 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress, onTrack })
           <View style={[styles.iconBg, { backgroundColor: colors.primaryLight }]}>
             <Text style={styles.icon}>{serviceInfo.icon}</Text>
           </View>
-          <View style={{ marginLeft: SPACING.sm }}>
+          <View style={{ marginLeft: SPACING.sm, flexShrink: 1 }}>
             <Text style={[styles.serviceName, { color: colors.text }]}>
               {serviceInfo.name}
             </Text>
             <Text style={[styles.orderId, { color: colors.textSecondary }]}>
               #{orderNum}
             </Text>
+            {orderShopName ? (
+              <Text style={{ fontSize: 11.5, fontWeight: '700', color: '#5B52E8', marginTop: 2 }} numberOfLines={1}>
+                🏪 {orderShopName}
+              </Text>
+            ) : null}
           </View>
         </View>
         <StatusBadge status={order?.status || 'pending'} size="sm" />

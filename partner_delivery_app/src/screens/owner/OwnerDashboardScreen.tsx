@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Linking, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { AppCard } from '../../components/AppCard';
@@ -594,12 +594,9 @@ export const OwnerDashboardScreen = () => {
 
             <TouchableOpacity
               style={styles.modalActionBtn}
-              onPress={() => {
-                setModalType(null);
-                navigation.navigate('ReviewsAndMedia');
-              }}
+              onPress={() => setModalType(null)}
             >
-              <Text style={styles.modalActionTxt}>View All Reviews & Customer Media ➔</Text>
+              <Text style={styles.modalActionTxt}>Close</Text>
             </TouchableOpacity>
           </View>
         );
@@ -872,15 +869,6 @@ export const OwnerDashboardScreen = () => {
               <Text style={styles.shortcutIcon}>📊</Text>
               <Text style={styles.shortcutTitle}>Revenue Analytics</Text>
               <Text style={styles.shortcutSub}>COD, Online & GST</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.shortcutCard}
-              onPress={() => navigation.navigate('ReviewsAndMedia')}
-            >
-              <Text style={styles.shortcutIcon}>⭐</Text>
-              <Text style={styles.shortcutTitle}>Reviews & Media</Text>
-              <Text style={styles.shortcutSub}>Reels, Photos & Reviews</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

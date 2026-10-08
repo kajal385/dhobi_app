@@ -2,17 +2,39 @@
 $pageTitle = 'Coupon & Promotion Center';
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/api-client.php';
+require_once __DIR__ . '/../includes/db.php';
 
-$isOwner = isLaundryOwner();
+$isOwner  = isLaundryOwner();
 $shopName = currentShopName();
+$shopId   = strval(currentShopId() ?: '30');
+$db       = getDb();
+
+// Load shops list for Super Admin view
+$allShopsList = [];
+if ($db) {
+    try {
+        $st = $db->query("SELECT id, name, owner_name FROM laundry_shops ORDER BY name ASC");
+        $allShopsList = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (\Throwable $e) {}
+}
+if (empty($allShopsList)) {
+    $allShopsList = [
+        ['id' => '30', 'name' => 'My Laundry Shop', 'owner_name' => 'Rajesh Sharma'],
+        ['id' => '44', 'name' => 'Star Wash Ultra Premium', 'owner_name' => 'Ashish Bhosale']
+    ];
+}
+
+$selectedShopFilter = (!$isOwner && isset($_GET['shop_id'])) ? strval($_GET['shop_id']) : 'all';
 
 $msg = null;
 
-// Initialize session state for Coupons
-if (!isset($_SESSION['coupons_store'])) {
+// Initialize session state for Coupons if missing
+if (!isset($_SESSION['coupons_store']) || empty($_SESSION['coupons_store'])) {
     $_SESSION['coupons_store'] = [
         'CPN-1' => [
             'id' => 'CPN-1',
+            'shop_id' => '30',
+            'shopName' => 'My Laundry Shop',
             'code' => 'WELCOME50',
             'title' => '50% Off First Laundry Order',
             'type' => 'PERCENTAGE',
@@ -24,6 +46,8 @@ if (!isset($_SESSION['coupons_store'])) {
         ],
         'CPN-2' => [
             'id' => 'CPN-2',
+            'shop_id' => '30',
+            'shopName' => 'My Laundry Shop',
             'code' => 'FESTIVE100',
             'title' => 'Diwali Festive Flat ₹100 Discount',
             'type' => 'FLAT',
@@ -35,24 +59,28 @@ if (!isset($_SESSION['coupons_store'])) {
         ],
         'CPN-3' => [
             'id' => 'CPN-3',
-            'code' => 'PUNEWASH20',
-            'title' => 'Pune Monsoon Special 20% Off',
+            'shop_id' => '44',
+            'shopName' => 'Star Wash Ultra Premium',
+            'code' => 'STAR30',
+            'title' => 'Star Wash 30% Off Exclusive Promo',
             'type' => 'PERCENTAGE',
-            'discountValue' => 20,
-            'minOrderAmount' => 250,
-            'maxDiscountAmount' => 80,
-            'usedCount' => 512,
+            'discountValue' => 30,
+            'minOrderAmount' => 600,
+            'maxDiscountAmount' => 180,
+            'usedCount' => 125,
             'status' => 'ACTIVE',
         ],
         'CPN-4' => [
             'id' => 'CPN-4',
-            'code' => 'REF50',
-            'title' => 'Referral Bonus ₹50 Cashback',
+            'shop_id' => '44',
+            'shopName' => 'Star Wash Ultra Premium',
+            'code' => 'PUNEWASH',
+            'title' => 'Pune Monsoon Special Flat ₹100 Off',
             'type' => 'FLAT',
-            'discountValue' => 50,
-            'minOrderAmount' => 150,
-            'maxDiscountAmount' => 50,
-            'usedCount' => 1204,
+            'discountValue' => 100,
+            'minOrderAmount' => 499,
+            'maxDiscountAmount' => 100,
+            'usedCount' => 78,
             'status' => 'ACTIVE',
         ],
     ];
@@ -70,9 +98,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $type = $_POST['type'] ?? 'PERCENTAGE';
         $newId = 'CPN-' . (count($_SESSION['coupons_store']) + 1);
 
+        $targetShopId = $isOwner ? $shopId : strval($_POST['target_shop_id'] ?? $shopId);
+        $targetShopName = $shopName;
+        foreach ($allShopsList as $s) {
+            if (strval($s['id']) === $targetShopId) {
+                $targetShopName = $s['name'];
+                break;
+            }
+        }
+
         if ($code && $title) {
             $_SESSION['coupons_store'][$newId] = [
                 'id' => $newId,
+                'shop_id' => $targetShopId,
+                'shopName' => $targetShopName,
                 'code' => $code,
                 'title' => $title,
                 'type' => $type,
@@ -82,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'usedCount' => 0,
                 'status' => 'ACTIVE',
             ];
-            $msg = "Promo coupon code '{$code}' created successfully!";
+            $msg = "Promo coupon code '{$code}' created successfully for {$targetShopName}!";
         }
     } elseif ($action === 'edit_coupon') {
         $cId = $_POST['coupon_id'] ?? '';
@@ -112,7 +151,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$coupons = array_values($_SESSION['coupons_store']);
+// Scoping: Laundry Owner ONLY sees their self-uploaded coupons! Super Admin sees overall or filtered.
+$allCoupons = array_values($_SESSION['coupons_store']);
+if ($isOwner) {
+    $coupons = array_values(array_filter($allCoupons, fn($c) => strval($c['shop_id'] ?? '') === strval($shopId)));
+} else {
+    if ($selectedShopFilter === 'all') {
+        $coupons = $allCoupons;
+    } else {
+        $coupons = array_values(array_filter($allCoupons, fn($c) => strval($c['shop_id'] ?? '') === strval($selectedShopFilter)));
+    }
+}
 ?>
 
 <div style="color: var(--text-primary);">
@@ -122,18 +171,22 @@ $coupons = array_values($_SESSION['coupons_store']);
       <div style="display: flex; align-items: center; gap: 0.6rem;">
         <h1 style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 0.5rem;">
           <i data-lucide="gift" style="width: 28px; height: 28px; color: #E8643A;"></i> 
-          <?= $isOwner ? 'My Shop Coupons &amp; Customer Promos' : 'Coupon &amp; Promotion Center' ?>
+          <?= $isOwner ? 'My Shop Coupons &amp; Customer Promos' : 'Coupon &amp; Promotion Center (Overall Info)' ?>
         </h1>
         <?php if ($isOwner): ?>
           <span style="font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 20px; background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 800;">
             🏬 <?= htmlspecialchars($shopName) ?>
           </span>
+        <?php else: ?>
+          <span style="font-size: 0.72rem; padding: 0.2rem 0.65rem; border-radius: 20px; background: rgba(99, 102, 241, 0.15); color: #4F46E5; border: 1px solid rgba(99, 102, 241, 0.3); font-weight: 800;">
+            🛡️ Platform Admin Overall View
+          </span>
         <?php endif; ?>
       </div>
       <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.25rem; margin-bottom: 0;">
         <?= $isOwner 
-          ? 'Create and manage promotional discount codes to attract more orders for your laundry outlet in Pune.' 
-          : 'Manage global promo codes, seasonal discounts, referral bonuses, and customer campaign usage caps.' ?>
+          ? 'Manage promotional discount codes created exclusively for your laundry outlet. Other shops cannot view your coupons.' 
+          : 'Super Admin view of coupons across every laundry owner in the platform.' ?>
       </p>
     </div>
 
@@ -145,6 +198,24 @@ $coupons = array_values($_SESSION['coupons_store']);
       <i data-lucide="plus" style="width: 18px; height: 18px;"></i> <?= $isOwner ? 'Create Shop Promo Code' : 'Create Promo Code' ?>
     </button>
   </div>
+
+  <?php if (!$isOwner): ?>
+  <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:12px;padding:0.75rem 1.25rem;margin-bottom:1.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+    <div style="font-size:0.85rem;font-weight:700;color:var(--text-secondary);">
+      Filter by laundry shop:
+    </div>
+    <form method="GET" style="margin:0;display:flex;gap:0.5rem;align-items:center;">
+      <select name="shop_id" onchange="this.form.submit()" class="form-control" style="font-weight:700;font-size:0.83rem;padding:0.4rem 0.8rem;border-radius:8px;">
+        <option value="all" <?= $selectedShopFilter === 'all' ? 'selected' : '' ?>>🌐 All Laundry Shops (Overall Info)</option>
+        <?php foreach($allShopsList as $s): ?>
+          <option value="<?= htmlspecialchars($s['id']) ?>" <?= $selectedShopFilter === strval($s['id']) ? 'selected' : '' ?>>
+            🏪 <?= htmlspecialchars($s['name']) ?> (Shop #<?= htmlspecialchars($s['id']) ?>)
+          </option>
+        <?php endforeach; ?>
+      </select>
+    </form>
+  </div>
+  <?php endif; ?>
 
   <?php if ($msg): ?>
     <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #059669; padding: 0.75rem 1rem; border-radius: 8px; font-weight: 700; font-size: 0.85rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
@@ -159,14 +230,20 @@ $coupons = array_values($_SESSION['coupons_store']);
         Active Promotional Discount Vouchers
       </h3>
       <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">
-        <?= count($coupons) ?> Promo Campaigns Configured
+        <?= count($coupons) ?> Promo Campaigns <?= $isOwner ? 'for your shop' : 'total' ?>
       </span>
     </div>
 
+    <?php if (empty($coupons)): ?>
+      <div style="text-align: center; padding: 3rem 1.5rem; background: var(--bg-card); border: 2px dashed var(--border-color); border-radius: 12px;">
+        <p style="color: var(--text-secondary); margin: 0;">No coupons found for this shop.</p>
+      </div>
+    <?php else: ?>
     <div class="table-container">
       <table class="data-table">
         <thead>
           <tr>
+            <?php if (!$isOwner): ?><th>Laundry Shop</th><?php endif; ?>
             <th>Coupon Code</th>
             <th>Campaign Title</th>
             <th>Type</th>
@@ -187,8 +264,16 @@ $coupons = array_values($_SESSION['coupons_store']);
               $min = $c['minOrderAmount'];
               $used = $c['usedCount'] ?? 0;
               $status = strtoupper($c['status'] ?? 'ACTIVE');
+              $cShopName = $c['shopName'] ?? ('Shop #' . ($c['shop_id'] ?? '30'));
           ?>
             <tr>
+              <?php if (!$isOwner): ?>
+              <td>
+                <span style="background: rgba(99,102,241,0.1); color: #4F46E5; padding: 0.2rem 0.55rem; border-radius: 6px; font-size: 0.74rem; font-weight: 800;">
+                  🏪 <?= htmlspecialchars($cShopName) ?>
+                </span>
+              </td>
+              <?php endif; ?>
               <td>
                 <span class="badge" style="background: rgba(129,98,238,0.18); color: #8162EE; font-family: monospace; font-size: 0.95rem; font-weight: 900; letter-spacing: 0.8px; padding: 0.35rem 0.65rem; border: 1px dashed rgba(129,98,238,0.4);">
                   🎟️ <?= htmlspecialchars($code) ?>
@@ -221,12 +306,11 @@ $coupons = array_values($_SESSION['coupons_store']);
                 </span>
               </td>
               <td>
-                <div style="display: flex; gap: 0.4rem; align-items: center; white-space: nowrap;">
+                <div style="display: flex; gap: 0.5rem;">
                   <button 
-                    type="button" 
-                    onclick="openEditCouponModal(<?= htmlspecialchars(json_encode($c)) ?>)" 
+                    onclick='openEditCouponModal(<?= json_encode($c) ?>)' 
                     class="btn btn-secondary btn-sm"
-                    style="display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 700;"
+                    style="padding: 0.4rem 0.6rem; font-size: 0.75rem;"
                     title="Edit Promo Campaign"
                   >
                     <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i> Edit
@@ -246,6 +330,7 @@ $coupons = array_values($_SESSION['coupons_store']);
         </tbody>
       </table>
     </div>
+    <?php endif; ?>
   </div>
 </div>
 
@@ -258,6 +343,20 @@ $coupons = array_values($_SESSION['coupons_store']);
     </div>
     <form method="POST" action="">
       <input type="hidden" name="action" value="create_coupon">
+
+      <?php if (!$isOwner): ?>
+      <div class="form-group" style="margin-bottom: 1rem;">
+        <label class="form-label" style="display: block; margin-bottom: 0.35rem; font-weight: 700;">Assign to Laundry Shop *</label>
+        <select name="target_shop_id" class="form-control" style="width: 100%;">
+          <?php foreach ($allShopsList as $s): ?>
+            <option value="<?= htmlspecialchars($s['id']) ?>">
+              🏪 <?= htmlspecialchars($s['name']) ?> (Shop #<?= htmlspecialchars($s['id']) ?>)
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <?php endif; ?>
+
       <div class="form-group" style="margin-bottom: 1rem;">
         <label class="form-label" style="display: block; margin-bottom: 0.35rem; font-weight: 700;">Coupon Code (UPPERCASE) *</label>
         <input type="text" name="code" class="form-control" placeholder="e.g. DHOBI25" required style="width: 100%; text-transform: uppercase; font-family: monospace; font-weight: 800;">

@@ -149,8 +149,26 @@ export const OrdersScreen = ({ navigation }: any) => {
           renderItem={({ item }) => (
             <OrderCard
               order={item}
-              onPress={() => navigation.navigate('Tracking', { orderId: item.id, order: item })}
-              onTrack={() => navigation.navigate('Tracking', { orderId: item.id, order: item })}
+              onPress={() =>
+                navigation.navigate('Tracking', {
+                  orderId: item.id,
+                  order: item,
+                  shopName: (item as any)?.shop_name || item?.shop?.name,
+                  ownerName: (item as any)?.owner_name || (item?.shop as any)?.owner_name,
+                  shopLocation: (item as any)?.shop_address || (item?.shop as any)?.address,
+                  shopPhone: (item as any)?.shop_phone || (item?.shop as any)?.phone,
+                })
+              }
+              onTrack={() =>
+                navigation.navigate('Tracking', {
+                  orderId: item.id,
+                  order: item,
+                  shopName: (item as any)?.shop_name || item?.shop?.name,
+                  ownerName: (item as any)?.owner_name || (item?.shop as any)?.owner_name,
+                  shopLocation: (item as any)?.shop_address || (item?.shop as any)?.address,
+                  shopPhone: (item as any)?.shop_phone || (item?.shop as any)?.phone,
+                })
+              }
             />
           )}
         />

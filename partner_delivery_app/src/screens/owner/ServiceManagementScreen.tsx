@@ -24,8 +24,8 @@ import { useAuth } from '../../context/AuthContext';
 export const ServiceManagementScreen = () => {
   const insets = useSafeAreaInsets();
   const [services, setServices] = useState<any[]>([]);
-  const { user } = useAuth();
-  const shopId = user?.shop_id;
+  const { currentUser, currentShop } = useAuth();
+  const shopId = currentShop?.id || currentUser?.shop_id;
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {

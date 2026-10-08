@@ -27,10 +27,10 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-      try {
-        if (typeof (storage as any).delete === 'function') (storage as any).delete('auth_token');
-        if (typeof storage.remove === 'function') storage.remove('auth_token');
-      } catch (e) {}
+    try {
+      if (typeof (storage as any).delete === 'function') (storage as any).delete('auth_token');
+      if (typeof storage.remove === 'function') storage.remove('auth_token');
+    } catch (e) { }
     return Promise.reject(error);
   }
 );

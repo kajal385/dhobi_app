@@ -139,7 +139,14 @@ export interface ShopProfileResponse {
 
 export const DEFAULT_SHOPS: ShopListItem[] = [
   {
-    id: 5, uuid: 'uuid-5', name: 'Star Wash Ultra Premium', slug: 'star-wash-ultra-premium', logo: null, cover_image: null,
+    id: 44, uuid: 'uuid-44', name: 'Star Wash Ultra Premium', slug: 'star-wash-ultra-premium', logo: null, cover_image: null,
+    address: 'Tathawade,pune', area: 'Tathawade', city: 'Pune', state: 'MH', pincode: '411033', latitude: 18.595, longitude: 73.765,
+    rating: 4.9, review_count: 185, is_open: true, is_verified: true, is_featured: true, pickup_charge: 0, delivery_charge: 0,
+    min_order_amount: 250, estimated_delivery_hours: 24, offers_express_delivery: true, offers_same_day: true, offers_free_pickup: true, offers_free_delivery: true,
+    distance: '0.4 km away (4 mins)'
+  },
+  {
+    id: 5, uuid: 'uuid-5', name: 'Star Wash Ultra Premium', slug: 'star-wash-ultra-premium-5', logo: null, cover_image: null,
     address: 'Dutta Mandir Road, Wakad, Pune', area: 'Wakad', city: 'Pune', state: 'MH', pincode: '411057', latitude: 18.595, longitude: 73.765,
     rating: 4.9, review_count: 185, is_open: true, is_verified: true, is_featured: true, pickup_charge: 0, delivery_charge: 0,
     min_order_amount: 250, estimated_delivery_hours: 24, offers_express_delivery: true, offers_same_day: true, offers_free_pickup: true, offers_free_delivery: true,

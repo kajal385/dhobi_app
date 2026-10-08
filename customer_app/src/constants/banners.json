@@ -1,0 +1,38 @@
+[
+    {
+        "id": "1",
+        "shopId": "30",
+        "shopName": "My Laundry Shop",
+        "title": "Super Clean Wash",
+        "subtitle": "Special festive laundry & dry clean offer",
+        "tag": "ACTIVE",
+        "tagColor": "#F59E0B",
+        "image": "\/uploads\/banners\/banner_30_1791351874.png",
+        "active": true,
+        "added": "07 Oct 2026"
+    },
+    {
+        "id": "2",
+        "shopId": "30",
+        "shopName": "My Laundry Shop",
+        "title": "Flat 30% OFF on First Dry Clean Order",
+        "subtitle": "Use code FIRST30 on your order",
+        "tag": "ACTIVE",
+        "tagColor": "#10B981",
+        "image": "https:\/\/images.unsplash.com\/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80",
+        "active": true,
+        "added": "07 Oct 2026"
+    },
+    {
+        "id": "3",
+        "shopId": "30",
+        "shopName": "My Laundry Shop",
+        "title": "Express 24-Hour Wash & Fold Service",
+        "subtitle": "Doorstep pickup & next-day delivery",
+        "tag": "ACTIVE",
+        "tagColor": "#10B981",
+        "image": "https:\/\/images.unsplash.com\/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=800&q=80",
+        "active": true,
+        "added": "07 Oct 2026"
+    }
+]

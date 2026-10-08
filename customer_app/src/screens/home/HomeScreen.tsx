@@ -44,6 +44,112 @@ const PROMOS = [
   { id: 3, text: 'Premium at ₹99/kg', sub: 'This weekend only', bg: '#FDDFC2' },
 ];
 
+import bannersJson from '../../constants/banners.json';
+
+const BANNER_FALLBACKS = [
+  require('../../../assets/myimages/admin_banner_super_clean.png'),
+  require('../../../assets/myimages/admin_banner_dry_clean.jpg'),
+  require('../../../assets/myimages/admin_banner_wash_fold.jpg'),
+  require('../../../assets/myimages/shop_cover_pearl.png'),
+  require('../../../assets/myimages/slider_img.png'),
+];
+
+export const DEFAULT_BANNERS = (Array.isArray(bannersJson) && bannersJson.length > 0 ? bannersJson : [
+  {
+    id: '1',
+    title: 'Super Clean Wash',
+    subtitle: 'Special festive laundry & dry clean offer',
+    tag: 'ACTIVE',
+    tagColor: '#10B981',
+    localAsset: require('../../../assets/myimages/admin_banner_super_clean.png'),
+    image: '/uploads/banners/banner_30_1791351874.png',
+  },
+  {
+    id: '2',
+    title: 'Flat 30% OFF on First Dry Clean Order',
+    subtitle: 'Use code FIRST30 on your order',
+    tag: 'ACTIVE',
+    tagColor: '#10B981',
+    localAsset: require('../../../assets/myimages/admin_banner_dry_clean.jpg'),
+    image: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80',
+  },
+  {
+    id: '3',
+    title: 'Express 24-Hour Wash & Fold Service',
+    subtitle: 'Doorstep pickup & next-day delivery',
+    tag: 'ACTIVE',
+    tagColor: '#10B981',
+    localAsset: require('../../../assets/myimages/admin_banner_wash_fold.jpg'),
+    image: 'https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=800&q=80',
+  },
+]).map((b: any, idx: number) => {
+  const bId = String(b.id || '');
+  const imgStr = String(b.image || b.url || '');
+  const titleStr = String(b.title || '').toLowerCase();
+  if (bId === '1' || imgStr.includes('banner_30_1791351874') || titleStr.includes('super clean')) {
+    return { ...b, localAsset: require('../../../assets/myimages/admin_banner_super_clean.png') };
+  }
+  if (bId === '2' || titleStr.includes('dry clean')) {
+    return { ...b, localAsset: require('../../../assets/myimages/admin_banner_dry_clean.jpg') };
+  }
+  if (bId === '3' || titleStr.includes('wash & fold') || titleStr.includes('express')) {
+    return { ...b, localAsset: require('../../../assets/myimages/admin_banner_wash_fold.jpg') };
+  }
+  return { ...b, localAsset: BANNER_FALLBACKS[idx % BANNER_FALLBACKS.length] };
+});
+
+const SafeBannerImage = ({ banner, index = 0, style, cardWidth, cardHeight }: any) => {
+  const fallbackAsset = BANNER_FALLBACKS[index % BANNER_FALLBACKS.length];
+
+  const getSource = () => {
+    if (banner?.localAsset) {
+      return banner.localAsset;
+    }
+    const bId = String(banner?.id || '');
+    const raw = String(banner?.image || banner?.image_url || banner?.url || '').trim();
+    if (bId === '1' || raw.includes('banner_30_1791351874') || (banner?.title && banner.title.toLowerCase().includes('super clean'))) {
+      return require('../../../assets/myimages/admin_banner_super_clean.png');
+    }
+    if (bId === '2' || (banner?.title && banner.title.toLowerCase().includes('dry clean'))) {
+      return require('../../../assets/myimages/admin_banner_dry_clean.jpg');
+    }
+    if (bId === '3' || (banner?.title && (banner.title.toLowerCase().includes('wash & fold') || banner.title.toLowerCase().includes('express')))) {
+      return require('../../../assets/myimages/admin_banner_wash_fold.jpg');
+    }
+    if (raw.length > 0) {
+      const uri = resolveImageUrl(raw);
+      if (uri) return { uri };
+    }
+    return fallbackAsset;
+  };
+
+  const [src, setSrc] = useState(getSource);
+
+  useEffect(() => {
+    setSrc(getSource());
+  }, [banner?.image, banner?.image_url, banner?.url, banner?.localAsset, banner?.title, banner?.id, index]);
+
+  return (
+    <Image
+      source={src}
+      style={[
+        {
+          width: cardWidth || '100%',
+          height: cardHeight || '100%',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+        },
+        style,
+      ]}
+      resizeMode="cover"
+      onError={() => {
+        setSrc(fallbackAsset);
+      }}
+    />
+  );
+};
+
 // ────────────────────────────────────────────────────────────
 //  Category image map (keys match category `key` field)
 // ────────────────────────────────────────────────────────────
@@ -434,7 +540,7 @@ export const HomeScreen = ({ navigation }: any) => {
   const [popularShops, setPopularShops] = useState<ShopListItem[]>(DEFAULT_SHOPS);
   const [nearbyShops, setNearbyShops] = useState<ShopListItem[]>(DEFAULT_SHOPS);
   const [shopsLoading, setShopsLoading] = useState(false);
-  const [banners, setBanners] = useState<any[]>([]);
+  const [banners, setBanners] = useState<any[]>(DEFAULT_BANNERS);
 
   const getShopDistance = useCallback((shop: ShopListItem) => {
     const userLat = Number(user?.latitude || 18.5980);
@@ -472,10 +578,13 @@ export const HomeScreen = ({ navigation }: any) => {
       }));
       setNearbyShops(processedNearby);
 
-      // Fetch global banners
+      // Fetch global banners uploaded by admin
       try {
         const bannersRes = await apiClient.get('/banners');
-        setBanners(bannersRes.data?.data || []);
+        const list = bannersRes.data?.data;
+        if (Array.isArray(list) && list.length > 0) {
+          setBanners(list);
+        }
       } catch (err) {
         console.warn('Failed to fetch banners', err);
       }
@@ -590,19 +699,21 @@ export const HomeScreen = ({ navigation }: any) => {
     walletService.getWallet().then((w) => {
       dispatch(setWallet(w));
     }).catch(() => {});
-    const timer = setInterval(
-      () => setPromoIndex((i) => (i + 1) % 3), // We have 3 slider items
-      3000
-    );
+    const timer = setInterval(() => {
+      setPromoIndex((i) => {
+        const total = banners && banners.length > 0 ? banners.length : DEFAULT_BANNERS.length;
+        return (i + 1) % total;
+      });
+    }, 3500);
     return () => {
       clearInterval(timer);
     };
-  }, [fetchOrders, fetchCategories, fetchShops, dispatch]);
+  }, [fetchOrders, fetchCategories, fetchShops, dispatch, banners.length]);
 
   // Automatically scroll when promoIndex changes
   useEffect(() => {
     if (promoScrollViewRef.current) {
-      const cardWidth = Dimensions.get('window').width * 0.85 + SPACING.md;
+      const cardWidth = Dimensions.get('window').width * 0.88 + SPACING.md;
       promoScrollViewRef.current.scrollTo({
         x: promoIndex * cardWidth,
         animated: true,
@@ -612,7 +723,7 @@ export const HomeScreen = ({ navigation }: any) => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchOrders(), fetchCategories()]);
+    await Promise.all([fetchOrders(), fetchCategories(), fetchShops()]);
     setRefreshing(false);
   };
 
@@ -738,34 +849,141 @@ export const HomeScreen = ({ navigation }: any) => {
         </TouchableOpacity>
 
         
-        {/* ── Promo Banner Slider ── */}
-        {banners && banners.length > 0 && (
-        <ScrollView
-          ref={promoScrollViewRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md }}
-        >
-          {banners.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              activeOpacity={0.9}
-              onPress={() => navigation.navigate('Booking')}
-              style={{ marginRight: index === banners.length - 1 ? 0 : SPACING.md }}
-            >
-              <Image
-                source={{ uri: resolveImageUrl(item.image) }}
-                style={{
-                  width: Dimensions.get('window').width * 0.85,
-                  height: 160,
-                  borderRadius: 16,
+        {/* ── Promo Banner Slider Cards (Managed via Admin Panel) ── */}
+        {(() => {
+          const list = (banners && banners.length > 0) ? banners : DEFAULT_BANNERS;
+          const screenWidth = Dimensions.get('window').width;
+          const cardWidth = Math.round(screenWidth * 0.90);
+          const cardHeight = 165;
+
+          return (
+            <View style={{ marginTop: SPACING.sm, marginBottom: SPACING.md }}>
+              <ScrollView
+                ref={promoScrollViewRef}
+                horizontal
+                pagingEnabled={false}
+                snapToInterval={cardWidth + SPACING.md}
+                decelerationRate="fast"
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: SPACING.xl, paddingVertical: 4 }}
+                onMomentumScrollEnd={(e) => {
+                  const scrollX = e.nativeEvent.contentOffset.x;
+                  const idx = Math.round(scrollX / (cardWidth + SPACING.md));
+                  setPromoIndex(Math.max(0, Math.min(idx, list.length - 1)));
                 }}
-                resizeMode="cover"
-              />
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-        )}
+              >
+                {list.map((item: any, index: number) => {
+                  return (
+                    <TouchableOpacity
+                      key={item.id ? `banner-${item.id}` : `banner-${index}`}
+                      activeOpacity={0.92}
+                      onPress={() => navigation.navigate('Booking')}
+                      style={{
+                        width: cardWidth,
+                        height: cardHeight,
+                        marginRight: index === list.length - 1 ? 0 : SPACING.md,
+                        borderRadius: 18,
+                        overflow: 'hidden',
+                        backgroundColor: '#321D8C',
+                        shadowColor: '#321D8C',
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.16,
+                        shadowRadius: 10,
+                        elevation: 5,
+                      }}
+                    >
+                      {/* Banner Image with Guaranteed Auto-Fallback */}
+                      <SafeBannerImage
+                        banner={item}
+                        index={index}
+                        cardWidth={cardWidth}
+                        cardHeight={cardHeight}
+                      />
+
+                      {/* Soft Bottom Gradient for crisp readable text without darkening the artwork */}
+                      <LinearGradient
+                        colors={['transparent', 'rgba(10,5,35,0.20)', 'rgba(10,5,35,0.72)']}
+                        locations={[0.45, 0.75, 1.0]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 0, y: 1 }}
+                        style={StyleSheet.absoluteFill}
+                      />
+
+                      {/* Top Tag Badge */}
+                      <View style={{ position: 'absolute', top: 12, left: 14 }}>
+                        <View style={{
+                          backgroundColor: item.tagColor || '#5B52E8',
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: 8,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                        }}>
+                          <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>
+                            {item.tag || 'FEATURED OFFER'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Bottom Banner Content */}
+                      <View style={{ position: 'absolute', bottom: 12, left: 14, right: 14, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                        <View style={{ flex: 1, marginRight: 10 }}>
+                          <Text
+                            style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '800', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4 }}
+                            numberOfLines={1}
+                          >
+                            {item.title || 'Special Laundry Discount'}
+                          </Text>
+                          {!!(item.subtitle || item.sub) && (
+                            <Text
+                              style={{ color: '#E0E7FF', fontSize: 11, fontWeight: '600', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 }}
+                              numberOfLines={1}
+                            >
+                              {item.subtitle || item.sub}
+                            </Text>
+                          )}
+                        </View>
+
+                        <View style={{
+                          backgroundColor: '#FFFFFF',
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 14,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                        }}>
+                          <Text style={{ color: '#321D8C', fontSize: 11, fontWeight: '800' }}>Book Now</Text>
+                          <Text style={{ color: '#321D8C', fontSize: 11, fontWeight: '800', marginLeft: 2 }}>→</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {/* Pagination Dots */}
+              {list.length > 1 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 8 }}>
+                  {list.map((_: any, idx: number) => {
+                    const isActive = promoIndex === idx;
+                    return (
+                      <View
+                        key={`dot-${idx}`}
+                        style={{
+                          width: isActive ? 16 : 6,
+                          height: 6,
+                          borderRadius: 3,
+                          backgroundColor: isActive ? '#5B52E8' : '#D1D5DB',
+                          marginHorizontal: 3,
+                        }}
+                      />
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          );
+        })()}
 
 
         {/* ── Recent Booking ── */}
@@ -910,7 +1128,14 @@ export const HomeScreen = ({ navigation }: any) => {
                   style={{ marginTop: 10, borderRadius: 10, overflow: 'hidden' }}
                   onPress={() => {
                     if (latestOrder?.id) {
-                      navigation.navigate('OrderDetail', { orderId: latestOrder.id, order: latestOrder });
+                      navigation.navigate('OrderDetail', {
+                        orderId: latestOrder.id,
+                        order: latestOrder,
+                        shopName: (latestOrder as any)?.shop_name || latestOrder?.shop?.name,
+                        ownerName: (latestOrder as any)?.owner_name || (latestOrder?.shop as any)?.owner_name,
+                        shopLocation: (latestOrder as any)?.shop_address || (latestOrder?.shop as any)?.address,
+                        shopPhone: (latestOrder as any)?.shop_phone || (latestOrder?.shop as any)?.phone,
+                      });
                     } else {
                       navigation.navigate('Orders');
                     }

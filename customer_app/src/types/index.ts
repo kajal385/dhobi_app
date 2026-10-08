@@ -23,7 +23,7 @@ export type OrderStatus =
 
 
 
-export type ServiceType = 'wash_fold' | 'dry_clean' | 'iron_only' | 'premium';
+export type ServiceType = 'wash_fold' | 'wash_iron' | 'dry_clean' | 'iron_only' | 'steam_iron' | 'premium';
 
 export type TransactionType = 'credit' | 'debit';
 
@@ -96,6 +96,11 @@ export interface Order {
   created_at: string;
   updated_at: string;
   shop?: Shop;
+  shop_id?: number;
+  shop_name?: string;
+  owner_name?: string;
+  shop_address?: string;
+  shop_phone?: string;
   delivery_boy?: DeliveryBoy;
   delivery_partner?: DeliveryBoy;
   delivery_boy_name?: string;
@@ -108,6 +113,8 @@ export interface Order {
 export interface Shop {
   id: number;
   name: string;
+  owner_name?: string;
+  phone?: string;
   logo?: string;
   rating: number;
   review_count: number;

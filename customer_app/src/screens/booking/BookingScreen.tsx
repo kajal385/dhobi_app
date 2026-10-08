@@ -180,10 +180,12 @@ const BookingScreenInner = ({ navigation, route }: any) => {
   const pickupDeliveryFee = itemsSubtotal > 199 ? 0 : 30; // Free above 199
   const totalAmount = itemsSubtotal + addonsSubtotal + pickupDeliveryFee;
 
-  // ── Shop Info (component-level so step 6 can access them) ─────────────────
-  const targetShopId = Number(route.params?.shopId || route.params?.shop_id || 1);
-  const targetShop = route.params?.shop || route.params?.reorderShop || DEFAULT_SHOPS.find(s => s.id === targetShopId) || null;
-  const targetShopName = route.params?.shopName || route.params?.shop_name || (targetShop as any)?.name || 'DhobiPro Express Laundry';
+  // ── Shop Info (component-level so step 1, 3, 6 can access them) ─────────────────
+  const targetShopId = Number(route.params?.shopId || route.params?.shop_id || (route.params?.shop?.id) || 44);
+  const targetShop = route.params?.shop || route.params?.reorderShop || DEFAULT_SHOPS.find(s => s.id === targetShopId) || DEFAULT_SHOPS[0];
+  const targetShopName = route.params?.shopName || route.params?.shop_name || (targetShop as any)?.name || 'Star Wash Ultra Premium';
+  const targetOwnerName = route.params?.ownerName || route.params?.owner_name || (targetShop as any)?.owner_name || (targetShop as any)?.ownerName || 'Ashish Bhosale';
+  const targetShopAddress = route.params?.shopLocation || route.params?.shop_location || route.params?.shop_address || route.params?.location || (targetShop as any)?.address || (targetShop as any)?.location || 'Tathawade,pune';
 
   React.useEffect(() => {
     loadAddresses();
@@ -335,8 +337,17 @@ const BookingScreenInner = ({ navigation, route }: any) => {
       const order = await orderService.createOrder({
         shop_id: targetShopId,
         shop_name: targetShopName,
-        shop: targetShop,
-        shop_address: targetShop?.address,
+        owner_name: targetOwnerName,
+        shop: {
+          ...(targetShop || {}),
+          id: targetShopId,
+          name: targetShopName,
+          owner_name: targetOwnerName,
+          address: targetShopAddress,
+          phone: (targetShop as any)?.phone || '9876543210',
+        },
+        shop_address: targetShopAddress,
+        shop_phone: (targetShop as any)?.phone || '9876543210',
         user_id: user?.id,
         customer_name: user?.name || 'Kajal Gajare',
         customer_mobile: user?.phone || '9309386003',
@@ -359,7 +370,22 @@ const BookingScreenInner = ({ navigation, route }: any) => {
         throw new Error('Invalid response from server');
       }
       // Deep-clone so Redux/Immer can freely draft the object (mock objects may be non-extensible)
-      const safeOrder = JSON.parse(JSON.stringify(order));
+      const safeOrder = JSON.parse(JSON.stringify({
+        ...order,
+        shop_id: targetShopId,
+        shop_name: targetShopName,
+        owner_name: targetOwnerName,
+        shop_address: targetShopAddress,
+        shop_phone: (targetShop as any)?.phone || '9876543210',
+        shop: {
+          ...(order?.shop || {}),
+          id: targetShopId,
+          name: targetShopName,
+          owner_name: targetOwnerName,
+          address: targetShopAddress,
+          phone: (targetShop as any)?.phone || '9876543210',
+        },
+      }));
       dispatch(addOrder(safeOrder));
       setPlacedOrder(safeOrder);
       setStep(6); // Navigate to Order Confirmed
@@ -413,6 +439,33 @@ const BookingScreenInner = ({ navigation, route }: any) => {
         {renderHeader('New Laundry Order', 'What do you need?')}
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          {/* Selected Laundry Store & Owner Card */}
+          <View style={[styles.selectedShopCard, { backgroundColor: colors.card, borderColor: '#5B52E8' }]}>
+            <View style={styles.selectedShopCardHeader}>
+              <View style={styles.selectedShopBadge}>
+                <Text style={styles.selectedShopBadgeText}>SELECTED LAUNDRY STORE</Text>
+              </View>
+            </View>
+            <View style={styles.selectedShopRow}>
+              <View style={styles.selectedShopIconCircle}>
+                <MaterialCommunityIcons name="storefront-outline" size={24} color="#5B52E8" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.selectedShopName, { color: colors.text }]}>{targetShopName}</Text>
+                {targetOwnerName ? (
+                  <Text style={[styles.selectedShopOwner, { color: colors.textSecondary }]}>
+                    👤 Owner: <Text style={{ fontWeight: '700', color: colors.text }}>{targetOwnerName}</Text>
+                  </Text>
+                ) : null}
+                {targetShopAddress ? (
+                  <Text style={[styles.selectedShopAddress, { color: colors.textSecondary }]} numberOfLines={1}>
+                    📍 {targetShopAddress}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </View>
+
           <View style={styles.servicesContainer}>
             {SERVICES.map(service => {
               const isSelected = activeService === service.key;
@@ -584,6 +637,33 @@ const BookingScreenInner = ({ navigation, route }: any) => {
               </View>
             </View>
           )}
+          {/* Selected Laundry Store & Owner Card */}
+          <View style={[styles.selectedShopCard, { backgroundColor: colors.card, borderColor: '#5B52E8' }]}>
+            <View style={styles.selectedShopCardHeader}>
+              <View style={styles.selectedShopBadge}>
+                <Text style={styles.selectedShopBadgeText}>SELECTED LAUNDRY STORE</Text>
+              </View>
+            </View>
+            <View style={styles.selectedShopRow}>
+              <View style={styles.selectedShopIconCircle}>
+                <MaterialCommunityIcons name="storefront-outline" size={24} color="#5B52E8" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.selectedShopName, { color: colors.text }]}>{targetShopName}</Text>
+                {targetOwnerName ? (
+                  <Text style={[styles.selectedShopOwner, { color: colors.textSecondary }]}>
+                    👤 Owner: <Text style={{ fontWeight: '700', color: colors.text }}>{targetOwnerName}</Text>
+                  </Text>
+                ) : null}
+                {targetShopAddress ? (
+                  <Text style={[styles.selectedShopAddress, { color: colors.textSecondary }]} numberOfLines={1}>
+                    📍 {targetShopAddress}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </View>
+
           {/* Selected Service Card */}
           <View style={[styles.reviewServiceCard, { backgroundColor: colors.card }]}>
 
@@ -960,6 +1040,12 @@ const BookingScreenInner = ({ navigation, route }: any) => {
               <Text style={{ color: colors.textSecondary }}>Laundry Store</Text>
               <Text style={[{ color: colors.text }, styles.boldText]}>{targetShopName}</Text>
             </View>
+            {targetOwnerName ? (
+              <View style={styles.confirmedDetailRow}>
+                <Text style={{ color: colors.textSecondary }}>Owner Name</Text>
+                <Text style={[{ color: colors.text }, styles.boldText]}>{targetOwnerName}</Text>
+              </View>
+            ) : null}
             <View style={styles.confirmedDetailRow}>
               <Text style={{ color: colors.textSecondary }}>Pickup</Text>
               <Text style={[{ color: colors.text }, styles.boldText]}>Today, {selectedSlot}</Text>
@@ -977,11 +1063,29 @@ const BookingScreenInner = ({ navigation, route }: any) => {
             activeOpacity={0.85}
             onPress={() => {
               if (placedOrder) {
+                const completeShopObj = {
+                  id: targetShopId,
+                  name: targetShopName,
+                  owner_name: targetOwnerName,
+                  address: targetShopAddress,
+                  phone: (targetShop as any)?.phone || '9876543210',
+                };
+                const orderWithShop = {
+                  ...placedOrder,
+                  shop_name: targetShopName,
+                  owner_name: targetOwnerName,
+                  shop_address: targetShopAddress,
+                  shop_phone: (targetShop as any)?.phone || '9876543210',
+                  shop: completeShopObj,
+                };
                 navigation.navigate('Tracking', {
                   orderId: placedOrder.id,
-                  order: placedOrder,
+                  order: orderWithShop,
                   shopName: targetShopName,
-                  shop: targetShop,
+                  ownerName: targetOwnerName,
+                  shopLocation: targetShopAddress,
+                  shopPhone: (targetShop as any)?.phone || '9876543210',
+                  shop: completeShopObj,
                 });
               } else {
                 navigation.navigate('MainTabs', { screen: 'Orders' });
@@ -1104,6 +1208,61 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: SPACING.xl,
     paddingBottom: 40,
+  },
+  selectedShopCard: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.sm,
+    shadowColor: '#5B52E8',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  selectedShopCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  selectedShopBadge: {
+    backgroundColor: '#EDE8FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  selectedShopBadgeText: {
+    color: '#5B52E8',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  selectedShopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectedShopIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F3F0FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedShopName: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  selectedShopOwner: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  selectedShopAddress: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   servicesContainer: {
     marginTop: SPACING.md,

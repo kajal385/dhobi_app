@@ -15,5 +15,5 @@ echo ===================================================
 :: Open browser with clean URL after server initializes
 start "" cmd /c "timeout /t 1 /nobreak >nul & start http://127.0.0.1:8080/auth/login.php"
 
-php -S 127.0.0.1:8080 -t "%~dp0"
+php -d upload_max_filesize=512M -d post_max_size=512M -d memory_limit=512M -d max_execution_time=300 -d max_input_time=300 -S 0.0.0.0:8080 -t "%~dp0"
 pause

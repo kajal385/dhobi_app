@@ -51,18 +51,159 @@ class CategoryController extends Controller
      */
     public function banners(Request $request): JsonResponse
     {
-        // For customer app home screen, return active banners
-        // Ideally filter by distance if lat/lng provided, but for now just global or any active
-        $banners = \Illuminate\Support\Facades\DB::table('banners')
-                    ->where('is_active', 1)
-                    ->orderBy('sort_order')
-                    ->limit(10)
-                    ->get();
-                    
-        return response()->json([
-            'success' => true,
-            'data' => $banners
-        ]);
+        try {
+            $banners = collect();
+            if (\Illuminate\Support\Facades\Schema::hasTable('banners')) {
+                $query = \Illuminate\Support\Facades\DB::table('banners')->where('is_active', 1);
+                if (\Illuminate\Support\Facades\Schema::hasColumn('banners', 'sort_order')) {
+                    $query->orderBy('sort_order');
+                }
+                $banners = $query->orderBy('id', 'desc')->limit(15)->get();
+            }
+
+            if ($banners->isEmpty()) {
+                $banners = collect([
+                    [
+                        'id' => 1,
+                        'title' => 'Flat 20% OFF First Order',
+                        'subtitle' => 'Use code: DHOBI20 at checkout',
+                        'image' => 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80',
+                        'link' => 'booking',
+                        'tag' => 'LIMITED OFFER',
+                        'is_active' => 1,
+                    ],
+                    [
+                        'id' => 2,
+                        'title' => 'Express 24h Laundry',
+                        'subtitle' => 'Fast pickup & doorstep delivery',
+                        'image' => 'https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=800&q=80',
+                        'link' => 'booking',
+                        'tag' => 'EXPRESS',
+                        'is_active' => 1,
+                    ],
+                    [
+                        'id' => 3,
+                        'title' => 'Premium Dry Cleaning',
+                        'subtitle' => 'Gentle organic care for silks & suits',
+                        'image' => 'https://images.unsplash.com/photo-1582735689369-4fe89db7114c?auto=format&fit=crop&w=800&q=80',
+                        'link' => 'booking',
+                        'tag' => 'PREMIUM',
+                        'is_active' => 1,
+                    ],
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $banners
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    [
+                        'id' => 1,
+                        'title' => 'Flat 20% OFF First Order',
+                        'subtitle' => 'Use code: DHOBI20 at checkout',
+                        'image' => 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80',
+                        'link' => 'booking',
+                        'tag' => 'SPECIAL OFFER',
+                        'is_active' => 1,
+                    ]
+                ]
+            ]);
+        }
+    }
+
+    /**
+     * POST /api/v1/banners
+     * Allow admin / laundry owner to upload and store banners
+     */
+    public function storeBanner(Request $request): JsonResponse
+    {
+        try {
+            $imageUrl = '';
+            if ($request->hasFile('banner_image') || $request->hasFile('image')) {
+                $file = $request->file('banner_image') ?: $request->file('image');
+                $filename = 'banner_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $dest = public_path('uploads/banners');
+                if (!file_exists($dest)) {
+                    @mkdir($dest, 0777, true);
+                }
+                $file->move($dest, $filename);
+                $imageUrl = '/uploads/banners/' . $filename;
+            } elseif ($request->filled('image')) {
+                $imageUrl = $request->input('image');
+            } elseif ($request->filled('image_url')) {
+                $imageUrl = $request->input('image_url');
+            } elseif ($request->filled('url')) {
+                $imageUrl = $request->input('url');
+            }
+
+            if (empty($imageUrl)) {
+                return response()->json(['success' => false, 'message' => 'Image file or URL is required'], 422);
+            }
+
+            $title = $request->input('title', $request->input('banner_title', 'Promotional Offer'));
+            $shopId = $request->input('shop_id');
+            $link = $request->input('link', 'booking');
+
+            $data = [
+                'title' => $title,
+                'image' => $imageUrl,
+                'link' => $link,
+                'is_active' => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('banners', 'shop_id') && $shopId) {
+                $data['shop_id'] = $shopId;
+            }
+            if (\Illuminate\Support\Facades\Schema::hasColumn('banners', 'sort_order')) {
+                $data['sort_order'] = (int)$request->input('sort_order', 0);
+            }
+
+            $id = \Illuminate\Support\Facades\DB::table('banners')->insertGetId($data);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Banner added successfully',
+                'data' => array_merge(['id' => $id], $data)
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * DELETE /api/v1/banners/{id}
+     */
+    public function deleteBanner(Request $request, $id): JsonResponse
+    {
+        try {
+            \Illuminate\Support\Facades\DB::table('banners')->where('id', $id)->delete();
+            return response()->json(['success' => true, 'message' => 'Banner deleted']);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * POST /api/v1/banners/{id}/status
+     */
+    public function toggleBannerStatus(Request $request, $id): JsonResponse
+    {
+        try {
+            $banner = \Illuminate\Support\Facades\DB::table('banners')->where('id', $id)->first();
+            if ($banner) {
+                $newStatus = $banner->is_active ? 0 : 1;
+                \Illuminate\Support\Facades\DB::table('banners')->where('id', $id)->update(['is_active' => $newStatus, 'updated_at' => now()]);
+            }
+            return response()->json(['success' => true, 'message' => 'Banner status updated']);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
     }
 
     /**

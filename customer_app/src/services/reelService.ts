@@ -2,18 +2,21 @@ import client from '../api/client';
 
 export interface Reel {
   id: string;
+  shopId?: string;
   shopName: string;
   video_url: string;
   thumbnail_url?: string;
+  ownerName?: string;
+  location?: string;
   caption?: string;
   offer?: string;
-  likes: number;
-  shares: number;
-  service: string;
-  bg: string;
-  isLiked: boolean;
-  isSaved: boolean;
-  isFollowing: boolean;
+  likes?: number;
+  shares?: number;
+  service?: string;
+  bg?: string;
+  isLiked?: boolean;
+  isSaved?: boolean;
+  isFollowing?: boolean;
 }
 
 export const FALLBACK_REELS: Reel[] = [
@@ -64,18 +67,28 @@ export const FALLBACK_REELS: Reel[] = [
   },
 ];
 
+import defaultReels from '../constants/reels.json';
+
 export const reelService = {
   getReels: async (): Promise<Reel[]> => {
+    const localReels: Reel[] = Array.isArray(defaultReels) ? (defaultReels as Reel[]) : [];
     try {
       const response = await client.get('/reels');
       const items = response.data?.data;
       if (Array.isArray(items) && items.length > 0) {
-        return items;
+        // Merge: local reels first, followed by remote reels not already included
+        const merged: Reel[] = [...localReels];
+        for (const remote of items) {
+          if (!merged.some(m => m.id === remote.id || m.video_url === remote.video_url)) {
+            merged.push(remote);
+          }
+        }
+        return merged;
       }
-      return FALLBACK_REELS;
+      return localReels.length > 0 ? localReels : FALLBACK_REELS;
     } catch (error) {
-      console.warn('Backend reels unavailable, loading fallback videos:', error);
-      return FALLBACK_REELS;
+      console.warn('Backend reels unavailable, loading local reels.json:', error);
+      return localReels.length > 0 ? localReels : FALLBACK_REELS;
     }
   },
 };

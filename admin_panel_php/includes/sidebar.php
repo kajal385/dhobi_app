@@ -192,6 +192,12 @@ $isLaundryActive = isSidebarActive('/laundries/', $currentUri);
         <i data-lucide="smartphone" style="width: 18px; height: 18px; color: <?= $active ? '#FFF' : '#0EA5E9' ?>;"></i>
         <span class="nav-text">Customer App</span>
       </a>
+    <?php else: ?>
+      <?php $active = isSidebarActive('/shop-app/', $currentUri); ?>
+      <a href="<?= ADMIN_BASE_URL ?>/shop-app/index.php" class="nav-item <?= $active ? 'active' : '' ?>" title="App Banners & Sliders">
+        <i data-lucide="smartphone" style="width: 18px; height: 18px; color: <?= $active ? '#FFF' : '#0EA5E9' ?>;"></i>
+        <span class="nav-text">App Banners &amp; Sliders</span>
+      </a>
     <?php endif; ?>
 
     <!-- Super Admin Only: Reports & Analytics -->

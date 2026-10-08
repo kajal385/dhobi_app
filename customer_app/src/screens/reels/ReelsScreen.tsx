@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,11 @@ import {
   TouchableOpacity,
   StatusBar,
   useColorScheme,
-  Share,
   ActivityIndicator,
   Image,
-  Linking,
 } from 'react-native';
+import Video from 'react-native-video';
+import { useIsFocused } from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
 import Toast from 'react-native-toast-message';
@@ -22,10 +22,13 @@ import { resolveImageUrl } from '../../constants/config';
 const { width, height } = Dimensions.get('window');
 
 export const ReelsScreen = ({ navigation }: any) => {
+  const isFocused = useIsFocused();
   const isDark = useColorScheme() === 'dark';
   const colors = isDark ? DARK_COLORS : COLORS;
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
     fetchReels();
@@ -34,12 +37,23 @@ export const ReelsScreen = ({ navigation }: any) => {
   const isVideoFile = (url?: string) => {
     if (!url) return false;
     const clean = url.toLowerCase().split('?')[0];
-    return clean.endsWith('.mp4') || clean.endsWith('.mov') || clean.endsWith('.webm') || clean.includes('/videos/') || clean.includes('video');
+    return (
+      clean.endsWith('.mp4') ||
+      clean.endsWith('.mov') ||
+      clean.endsWith('.webm') ||
+      clean.endsWith('.mkv') ||
+      clean.includes('/videos/') ||
+      clean.includes('video') ||
+      clean.includes('mixkit') ||
+      clean.includes('youtube') ||
+      clean.includes('youtu.be') ||
+      clean.includes('vimeo')
+    );
   };
 
   const fetchReels = async () => {
     try {
-      setLoading(true);
+      if (!refreshing) setLoading(true);
       const data = await reelService.getReels();
       // Only keep items that have a real playable video URL
       const videoOnly = (data || []).filter((item: Reel) => isVideoFile(item.video_url));
@@ -51,173 +65,131 @@ export const ReelsScreen = ({ navigation }: any) => {
       });
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const handlePlayVideo = async (url: string) => {
-    try {
-      if (!url) {
-        Toast.show({ type: 'info', text1: 'Video unavailable' });
-        return;
-      }
-      const resolved = resolveImageUrl(url);
-      const targetUrl = resolved || url;
-      
-      Toast.show({ type: 'info', text1: 'Playing Video 🎬', text2: 'Opening in video player...' });
-      const canOpen = await Linking.canOpenURL(targetUrl);
-      if (canOpen) {
-        await Linking.openURL(targetUrl);
-      } else {
-        await Linking.openURL(url);
-      }
-    } catch (e: any) {
-      Linking.openURL(url).catch(() => {
-        Toast.show({ type: 'error', text1: 'Could not open video player' });
-      });
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchReels();
+  };
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+    if (viewableItems && viewableItems.length > 0) {
+      setCurrentIndex(viewableItems[0].index ?? 0);
     }
+  }).current;
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 60,
+  }).current;
+
+  const decodeHtml = (str?: string) => {
+    if (!str) return '';
+    return str
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;/g, "'")
+      .replace(/&nbsp;/g, ' ');
   };
 
-  const handleLike = (id: string) => {
-    setReels(prev =>
-      prev.map(item => {
-        if (item.id === id) {
-          const newLiked = !item.isLiked;
-          return {
-            ...item,
-            isLiked: newLiked,
-            likes: newLiked ? item.likes + 1 : item.likes - 1,
-          };
-        }
-        return item;
-      })
-    );
-  };
-
-  const handleSave = (id: string) => {
-    setReels(prev =>
-      prev.map(item => {
-        if (item.id === id) {
-          const newSaved = !item.isSaved;
-          Toast.show({
-            type: 'success',
-            text1: newSaved ? 'Saved to collection' : 'Removed from saved',
-          });
-          return { ...item, isSaved: newSaved };
-        }
-        return item;
-      })
-    );
-  };
-
-  const handleFollow = (id: string) => {
-    setReels(prev =>
-      prev.map(item => {
-        if (item.id === id) {
-          const newFollow = !item.isFollowing;
-          Toast.show({
-            type: 'success',
-            text1: newFollow ? `Following ${item.shopName}` : `Unfollowed ${item.shopName}`,
-          });
-          return { ...item, isFollowing: newFollow };
-        }
-        return item;
-      })
-    );
-  };
-
-  const handleShare = async (item: Reel) => {
-    try {
-      await Share.share({
-        message: `Check out ${item.shopName}'s service: ${item.service}! Offer: ${item.offer}. Book now on DhobiPro!`,
-      });
-    } catch (e: any) {
-      console.log(e.message);
-    }
-  };
-
-  const renderReelItem = ({ item }: { item: Reel }) => {
+  const renderReelItem = ({ item, index }: { item: Reel; index: number }) => {
+    const isCurrent = isFocused && currentIndex === index;
     const videoToPlay = item.video_url || '';
     const rawPoster = item.thumbnail_url || (!isVideoFile(item.video_url) ? item.video_url : null);
     const resolvedPoster = rawPoster ? resolveImageUrl(rawPoster) : 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800&auto=format&fit=crop&q=80';
 
+    let fullVideoUrl = resolveImageUrl(videoToPlay) || videoToPlay;
+    if (!fullVideoUrl.startsWith('http://') && !fullVideoUrl.startsWith('https://')) {
+      const clean = fullVideoUrl.startsWith('/') ? fullVideoUrl : `/${fullVideoUrl}`;
+      fullVideoUrl = `http://192.168.1.21:8080${clean}`;
+    }
+
+    const hasVideo = isVideoFile(fullVideoUrl);
+
     return (
       <View style={[styles.reelContainer, { backgroundColor: '#000' }]}>
-        <Image
-          source={{ uri: resolvedPoster }}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-        />
+        {hasVideo ? (
+          <Video
+            source={{ uri: fullVideoUrl }}
+            poster={resolvedPoster}
+            posterResizeMode="cover"
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            repeat={true}
+            paused={!isCurrent}
+            muted={false}
+            playInBackground={false}
+            playWhenInactive={false}
+            ignoreSilentSwitch="ignore"
+            onError={(e: any) => console.log('Video error:', e)}
+          />
+        ) : (
+          <Image
+            source={{ uri: resolvedPoster }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
+        )}
 
         <LinearGradient
-          colors={['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.88)']}
+          colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.85)']}
           style={styles.overlay}
         >
-          {/* Main Tap-To-Play Area */}
-          <TouchableOpacity
-            style={styles.centerGraphics}
-            activeOpacity={0.8}
-            onPress={() => handlePlayVideo(videoToPlay)}
-          >
-            <View style={styles.playBtnCircle}>
-              <Text style={styles.playIconText}>▶</Text>
-            </View>
-            <View style={styles.playPillBadge}>
-              <Text style={styles.graphicsText}>Tap to Play Video</Text>
-            </View>
-          </TouchableOpacity>
+          {/* Bottom Container: Left Info + Right Side Bottom Book Now Button */}
+          <View style={styles.bottomRow}>
+            {/* Left Info Panel: Laundry Name, Owner Name, Location */}
+            <View style={styles.leftInfoPanel}>
+              {/* Laundry Shop Name */}
+              <Text style={styles.shopName} numberOfLines={1}>{decodeHtml(item.shopName || item.caption)}</Text>
 
-          {/* Left Side Info Panel */}
-          <View style={styles.leftInfoPanel}>
-            <View style={styles.shopRow}>
-              <Text style={styles.shopName}>{item.shopName}</Text>
-              <TouchableOpacity
-                onPress={() => handleFollow(item.id)}
-                style={[
-                  styles.followBtn,
-                  { backgroundColor: item.isFollowing ? 'rgba(255,255,255,0.2)' : colors.primary },
-                ]}
-              >
-                <Text style={styles.followBtnText}>
-                  {item.isFollowing ? 'Following' : 'Follow'}
+              {/* Owner Name at laundry shop */}
+              {item.ownerName ? (
+                <Text style={styles.ownerText} numberOfLines={1}>
+                  👤 Owner: {decodeHtml(item.ownerName)}
                 </Text>
-              </TouchableOpacity>
+              ) : null}
+
+              {/* Location that laundry */}
+              {item.location ? (
+                <View style={styles.locationRow}>
+                  <Text style={styles.locationText} numberOfLines={1}>📍 {decodeHtml(item.location)}</Text>
+                </View>
+              ) : null}
             </View>
 
-            <Text style={styles.description}>{item.service}</Text>
-            {item.offer ? (
-              <View style={styles.offerBadge}>
-                <Text style={styles.offerText}>🎉 {item.offer}</Text>
-              </View>
-            ) : null}
-
-            {/* Book Now Button */}
+            {/* Book Now Button on Right Side Bottom */}
             <TouchableOpacity
-              activeOpacity={0.8}
+              activeOpacity={0.85}
               style={[styles.bookBtn, { backgroundColor: colors.accent }]}
-              onPress={() => navigation.navigate('Booking', { shopName: item.shopName })}
+              onPress={() => {
+                const shopIdNum = item.shopId ? Number(item.shopId) : 44;
+                navigation.navigate('Booking', {
+                  shopId: shopIdNum,
+                  shop_id: shopIdNum,
+                  shopName: item.shopName || 'Star Wash Ultra Premium',
+                  shop_name: item.shopName || 'Star Wash Ultra Premium',
+                  ownerName: item.ownerName || 'Ashish Bhosale',
+                  owner_name: item.ownerName || 'Ashish Bhosale',
+                  shopLocation: item.location || 'Tathawade, Pune',
+                  shop_address: item.location || 'Tathawade, Pune',
+                  shopPhone: '9876543210',
+                  shop_phone: '9876543210',
+                  shop: {
+                    id: shopIdNum,
+                    name: item.shopName || 'Star Wash Ultra Premium',
+                    owner_name: item.ownerName || 'Ashish Bhosale',
+                    address: item.location || 'Tathawade, Pune',
+                    phone: '9876543210',
+                    rating: 4.9,
+                    review_count: 28,
+                  },
+                });
+              }}
             >
               <Text style={styles.bookBtnText}>Book Now</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Right Side Buttons Panel */}
-          <View style={styles.rightButtonsPanel}>
-            {/* Like */}
-            <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(item.id)}>
-              <Text style={styles.actionEmoji}>{item.isLiked ? '❤️' : '🤍'}</Text>
-              <Text style={styles.actionCount}>{item.likes}</Text>
-            </TouchableOpacity>
-
-            {/* Comment/Share */}
-            <TouchableOpacity style={styles.actionBtn} onPress={() => handleShare(item)}>
-              <Text style={styles.actionEmoji}>✈️</Text>
-              <Text style={styles.actionCount}>Share</Text>
-            </TouchableOpacity>
-
-            {/* Save */}
-            <TouchableOpacity style={styles.actionBtn} onPress={() => handleSave(item.id)}>
-              <Text style={styles.actionEmoji}>{item.isSaved ? '⭐️' : '☆'}</Text>
-              <Text style={styles.actionCount}>Save</Text>
             </TouchableOpacity>
           </View>
         </LinearGradient>
@@ -248,6 +220,10 @@ export const ReelsScreen = ({ navigation }: any) => {
           snapToInterval={height - 60}
           snapToAlignment="start"
           decelerationRate="fast"
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
         />
       )}
     </View>
@@ -273,126 +249,66 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     padding: SPACING.lg,
   },
-  centerGraphics: {
-    position: 'absolute',
-    top: '30%',
-    alignSelf: 'center',
-    alignItems: 'center',
-  },
-  playBtnCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(232, 100, 58, 0.85)',
-    borderWidth: 2.5,
-    borderColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACING.sm,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  playIconText: {
-    color: '#FFF',
-    fontSize: 32,
-    marginLeft: 4,
-  },
-  playPillBadge: {
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  graphicsEmoji: {
-    fontSize: 40,
-    marginLeft: 4,
-  },
-  graphicsText: {
-    color: '#FFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  leftInfoPanel: {
-    width: '80%',
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    width: '100%',
     marginBottom: SPACING.xl,
   },
-  shopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.xs,
+  leftInfoPanel: {
+    flex: 1,
+    paddingRight: SPACING.md,
   },
   shopName: {
     color: '#FFF',
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '800',
-    marginRight: SPACING.md,
+    marginBottom: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.85)',
+    textShadowOffset: { width: 0, height: 1.5 },
+    textShadowRadius: 4,
   },
-  followBtn: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: SIZES.radius_sm,
+  ownerText: {
+    color: '#F3F4F6',
+    fontSize: 13.5,
+    fontWeight: '600',
+    marginBottom: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
-  followBtnText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '700',
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
   },
-  description: {
-    color: '#E0E0E0',
-    fontSize: 14,
-    marginBottom: SPACING.md,
-  },
-  offerBadge: {
-    backgroundColor: 'rgba(232, 100, 58, 0.25)',
-    borderWidth: 1,
-    borderColor: '#E8643A',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs + 2,
-    borderRadius: SIZES.radius_full,
-    alignSelf: 'flex-start',
-    marginBottom: SPACING.lg,
-  },
-  offerText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '700',
+  locationText: {
+    color: '#E5E7EB',
+    fontSize: 12.5,
+    fontWeight: '500',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   bookBtn: {
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.xl,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
     borderRadius: SIZES.radius_lg,
     alignItems: 'center',
-    width: 160,
+    justifyContent: 'center',
+    minWidth: 120,
+    marginBottom: 2,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
   },
   bookBtnText: {
     color: '#FFF',
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: '800',
   },
-  rightButtonsPanel: {
-    position: 'absolute',
-    right: SPACING.lg,
-    bottom: SPACING.xxl + 40,
-    alignItems: 'center',
-    gap: SPACING.xl,
-  },
-  actionBtn: {
-    alignItems: 'center',
-  },
-  actionEmoji: {
-    fontSize: 28,
-  },
-  actionCount: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 4,
-  },
 });
-
 export default ReelsScreen;

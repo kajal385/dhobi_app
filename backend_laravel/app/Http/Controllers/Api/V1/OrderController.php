@@ -125,6 +125,22 @@ class OrderController extends Controller
 
             // Resolve Shop
             $shopId = $request->input('shop_id') ?? $request->input('laundry_id') ?? $request->input('laundry_shop_id');
+            $requestedShopName = $request->input('shop_name');
+            $requestedOwnerName = $request->input('owner_name');
+
+            if ($requestedShopName && (!$shopId || !LaundryShop::where('id', $shopId)->exists())) {
+                $matchedShop = LaundryShop::where('name', 'LIKE', '%' . $requestedShopName . '%')->first();
+                if ($matchedShop) {
+                    $shopId = $matchedShop->id;
+                }
+            }
+            if ($requestedOwnerName && (!$shopId || !LaundryShop::where('id', $shopId)->exists())) {
+                $matchedOwner = LaundryShop::where('owner_name', 'LIKE', '%' . $requestedOwnerName . '%')->first();
+                if ($matchedOwner) {
+                    $shopId = $matchedOwner->id;
+                }
+            }
+
             if (!$shopId || !LaundryShop::where('id', $shopId)->exists()) {
                 $activeShop = LaundryShop::where('city', 'Pune')->first() ?? LaundryShop::where('is_active', 1)->first() ?? LaundryShop::first();
                 $shopId = $activeShop ? $activeShop->id : 1;
