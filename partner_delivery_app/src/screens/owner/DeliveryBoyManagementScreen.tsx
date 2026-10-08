@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   Modal,
   Alert,
+  RefreshControl,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppCard } from '../../components/AppCard';
@@ -19,6 +21,7 @@ import { partnerService } from '../../services/partnerService';
 import { apiClient } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import { getOrderStatusMeta } from './OrderManagementScreen';
 
 export const DeliveryBoyManagementScreen = () => {
   const insets = useSafeAreaInsets();
@@ -33,6 +36,8 @@ export const DeliveryBoyManagementScreen = () => {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignTargetBoy, setAssignTargetBoy] = useState<any>(null);
   const [unassignedOrders, setUnassignedOrders] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [assignFilterTab, setAssignFilterTab] = useState<'unassigned' | 'all'>('unassigned');
 
   const refreshBoys = useCallback(async () => {
     try {
@@ -61,15 +66,26 @@ export const DeliveryBoyManagementScreen = () => {
         setShopOrders(apiOrders);
 
         const unassigned = apiOrders
-          .filter((o: any) => !o.delivery_boy_id && String(o.status || '').toUpperCase() !== 'CANCELLED' && String(o.status || '').toUpperCase() !== 'COMPLETED')
+          .filter((o: any) => {
+            const hasBoy = o.delivery_boy_id || o.delivery_partner_id || o.deliveryPartner?.id || o.delivery_boy?.id;
+            const st = String(o.status || '').toUpperCase();
+            return !hasBoy && st !== 'CANCELLED' && st !== 'COMPLETED' && st !== 'DELIVERED';
+          })
           .map((o: any) => ({
             id: o.order_number || `ORD-${o.id}`,
             numericId: o.id,
             customer: o.customer?.name || o.customer_name || 'Customer',
+            phone: o.customer?.phone || o.customer_phone || 'N/A',
             address: o.pickup_address || o.delivery_address || 'Pune',
             items: Array.isArray(o.items) && o.items.length > 0
               ? o.items.map((i: any) => `${i.item_name || i.service_name || 'Item'} (${i.quantity || 1})`).join(', ')
-              : `Order Total: ₹${o.total_amount || 0}`,
+              : 'Laundry Service',
+            amount: `₹${o.total_amount || 0}`,
+            status: o.status || 'Received',
+            rawStatus: o.status,
+            paymentStatus: String(o.payment_status || '').toUpperCase() === 'PAID' ? 'Paid' : 'Unpaid',
+            deliveryBoyId: o.delivery_boy_id || o.delivery_partner_id,
+            deliveryBoyName: o.delivery_partner?.name || o.deliveryPartner?.name || o.delivery_boy?.name || null,
           }));
 
         setUnassignedOrders(unassigned);
@@ -81,6 +97,12 @@ export const DeliveryBoyManagementScreen = () => {
 
   useEffect(() => {
     refreshBoys();
+  }, [refreshBoys]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshBoys();
+    setRefreshing(false);
   }, [refreshBoys]);
 
   // New Boy Form
@@ -172,7 +194,18 @@ export const DeliveryBoyManagementScreen = () => {
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.primary]}
+              tintColor={COLORS.primary}
+            />
+          }
+        >
           {/* Summary Stats Row */}
           <View style={styles.summaryRow}>
             <AppCard style={styles.sumCard}>
@@ -411,13 +444,22 @@ export const DeliveryBoyManagementScreen = () => {
                     </View>
                   </View>
 
-                  {/* Comprehensive Assigned Orders & Stats inside Modal */}
+                  {/* Comprehensive Assigned Orders & Order Related Cards inside Modal */}
                   {(() => {
-                    const boyId = String(selectedBoy.raw_id || selectedBoy.numericId || selectedBoy.id || '').replace('BOY-', '');
-                    const boyUserId = String(selectedBoy.user_id || selectedBoy.userId || '');
+                    const boyId = String(selectedBoy.raw_id || selectedBoy.numericId || selectedBoy.id || '').replace('BOY-', '').trim();
+                    const boyUserId = String(selectedBoy.user_id || selectedBoy.userId || '').trim();
+                    const boyName = String(selectedBoy.name || '').trim().toLowerCase();
+                    const boyPhone = String(selectedBoy.phone || '').replace(/\D/g, '');
+
                     const assigned = shopOrders.filter((o: any) => {
-                      const targetId = String(o.delivery_boy_id ?? o.deliveryPartner?.id ?? '').replace('BOY-', '');
-                      return targetId && (targetId === boyId || targetId === boyUserId);
+                      const assignedBoyId = String(o.delivery_boy_id ?? o.delivery_partner_id ?? o.deliveryPartner?.id ?? o.delivery_boy?.id ?? '').replace('BOY-', '').trim();
+                      const assignedName = String(o.delivery_partner?.name || o.deliveryPartner?.name || o.delivery_boy?.name || o.deliveryBoy || '').trim().toLowerCase();
+                      const assignedPhone = String(o.delivery_partner?.phone || o.deliveryPartner?.phone || o.delivery_boy?.phone || '').replace(/\D/g, '');
+
+                      if (assignedBoyId && (assignedBoyId === boyId || (boyUserId && assignedBoyId === boyUserId))) return true;
+                      if (boyName && assignedName && (assignedName === boyName || assignedName.includes(boyName) || boyName.includes(assignedName))) return true;
+                      if (boyPhone && assignedPhone && (boyPhone === assignedPhone || assignedPhone.endsWith(boyPhone) || boyPhone.endsWith(assignedPhone))) return true;
+                      return false;
                     });
 
                     let completed = 0, pickup = 0, delivery = 0, pending = 0;
@@ -459,35 +501,76 @@ export const DeliveryBoyManagementScreen = () => {
                         </View>
 
                         <Text style={styles.assignedSectionTitle}>
-                          📋 Active & Past Assignments
+                          📋 Active & Past Assignments ({assigned.length})
                         </Text>
-                        <ScrollView style={{ maxHeight: 200, backgroundColor: COLORS.background, borderRadius: SIZES.radius_sm, padding: SPACING.sm, borderColor: COLORS.border, borderWidth: 1 }} nestedScrollEnabled>
+                        <ScrollView style={{ maxHeight: 220, paddingBottom: 4 }} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                           {assigned.length === 0 ? (
-                            <Text style={styles.assignedEmptyTxt}>No active orders assigned currently</Text>
+                            <View style={styles.modalNoAssignedBox}>
+                              <Text style={styles.assignedEmptyTxt}>No active orders assigned currently to {selectedBoy.name}</Text>
+                              <TouchableOpacity
+                                style={styles.modalAssignQuickBtn}
+                                onPress={() => {
+                                  const target = selectedBoy;
+                                  setSelectedBoy(null);
+                                  setAssignTargetBoy(target);
+                                  setShowAssignModal(true);
+                                }}
+                                activeOpacity={0.8}
+                              >
+                                <Text style={styles.modalAssignQuickBtnTxt}>📦 Assign an Order to {selectedBoy.name}</Text>
+                              </TouchableOpacity>
+                            </View>
                           ) : (
                             assigned.map((ao: any) => {
                               const customerName = ao.customer?.name || ao.customer_name || ao.customer || 'Customer';
                               const customerPhone = ao.customer?.phone || ao.customer_phone || ao.phone || '';
+                              const statusMeta = getOrderStatusMeta(ao.status || 'Received');
+                              const itemsSummary = Array.isArray(ao.items) && ao.items.length > 0
+                                ? ao.items.map((i: any) => `${i.item_name || i.service_name || 'Item'} (${i.quantity || 1})`).join(', ')
+                                : 'Laundry Service';
+
                               return (
-                                <TouchableOpacity 
-                                  key={ao.id} 
-                                  style={[styles.assignedOrderChip, { backgroundColor: COLORS.white, marginBottom: 8 }]}
-                                  activeOpacity={0.7}
-                                  onPress={() => {
-                                    setSelectedBoy(null);
-                                    navigation.navigate('OrderDetail', { order: ao });
-                                  }}
-                                >
-                                  <View style={{ flex: 1 }}>
-                                    <Text style={styles.assignedOrderTxt} numberOfLines={1}>
-                                      {ao.order_number || ao.id} • {customerName}
-                                    </Text>
-                                    <Text style={styles.assignedSubTxt} numberOfLines={1}>
-                                      📍 {ao.pickup_address || ao.delivery_address || ao.address || 'Address N/A'}
-                                    </Text>
+                                <View key={ao.id} style={styles.modalAssignedOrderCard}>
+                                  <View style={styles.modalAssignedHeader}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                      <Text style={styles.modalAssignedId}>{ao.order_number || `ORD-${ao.id}`}</Text>
+                                      <View style={[styles.statusMiniBadge, { backgroundColor: statusMeta.bg }]}>
+                                        <Text style={[styles.statusMiniBadgeTxt, { color: statusMeta.text }]}>
+                                          {ao.status || 'ASSIGNED'}
+                                        </Text>
+                                      </View>
+                                    </View>
+                                    <Text style={styles.modalAssignedAmount}>₹{ao.total_amount || 0}</Text>
                                   </View>
-                                  <Text style={styles.assignedStatusTxt}>{ao.status || 'ASSIGNED'}</Text>
-                                </TouchableOpacity>
+
+                                  <View style={styles.assignOrderCustomerRow}>
+                                    <Text style={styles.assignOrderCustomerName}>👤 {customerName}</Text>
+                                    {customerPhone ? (
+                                      <TouchableOpacity onPress={() => Linking.openURL(`tel:${customerPhone}`)}>
+                                        <Text style={styles.modalAssignedPhone}>📞 {customerPhone}</Text>
+                                      </TouchableOpacity>
+                                    ) : null}
+                                  </View>
+
+                                  <Text style={styles.assignOrderAddress} numberOfLines={2}>
+                                    📍 {ao.pickup_address || ao.delivery_address || ao.address || 'Address N/A'}
+                                  </Text>
+
+                                  <View style={styles.modalAssignedFooter}>
+                                    <Text style={styles.modalAssignedItems} numberOfLines={1}>
+                                      🧺 {itemsSummary}
+                                    </Text>
+                                    <TouchableOpacity
+                                      style={styles.modalAssignedViewBtn}
+                                      onPress={() => {
+                                        setSelectedBoy(null);
+                                        navigation.navigate('OrderDetail', { order: ao });
+                                      }}
+                                    >
+                                      <Text style={styles.modalAssignedViewBtnTxt}>View Order ➔</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                </View>
                               );
                             })
                           )}
@@ -510,41 +593,156 @@ export const DeliveryBoyManagementScreen = () => {
           </View>
         </Modal>
 
-        {/* Assign Orders Modal */}
+        {/* Assign Orders Modal (Shows Full Order Related Cards) */}
         <Modal visible={showAssignModal} transparent animationType="slide">
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+            <View style={[styles.modalContent, { maxHeight: '88%' }]}>
               <View style={styles.modalHeaderRow}>
-                <Text style={styles.modalTitle}>
-                  Assign Order to {assignTargetBoy?.name}
-                </Text>
+                <View>
+                  <Text style={styles.modalTitle}>
+                    Assign Order
+                  </Text>
+                  <Text style={styles.headerSubTitle}>
+                    Select an order to assign to {assignTargetBoy?.name}
+                  </Text>
+                </View>
                 <TouchableOpacity onPress={() => setShowAssignModal(false)}>
                   <Text style={styles.closeIconTxt}>✕</Text>
                 </TouchableOpacity>
               </View>
 
-              {unassignedOrders.length === 0 ? (
-                <View style={styles.emptyOrdersBox}>
-                  <Text style={styles.emptyOrdersTxt}>
-                    No unassigned orders available right now.
-                  </Text>
-                </View>
-              ) : (
-                unassignedOrders.map((ord) => (
-                  <View key={ord.id} style={styles.assignItem}>
-                    <View style={{ flex: 1, marginRight: SPACING.md }}>
-                      <Text style={styles.assignId}>{ord.id} • {ord.customer}</Text>
-                      <Text style={styles.assignSub}>{ord.items} • {ord.address}</Text>
+              {/* Filter Tabs */}
+              {(() => {
+                const activeShopOrders = shopOrders
+                  .filter((o: any) => {
+                    const st = String(o.status || '').toUpperCase();
+                    return st !== 'CANCELLED' && st !== 'COMPLETED' && st !== 'DELIVERED';
+                  })
+                  .map((o: any) => ({
+                    id: o.order_number || `ORD-${o.id}`,
+                    numericId: o.id,
+                    customer: o.customer?.name || o.customer_name || 'Customer',
+                    phone: o.customer?.phone || o.customer_phone || 'N/A',
+                    address: o.pickup_address || o.delivery_address || 'Pune',
+                    items: Array.isArray(o.items) && o.items.length > 0
+                      ? o.items.map((i: any) => `${i.item_name || i.service_name || 'Item'} (${i.quantity || 1})`).join(', ')
+                      : 'Laundry Service',
+                    amount: `₹${o.total_amount || 0}`,
+                    status: o.status || 'Received',
+                    rawStatus: o.status,
+                    paymentStatus: String(o.payment_status || '').toUpperCase() === 'PAID' ? 'Paid' : 'Unpaid',
+                    deliveryBoyId: o.delivery_boy_id || o.delivery_partner_id,
+                    deliveryBoyName: o.delivery_partner?.name || o.deliveryPartner?.name || o.delivery_boy?.name || null,
+                  }));
+
+                const ordersToShow = assignFilterTab === 'unassigned'
+                  ? (unassignedOrders.length > 0 ? unassignedOrders : activeShopOrders)
+                  : activeShopOrders;
+
+                return (
+                  <>
+                    <View style={styles.assignTabsRow}>
+                      <TouchableOpacity
+                        style={[styles.assignTabBtn, assignFilterTab === 'unassigned' && styles.assignTabBtnActive]}
+                        onPress={() => setAssignFilterTab('unassigned')}
+                      >
+                        <Text style={[styles.assignTabTxt, assignFilterTab === 'unassigned' && styles.assignTabTxtActive]}>
+                          ⏳ Unassigned ({unassignedOrders.length})
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.assignTabBtn, assignFilterTab === 'all' && styles.assignTabBtnActive]}
+                        onPress={() => setAssignFilterTab('all')}
+                      >
+                        <Text style={[styles.assignTabTxt, assignFilterTab === 'all' && styles.assignTabTxtActive]}>
+                          📋 All Active ({activeShopOrders.length})
+                        </Text>
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      style={styles.assignBtn}
-                      onPress={() => handleAssignOrder(ord)}
-                    >
-                      <Text style={styles.assignBtnTxt}>Assign</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))
-              )}
+
+                    <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 440 }}>
+                      {ordersToShow.length === 0 ? (
+                        <View style={styles.emptyOrdersBox}>
+                          <Text style={styles.emptyOrdersTxt}>
+                            No active orders available right now.
+                          </Text>
+                        </View>
+                      ) : (
+                        ordersToShow.map((ord) => {
+                          const statusMeta = getOrderStatusMeta(ord.status);
+                          const isAssignedToThisBoy =
+                            ord.deliveryBoyId &&
+                            String(ord.deliveryBoyId) === String(assignTargetBoy?.numericId || assignTargetBoy?.id || assignTargetBoy?.userId);
+
+                          return (
+                            <View key={ord.id} style={styles.assignOrderCard}>
+                              {/* Header row: Order ID + Status Badge + Amount */}
+                              <View style={styles.assignOrderCardHeader}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                  <Text style={styles.assignOrderCardId}>{ord.id}</Text>
+                                  <View style={[styles.statusMiniBadge, { backgroundColor: statusMeta.bg }]}>
+                                    <Text style={[styles.statusMiniBadgeTxt, { color: statusMeta.text }]}>
+                                      {ord.status}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <Text style={styles.assignOrderCardAmount}>{ord.amount}</Text>
+                              </View>
+
+                              {/* Customer Details */}
+                              <View style={styles.assignOrderCustomerRow}>
+                                <Text style={styles.assignOrderCustomerName}>👤 {ord.customer}</Text>
+                                <Text style={styles.assignOrderCustomerPhone}>📞 {ord.phone}</Text>
+                              </View>
+
+                              {/* Address */}
+                              <Text style={styles.assignOrderAddress} numberOfLines={2}>
+                                📍 {ord.address}
+                              </Text>
+
+                              {/* Service summary & payment status */}
+                              <View style={styles.assignOrderFooterRow}>
+                                <Text style={styles.assignOrderItems} numberOfLines={1}>
+                                  🧺 {ord.items}
+                                </Text>
+                                <Text style={[styles.assignOrderPayment, { color: ord.paymentStatus === 'Paid' ? COLORS.success : COLORS.warning }]}>
+                                  ● {ord.paymentStatus}
+                                </Text>
+                              </View>
+
+                              {/* Current Assignment Status & Assign Button */}
+                              <View style={styles.assignCardActionRow}>
+                                {ord.deliveryBoyName ? (
+                                  <Text style={styles.assignCurrentDriverTxt} numberOfLines={1}>
+                                    Driver: <Text style={{ fontFamily: FONTS.bold }}>{ord.deliveryBoyName}</Text>
+                                  </Text>
+                                ) : (
+                                  <Text style={styles.assignUnassignedTxt}>
+                                    ⏳ Ready for Assignment
+                                  </Text>
+                                )}
+
+                                <TouchableOpacity
+                                  style={[styles.assignActionBtn, isAssignedToThisBoy && { backgroundColor: COLORS.success }]}
+                                  onPress={() => handleAssignOrder(ord)}
+                                  activeOpacity={0.8}
+                                >
+                                  <Text style={styles.assignActionBtnTxt}>
+                                    {isAssignedToThisBoy
+                                      ? '✓ Assigned'
+                                      : `🚀 Assign to ${assignTargetBoy?.name?.split(' ')[0] || 'Staff'}`}
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          );
+                        })
+                      )}
+                    </ScrollView>
+                  </>
+                );
+              })()}
 
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAssignModal(false)}>
                 <Text style={styles.cancelTxt}>Close</Text>
@@ -993,6 +1191,218 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textTransform: 'uppercase',
     marginTop: 2,
+  },
+  modalNoAssignedBox: {
+    backgroundColor: COLORS.cardAlt,
+    borderRadius: SIZES.radius_sm,
+    padding: SPACING.md,
+    alignItems: 'center',
+    marginVertical: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalAssignQuickBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderRadius: SIZES.radius_sm,
+    marginTop: SPACING.sm,
+  },
+  modalAssignQuickBtnTxt: {
+    color: COLORS.white,
+    fontFamily: FONTS.bold,
+    fontSize: 12,
+  },
+  modalAssignedOrderCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: SIZES.radius_sm,
+    padding: SPACING.sm,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalAssignedHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  modalAssignedId: {
+    fontFamily: FONTS.bold,
+    fontSize: 13,
+    color: COLORS.primaryDark,
+  },
+  statusMiniBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  statusMiniBadgeTxt: {
+    fontFamily: FONTS.bold,
+    fontSize: 10,
+    textTransform: 'uppercase',
+  },
+  modalAssignedAmount: {
+    fontFamily: FONTS.bold,
+    fontSize: 13,
+    color: COLORS.success,
+  },
+  modalAssignedPhone: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 12,
+    color: COLORS.primary,
+  },
+  modalAssignedFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  modalAssignedItems: {
+    fontFamily: FONTS.medium,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    flex: 1,
+  },
+  modalAssignedViewBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  modalAssignedViewBtnTxt: {
+    fontFamily: FONTS.bold,
+    fontSize: 11,
+    color: COLORS.primaryDark,
+  },
+  assignTabsRow: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.cardAlt,
+    borderRadius: SIZES.radius_sm,
+    padding: 3,
+    marginBottom: SPACING.md,
+  },
+  assignTabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  assignTabBtnActive: {
+    backgroundColor: COLORS.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  assignTabTxt: {
+    fontFamily: FONTS.medium,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  assignTabTxtActive: {
+    fontFamily: FONTS.bold,
+    color: COLORS.primary,
+  },
+  assignOrderCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: SIZES.radius_md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  assignOrderCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  assignOrderCardId: {
+    fontFamily: FONTS.bold,
+    fontSize: 14,
+    color: COLORS.primaryDark,
+  },
+  assignOrderCardAmount: {
+    fontFamily: FONTS.bold,
+    fontSize: 14,
+    color: COLORS.success,
+  },
+  assignOrderCustomerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  assignOrderCustomerName: {
+    fontFamily: FONTS.bold,
+    fontSize: 13,
+    color: COLORS.text,
+  },
+  assignOrderCustomerPhone: {
+    fontFamily: FONTS.medium,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  assignOrderAddress: {
+    fontFamily: FONTS.regular,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: 6,
+  },
+  assignOrderFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    marginBottom: 8,
+  },
+  assignOrderItems: {
+    fontFamily: FONTS.medium,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    flex: 1,
+  },
+  assignOrderPayment: {
+    fontFamily: FONTS.bold,
+    fontSize: 11,
+    marginLeft: 8,
+  },
+  assignCardActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  assignCurrentDriverTxt: {
+    fontFamily: FONTS.regular,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    flex: 1,
+  },
+  assignUnassignedTxt: {
+    fontFamily: FONTS.medium,
+    fontSize: 11,
+    color: COLORS.warning,
+    flex: 1,
+  },
+  assignActionBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 7,
+    borderRadius: SIZES.radius_sm,
+  },
+  assignActionBtnTxt: {
+    fontFamily: FONTS.bold,
+    fontSize: 12,
+    color: COLORS.white,
   },
 });
 

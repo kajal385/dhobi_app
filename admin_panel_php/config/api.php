@@ -92,13 +92,12 @@ $hostOnly = explode(':', $rawHost)[0];
 $isLocal = in_array($hostOnly, ['localhost', '127.0.0.1', '::1', '192.168.1.14', '192.168.1.15']);
 
 // Define Base URLs
+if (!defined('BACKEND_BASE_URL')) {
+    define('BACKEND_BASE_URL', 'https://dhobi-api.bizz-manager.com/public');
+}
+
 if (!defined('API_BASE_URL')) {
-    // You can override this with your specific Laravel deployment URL
-    if ($isLocal) {
-        define('API_BASE_URL', 'http://127.0.0.1:8000/api/v1');
-    } else {
-        define('API_BASE_URL', 'https://dhobi-api.bizz-manager.com/public/api/v1');
-    }
+    define('API_BASE_URL', 'https://dhobi-api.bizz-manager.com/public/api/v1');
 }
 
 if (!defined('APP_NAME')) {

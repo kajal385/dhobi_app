@@ -27,8 +27,6 @@ export const resolveImageUrl = (path?: string | null): string => {
   }
 
   const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-  if (cleanPath.startsWith('/uploads/')) {
-    return `${ADMIN_BASE_URL}${cleanPath}`;
-  }
   return `${BASE_URL}${cleanPath}`;
 };
+

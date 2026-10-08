@@ -197,80 +197,9 @@ export const LoginScreen = () => {
 
           {/* Form */}
           <View style={styles.form}>
-            {role === 'owner' && (
-              <View style={styles.syncBox}>
-                <View style={styles.syncHeaderRow}>
-                  <Text style={styles.syncBadge}>🌐 Web Panel Synced</Text>
-                  <Text style={styles.syncHint}>Same login as Admin Web Panel</Text>
-                </View>
-                <Text style={styles.syncTitle}>Choose Laundry Account to Login:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
-                  <TouchableOpacity
-                    style={[
-                      styles.accountChip,
-                      (phone === 'ashish.laundry@dhobipro.com' || phone === '8600692767') && styles.accountChipActive,
-                    ]}
-                    onPress={() => {
-                      setPhone('ashish.laundry@dhobipro.com');
-                      setPassword('owner123');
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.chipShopName}>⭐ Star Wash Ultra</Text>
-                    <Text style={styles.chipOwnerName}>Ashish Bhosale</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.accountChip,
-                      (phone === 'ram@gmail.com' || phone === '9021991344') && styles.accountChipActive,
-                    ]}
-                    onPress={() => {
-                      setPhone('ram@gmail.com');
-                      setPassword('owner123');
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.chipShopName}>🧺 Dhobi UltraPro</Text>
-                    <Text style={styles.chipOwnerName}>Ram Kale</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.accountChip,
-                      (phone === 'rajesh.laundry@dhobipro.com' || phone === '9876543210') && styles.accountChipActive,
-                    ]}
-                    onPress={() => {
-                      setPhone('rajesh.laundry@dhobipro.com');
-                      setPassword('owner123');
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.chipShopName}>👔 My Laundry Shop</Text>
-                    <Text style={styles.chipOwnerName}>Rajesh Sharma</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.accountChip,
-                      (phone === 'javed.laundry@dhobipro.com' || phone === '020394859292') && styles.accountChipActive,
-                    ]}
-                    onPress={() => {
-                      setPhone('javed.laundry@dhobipro.com');
-                      setPassword('owner123');
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.chipShopName}>✨ Super Clean Wash</Text>
-                    <Text style={styles.chipOwnerName}>Javed Atkhar</Text>
-                  </TouchableOpacity>
-                </ScrollView>
-              </View>
-            )}
-
             <AppInput
               label="Email or Mobile Number"
-              placeholder="e.g. ashish.laundry@dhobipro.com or 8600692767"
+              placeholder="Enter email or mobile number"
               keyboardType="email-address"
               autoCapitalize="none"
               value={phone}
@@ -278,7 +207,7 @@ export const LoginScreen = () => {
             />
             <AppInput
               label="Password"
-              placeholder="Enter password (e.g. owner123)"
+              placeholder="Enter password"
               secureTextEntry
               value={password}
               onChangeText={setPassword}
@@ -402,67 +331,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.primary,
   },
-  syncBox: {
-    backgroundColor: '#F5F3FF',
-    borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
-    padding: SPACING.md,
-    marginBottom: SPACING.lg,
-  },
-  syncHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  syncBadge: {
-    fontFamily: FONTS.bold,
-    fontSize: 12,
-    color: '#6D28D9',
-    backgroundColor: '#EDE9FE',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  syncHint: {
-    fontFamily: FONTS.regular,
-    fontSize: 11,
-    color: COLORS.textSecondary,
-  },
-  syncTitle: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 12,
-    color: COLORS.text,
-    marginBottom: 8,
-  },
-  chipsScroll: {
-    gap: 8,
-    paddingBottom: 2,
-  },
-  accountChip: {
-    backgroundColor: COLORS.card,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    minWidth: 120,
-  },
-  accountChipActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: '#EDE9FE',
-  },
-  chipShopName: {
-    fontFamily: FONTS.bold,
-    fontSize: 12,
-    color: COLORS.text,
-  },
-  chipOwnerName: {
-    fontFamily: FONTS.regular,
-    fontSize: 10,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
 });
+

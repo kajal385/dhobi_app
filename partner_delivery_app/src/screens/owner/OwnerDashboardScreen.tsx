@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Linking, TextInput } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Linking, TextInput, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { AppCard } from '../../components/AppCard';
@@ -34,77 +34,86 @@ export const OwnerDashboardScreen = () => {
   const [customersList, setCustomersList] = React.useState<any[]>([]);
   const [customersCount, setCustomersCount] = React.useState(0);
 
-  React.useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        const shopId = currentShop?.id || currentUser?.shop_id;
-        const profileData = shopId ? null : await partnerService.getOwnerProfile();
-        const resolvedShopId = shopId || profileData?.shop?.id || profileData?.id;
+  const [refreshing, setRefreshing] = useState(false);
 
-        if (profileData?.shop) {
-          updateShop(profileData.shop);
-        }
+  const loadDashboardData = useCallback(async () => {
+    try {
+      const shopId = currentShop?.id || currentUser?.shop_id;
+      const profileData = shopId ? null : await partnerService.getOwnerProfile();
+      const resolvedShopId = shopId || profileData?.shop?.id || profileData?.id;
 
-        // Load real orders for this shop
-        const apiOrders = await partnerService.getOwnerOrders(undefined, resolvedShopId);
-        if (Array.isArray(apiOrders)) {
-          const mapped = apiOrders.map((ao: any) => {
-            const rawSt = String(ao.status || 'PENDING').toUpperCase();
-            let status = 'Received';
-            if (['PENDING', 'CONFIRMED'].includes(rawSt)) status = 'Received';
-            else if (['PROCESSING', 'WASHING', 'PICKUP_ASSIGNED', 'PICKED_UP', 'ACCEPTED'].includes(rawSt)) status = 'Processing';
-            else if (rawSt === 'READY') status = 'Ready';
-            else if (rawSt === 'OUT_FOR_DELIVERY') status = 'Out For Delivery';
-            else if (['DELIVERED', 'COMPLETED'].includes(rawSt)) status = 'Completed';
-            else if (rawSt === 'CANCELLED') status = 'Cancelled';
-            return {
-              id: ao.order_number || `ORD-${ao.id}`,
-              numericId: ao.id,
-              customerName: ao.customer?.name || 'Customer',
-              mobile: ao.customer?.phone || 'N/A',
-              address: ao.pickup_address || 'Pune',
-              status,
-              totalAmount: parseFloat(ao.total_amount) || 0,
-              paymentStatus: String(ao.payment_status || '').toUpperCase() === 'PAID' ? 'Paid' : 'Unpaid',
-              deliveryBoy: ao.delivery_partner?.name || null,
-              createdAt: ao.created_at,
-              isUrgent: Boolean(ao.is_urgent || ao.is_emergency),
-            };
-          });
-          setOrders(mapped);
-        }
-
-        // Load real delivery boys for this shop
-        const boysData = await partnerService.getOwnerDeliveryBoys(resolvedShopId);
-        if (Array.isArray(boysData) && boysData.length > 0) {
-          setDeliveryBoys(boysData.map((b: any) => ({
-            id: b.id ?? b.raw_id,
-            name: b.name ?? 'Delivery Boy',
-            phone: b.phone ?? '',
-            vehicle: b.vehicle_number ?? b.vehicle ?? '',
-            status: b.is_online ? 'Online' : 'Offline',
-          })));
-        }
-
-        // Load customers for this shop
-        const custData = await partnerService.getOwnerCustomers(resolvedShopId);
-        if (Array.isArray(custData) && custData.length > 0) {
-          setCustomersList(custData);
-          setCustomersCount(custData.length);
-        } else {
-          setCustomersCount(12); // Fallback data display logic handles this gracefully if empty
-          setCustomersList([
-            { id: 'C-1', name: 'Amitabh Sharma', phone: '+91 98765 43210', totalOrders: 24, totalSpent: '₹14,200' },
-            { id: 'C-2', name: 'Pooja Verma', phone: '+91 98123 45678', totalOrders: 18, totalSpent: '₹9,800' },
-            { id: 'C-3', name: 'Rahul Deshmukh', phone: '+91 99221 13344', totalOrders: 11, totalSpent: '₹5,400' }
-          ]);
-        }
-      } catch (e) {
-        console.log('OwnerDashboard loadData error:', e);
+      if (profileData?.shop) {
+        updateShop(profileData.shop);
       }
-    };
+
+      // Load real orders for this shop
+      const apiOrders = await partnerService.getOwnerOrders(undefined, resolvedShopId);
+      if (Array.isArray(apiOrders)) {
+        const mapped = apiOrders.map((ao: any) => {
+          const rawSt = String(ao.status || 'PENDING').toUpperCase();
+          let status = 'Received';
+          if (['PENDING', 'CONFIRMED'].includes(rawSt)) status = 'Received';
+          else if (['PROCESSING', 'WASHING', 'PICKUP_ASSIGNED', 'PICKED_UP', 'ACCEPTED'].includes(rawSt)) status = 'Processing';
+          else if (rawSt === 'READY') status = 'Ready';
+          else if (rawSt === 'OUT_FOR_DELIVERY') status = 'Out For Delivery';
+          else if (['DELIVERED', 'COMPLETED'].includes(rawSt)) status = 'Completed';
+          else if (rawSt === 'CANCELLED') status = 'Cancelled';
+          return {
+            id: ao.order_number || `ORD-${ao.id}`,
+            numericId: ao.id,
+            customerName: ao.customer?.name || ao.customer_name || 'Customer',
+            mobile: ao.customer?.phone || ao.customer_phone || 'N/A',
+            address: ao.pickup_address || ao.delivery_address || 'Pune',
+            status,
+            totalAmount: parseFloat(ao.total_amount) || 0,
+            paymentStatus: String(ao.payment_status || '').toUpperCase() === 'PAID' ? 'Paid' : 'Unpaid',
+            deliveryBoy: ao.delivery_partner?.name || ao.delivery_boy?.name || null,
+            createdAt: ao.created_at,
+            isUrgent: Boolean(ao.is_urgent || ao.is_emergency),
+          };
+        });
+        setOrders(mapped);
+      }
+
+      // Load real delivery boys for this shop
+      const boysData = await partnerService.getOwnerDeliveryBoys(resolvedShopId);
+      if (Array.isArray(boysData) && boysData.length > 0) {
+        setDeliveryBoys(boysData.map((b: any) => ({
+          id: b.id ?? b.raw_id,
+          name: b.name ?? 'Delivery Boy',
+          phone: b.phone ?? '',
+          vehicle: b.vehicle_number ?? b.vehicle ?? '',
+          status: b.is_online ? 'Online' : 'Offline',
+        })));
+      }
+
+      // Load customers for this shop
+      const custData = await partnerService.getOwnerCustomers(resolvedShopId);
+      if (Array.isArray(custData) && custData.length > 0) {
+        setCustomersList(custData);
+        setCustomersCount(custData.length);
+      } else {
+        setCustomersCount(12);
+        setCustomersList([
+          { id: 'C-1', name: 'Amitabh Sharma', phone: '+91 98765 43210', totalOrders: 24, totalSpent: '₹14,200' },
+          { id: 'C-2', name: 'Pooja Verma', phone: '+91 98123 45678', totalOrders: 18, totalSpent: '₹9,800' },
+          { id: 'C-3', name: 'Rahul Deshmukh', phone: '+91 99221 13344', totalOrders: 11, totalSpent: '₹5,400' }
+        ]);
+      }
+    } catch (e) {
+      console.log('OwnerDashboard loadData error:', e);
+    }
+  }, [currentShop?.id, currentUser?.shop_id, updateShop]);
+
+  useEffect(() => {
     loadDashboardData();
-  }, [currentShop?.id, currentUser?.shop_id]);
+  }, [loadDashboardData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+    setRefreshing(false);
+  }, [loadDashboardData]);
 
   const todaysOrders = orders;
   const todaysOrdersCount = orders.length;
@@ -670,7 +679,17 @@ export const OwnerDashboardScreen = () => {
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.primary]}
+              tintColor={COLORS.primary}
+            />
+          }
+        >
           {/* Revenue Summary Banner (Real Live Data) */}
           {/* Revenue Summary Banner (Real Live Data) */}
           <TouchableOpacity

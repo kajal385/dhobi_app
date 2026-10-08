@@ -17,7 +17,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
 import Toast from 'react-native-toast-message';
 import { reelService, Reel } from '../../services/reelService';
-import { resolveImageUrl } from '../../constants/config';
+import { BASE_URL, resolveImageUrl } from '../../constants/config';
 
 const { width, height } = Dimensions.get('window');
 
@@ -104,7 +104,7 @@ export const ReelsScreen = ({ navigation }: any) => {
     let fullVideoUrl = resolveImageUrl(videoToPlay) || videoToPlay;
     if (!fullVideoUrl.startsWith('http://') && !fullVideoUrl.startsWith('https://')) {
       const clean = fullVideoUrl.startsWith('/') ? fullVideoUrl : `/${fullVideoUrl}`;
-      fullVideoUrl = `http://192.168.1.21:8080${clean}`;
+      fullVideoUrl = `${BASE_URL}${clean}`;
     }
 
     const hasVideo = isVideoFile(fullVideoUrl);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
   Linking,
   TextInput,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppCard } from '../../components/AppCard';
@@ -142,81 +143,89 @@ export const OrderManagementScreen = () => {
   const [selectedCancelReason, setSelectedCancelReason] = useState(CANCEL_REASONS[0]);
   const [customReasonText, setCustomReasonText] = useState('');
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        // Get current shop ID from auth context or profile API
-        const shopId = currentShop?.id || currentUser?.shop_id;
-        const profileData = shopId ? null : await partnerService.getOwnerProfile();
-        const resolvedShopId = shopId || profileData?.shop?.id || profileData?.id;
+  const [refreshing, setRefreshing] = useState(false);
 
-        // Load real delivery boys for this shop only
-        const boysData = await partnerService.getOwnerDeliveryBoys(resolvedShopId);
-        if (Array.isArray(boysData) && boysData.length > 0) {
-          setDeliveryBoys(boysData.map((b: any) => ({
-            id: b.id ?? b.raw_id,
-            name: b.name ?? b.user?.name ?? 'Delivery Boy',
-            phone: b.phone ?? b.user?.phone ?? '',
-            vehicle: b.vehicle_number ?? b.vehicle ?? '',
-            status: b.is_online ? 'Online' : 'Offline',
-          })));
-        }
+  const loadData = useCallback(async () => {
+    try {
+      // Get current shop ID from auth context or profile API
+      const shopId = currentShop?.id || currentUser?.shop_id;
+      const profileData = shopId ? null : await partnerService.getOwnerProfile();
+      const resolvedShopId = shopId || profileData?.shop?.id || profileData?.id;
 
-        // Load real orders for this shop only (no dummy data)
-        const apiOrders = await partnerService.getOwnerOrders(undefined, resolvedShopId);
-        if (Array.isArray(apiOrders)) {
-          const mappedApiOrders = apiOrders.map((ao: any) => {
-            let mappedStatus = 'Placed';
-            const rawSt = String(ao.status || 'PLACED').toLowerCase().replace(/[\s_-]+/g, '');
-            if (rawSt === 'placed') mappedStatus = 'Placed';
-            else if (rawSt === 'received' || rawSt === 'pending') mappedStatus = 'Received';
-            else if (['inprocess', 'process', 'processing', 'accepted', 'washing'].includes(rawSt)) mappedStatus = 'In-Process';
-            else if (rawSt === 'readyfordelivery' || rawSt === 'ready') {
-              mappedStatus = (ao.customer_available || ao.is_customer_available) ? 'Customer Confirmed' : 'Ready for Delivery';
-            }
-            else if (rawSt === 'customerconfirmed') mappedStatus = 'Customer Confirmed';
-            else if (rawSt === 'deliveryassigned') mappedStatus = 'Delivery Assigned';
-            else if (rawSt === 'outfordelivery') mappedStatus = 'Out for Delivery';
-            else if (['delivered', 'completed'].includes(rawSt)) mappedStatus = 'Delivered';
-            else if (rawSt === 'cancelled') mappedStatus = 'Cancelled';
-            else mappedStatus = 'Placed';
+      // Load real delivery boys for this shop only
+      const boysData = await partnerService.getOwnerDeliveryBoys(resolvedShopId);
+      if (Array.isArray(boysData) && boysData.length > 0) {
+        setDeliveryBoys(boysData.map((b: any) => ({
+          id: b.id ?? b.raw_id,
+          name: b.name ?? b.user?.name ?? 'Delivery Boy',
+          phone: b.phone ?? b.user?.phone ?? '',
+          vehicle: b.vehicle_number ?? b.vehicle ?? '',
+          status: b.is_online ? 'Online' : 'Offline',
+        })));
+      }
 
-            const itemsStr = Array.isArray(ao.items) && ao.items.length > 0
-              ? ao.items.map((it: any) => `${it.item_name || it.service_name || 'Item'} (${it.quantity || 1})`).join(', ')
-              : 'Laundry Service';
+      // Load real orders for this shop only (no dummy data)
+      const apiOrders = await partnerService.getOwnerOrders(undefined, resolvedShopId);
+      if (Array.isArray(apiOrders)) {
+        const mappedApiOrders = apiOrders.map((ao: any) => {
+          let mappedStatus = 'Placed';
+          const rawSt = String(ao.status || 'PLACED').toLowerCase().replace(/[\s_-]+/g, '');
+          if (rawSt === 'placed') mappedStatus = 'Placed';
+          else if (rawSt === 'received' || rawSt === 'pending') mappedStatus = 'Received';
+          else if (['inprocess', 'process', 'processing', 'accepted', 'washing'].includes(rawSt)) mappedStatus = 'In-Process';
+          else if (rawSt === 'readyfordelivery' || rawSt === 'ready') {
+            mappedStatus = (ao.customer_available || ao.is_customer_available) ? 'Customer Confirmed' : 'Ready for Delivery';
+          }
+          else if (rawSt === 'customerconfirmed') mappedStatus = 'Customer Confirmed';
+          else if (rawSt === 'deliveryassigned') mappedStatus = 'Delivery Assigned';
+          else if (rawSt === 'outfordelivery') mappedStatus = 'Out for Delivery';
+          else if (['delivered', 'completed'].includes(rawSt)) mappedStatus = 'Delivered';
+          else if (rawSt === 'cancelled') mappedStatus = 'Cancelled';
+          else mappedStatus = 'Placed';
 
-            return {
-              id: ao.order_number || `ORD-${ao.id}`,
-              numericId: ao.id,
-              customer: ao.customer?.name || ao.customer_name || 'Customer',
-              phone: ao.customer?.phone || ao.customer_phone || 'N/A',
-              address: ao.pickup_address || ao.delivery_address || 'Pune',
-              service: itemsStr,
-              amount: `₹${ao.total_amount || 0}`,
-              type: 'Home Delivery',
-              status: mappedStatus,
-              rawStatus: ao.status,
-              customerAvailable: Boolean(ao.customer_available || ao.is_customer_available || mappedStatus === 'Customer Confirmed'),
-              paymentStatus: String(ao.payment_status || '').toUpperCase() === 'PAID' ? 'Paid' : 'Unpaid',
-              paymentMethod: ao.payment_method ? String(ao.payment_method).toUpperCase() : 'COD',
-              pickupTime: ao.pickup_date || ao.created_at?.slice(0, 10) || 'Today',
-              deliveryBoy: ao.delivery_partner?.name || ao.deliveryPartner?.name || null,
-              createdAt: ao.created_at || new Date().toISOString(),
-              isUrgent: Boolean(ao.is_urgent || ao.is_emergency),
-            };
-          });
-          setOrders(mappedApiOrders);
-        } else {
-          setOrders([]);
-        }
-      } catch (err) {
-        console.log('OrderManagementScreen loadData error:', err);
+          const itemsStr = Array.isArray(ao.items) && ao.items.length > 0
+            ? ao.items.map((it: any) => `${it.item_name || it.service_name || 'Item'} (${it.quantity || 1})`).join(', ')
+            : 'Laundry Service';
+
+          return {
+            id: ao.order_number || `ORD-${ao.id}`,
+            numericId: ao.id,
+            customer: ao.customer?.name || ao.customer_name || 'Customer',
+            phone: ao.customer?.phone || ao.customer_phone || 'N/A',
+            address: ao.pickup_address || ao.delivery_address || 'Pune',
+            service: itemsStr,
+            amount: `₹${ao.total_amount || 0}`,
+            type: 'Home Delivery',
+            status: mappedStatus,
+            rawStatus: ao.status,
+            customerAvailable: Boolean(ao.customer_available || ao.is_customer_available || mappedStatus === 'Customer Confirmed'),
+            paymentStatus: String(ao.payment_status || '').toUpperCase() === 'PAID' ? 'Paid' : 'Unpaid',
+            paymentMethod: ao.payment_method ? String(ao.payment_method).toUpperCase() : 'COD',
+            pickupTime: ao.pickup_date || ao.created_at?.slice(0, 10) || 'Today',
+            deliveryBoy: ao.delivery_partner?.name || ao.deliveryPartner?.name || null,
+            createdAt: ao.created_at || new Date().toISOString(),
+            isUrgent: Boolean(ao.is_urgent || ao.is_emergency),
+          };
+        });
+        setOrders(mappedApiOrders);
+      } else {
         setOrders([]);
       }
-    };
-
-    loadData();
+    } catch (err) {
+      console.log('OrderManagementScreen loadData error:', err);
+      setOrders([]);
+    }
   }, [currentShop, currentUser]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }, [loadData]);
 
   const getFilterCount = (filterName: string) => {
     if (filterName === 'All') return orders.length;
@@ -446,7 +455,17 @@ export const OrderManagementScreen = () => {
           )}
         </ScrollView>
 
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.primary]}
+              tintColor={COLORS.primary}
+            />
+          }
+        >
           {filteredOrders.length === 0 ? (
             <View style={{ padding: SPACING.xl, alignItems: 'center' }}>
               <Text style={{ fontFamily: FONTS.medium, fontSize: 16, color: COLORS.textSecondary }}>

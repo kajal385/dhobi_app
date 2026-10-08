@@ -288,7 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $appVideoDir = __DIR__ . '/../../customer_app/assets/myvideos/';
         if (!is_dir($appVideoDir)) @mkdir($appVideoDir, 0777, true);
 
-        $lanBaseUrl = 'http://192.168.1.21:8080';
+        $backendBaseUrl = defined('BACKEND_BASE_URL') ? BACKEND_BASE_URL : 'https://dhobi-api.bizz-manager.com/public';
 
         // 1. Video upload
         if (!empty($_FILES['video_file']['name']) && $_FILES['video_file']['error'] === UPLOAD_ERR_OK) {
@@ -297,7 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $vfname = 'vid_' . $targetShopId . '_' . time() . '.' . $ext;
             if (move_uploaded_file($_FILES['video_file']['tmp_name'], $uploadDir . $vfname)) {
                 @copy($uploadDir . $vfname, $appVideoDir . $vfname);
-                $finalVideoUrl = $lanBaseUrl . '/uploads/shop-media/' . $vfname;
+                $finalVideoUrl = $backendBaseUrl . '/uploads/shop-media/' . $vfname;
             }
         } elseif (!empty($videoUrlInput)) {
             $finalVideoUrl = $videoUrlInput;
@@ -308,7 +308,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $text = strtolower(pathinfo($_FILES['thumbnail_file']['name'], PATHINFO_EXTENSION));
             $tfname = 'thumb_' . $targetShopId . '_' . time() . '.' . $text;
             if (move_uploaded_file($_FILES['thumbnail_file']['tmp_name'], $uploadDir . $tfname)) {
-                $finalThumbUrl = $lanBaseUrl . '/uploads/shop-media/' . $tfname;
+                $finalThumbUrl = $backendBaseUrl . '/uploads/shop-media/' . $tfname;
             }
         }
         if (empty($finalThumbUrl)) {
@@ -379,7 +379,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $appVideoDir = __DIR__ . '/../../customer_app/assets/myvideos/';
         if (!is_dir($appVideoDir)) @mkdir($appVideoDir, 0777, true);
 
-        $lanBaseUrl = 'http://192.168.1.21:8080';
+        $backendBaseUrl = defined('BACKEND_BASE_URL') ? BACKEND_BASE_URL : 'https://dhobi-api.bizz-manager.com/public';
         $uploadedVideoUrl = null;
         if (!empty($_FILES['video_file']['name']) && $_FILES['video_file']['error'] === UPLOAD_ERR_OK) {
             $ext = strtolower(pathinfo($_FILES['video_file']['name'], PATHINFO_EXTENSION));
@@ -387,7 +387,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $vfname = 'vid_edit_' . time() . '.' . $ext;
             if (move_uploaded_file($_FILES['video_file']['tmp_name'], $uploadDir . $vfname)) {
                 @copy($uploadDir . $vfname, $appVideoDir . $vfname);
-                $uploadedVideoUrl = $lanBaseUrl . '/uploads/shop-media/' . $vfname;
+                $uploadedVideoUrl = $backendBaseUrl . '/uploads/shop-media/' . $vfname;
             }
         }
 
@@ -396,7 +396,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $text = strtolower(pathinfo($_FILES['thumbnail_file']['name'], PATHINFO_EXTENSION));
             $tfname = 'thumb_edit_' . time() . '.' . $text;
             if (move_uploaded_file($_FILES['thumbnail_file']['tmp_name'], $uploadDir . $tfname)) {
-                $uploadedThumbUrl = $lanBaseUrl . '/uploads/shop-media/' . $tfname;
+                $uploadedThumbUrl = $backendBaseUrl . '/uploads/shop-media/' . $tfname;
             }
         }
 
@@ -1385,7 +1385,7 @@ $activeTab = $_GET['tab'] ?? 'banners';
       document.getElementById('edit_video_owner_name').value = data.ownerName || '';
       document.getElementById('edit_video_shop_location').value = data.location || '';
       if (document.getElementById('edit_video_url_input')) {
-        document.getElementById('edit_video_url_input').value = (data.url && data.url.startsWith('http') && !data.url.includes('192.168.1.21')) ? data.url : '';
+        document.getElementById('edit_video_url_input').value = (data.url && data.url.startsWith('http') && !data.url.includes('/uploads/shop-media/')) ? data.url : '';
       }
       const thumbPrev = document.getElementById('edit_video_thumb_preview');
       if (thumbPrev && data.thumbnail) {
