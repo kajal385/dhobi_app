@@ -12,6 +12,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $reason = $_POST['reason'] ?? '';
 
     if ($action === 'approve' && $shopId) {
+        if (!isset($_SESSION['approved_shop_ids'])) {
+            $_SESSION['approved_shop_ids'] = [];
+        }
+        $_SESSION['approved_shop_ids'][strval($shopId)] = true;
+
         if (!empty($_SESSION['custom_shops'])) {
             foreach ($_SESSION['custom_shops'] as &$cs) {
                 if (strval($cs['id'] ?? '') === strval($shopId)) {
@@ -19,6 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $cs['verification_status'] = 'APPROVED';
                     $cs['status'] = 'ACTIVE';
                     $cs['accountStatus'] = 'ACTIVE';
+                    $cs['is_verified'] = 1;
                     break;
                 }
             }
@@ -170,6 +176,55 @@ foreach ($queue as &$qItem) {
 }
 unset($qItem);
 
+// STRICT RULE: Verification Queue ONLY shows unverified / pending laundry shops.
+// Approved laundry shops MUST NEVER be shown in the verification queue!
+$queue = array_values(array_filter($queue, function($item) {
+    $sId = strval($item['id'] ?? $item['shop_id'] ?? '');
+
+    // 1. Check session approved records
+    if (!empty($_SESSION['approved_shop_ids'][$sId])) {
+        return false;
+    }
+
+    // 2. Check explicit verification status
+    $vStatus = strtoupper(trim($item['verification_status'] ?? $item['verificationStatus'] ?? ''));
+    if ($vStatus === 'APPROVED' || $vStatus === 'VERIFIED') {
+        return false;
+    }
+
+    // 3. Check boolean/integer is_verified flag
+    $isVerified = $item['is_verified'] ?? null;
+    if ($isVerified === 1 || $isVerified === '1' || $isVerified === true) {
+        return false;
+    }
+
+    // 4. Check account status
+    $accStatus = strtoupper(trim($item['status'] ?? $item['accountStatus'] ?? ''));
+    if ($accStatus === 'APPROVED') {
+        return false;
+    }
+
+    // 5. Cross-check against custom_shops session storage
+    if (!empty($_SESSION['custom_shops'])) {
+        foreach ($_SESSION['custom_shops'] as $cs) {
+            $csId = strval($cs['id'] ?? $cs['shop_id'] ?? '');
+            $csEmail = strtolower(trim($cs['email'] ?? ''));
+            $itemEmail = strtolower(trim($item['email'] ?? ''));
+            $csPhone = trim($cs['phone'] ?? '');
+            $itemPhone = trim($item['phone'] ?? '');
+
+            if (($csId && $csId === $sId) || ($csEmail && $itemEmail && $csEmail === $itemEmail) || ($csPhone && $itemPhone && $csPhone === $itemPhone)) {
+                $csVStatus = strtoupper(trim($cs['verificationStatus'] ?? $cs['verification_status'] ?? ''));
+                if ($csVStatus === 'APPROVED' || $csVStatus === 'VERIFIED' || (!empty($cs['is_verified']) && $cs['is_verified'] == 1)) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}));
+
 // --- ROLE DETECTION ---
 $isOwner = isLaundryOwner();
 $myShopId   = strval(currentShopId() ?: '30');
@@ -189,8 +244,6 @@ if ($isOwner) {
         if ($myShopName !== '' && $qShop !== '' && strpos($myShopName, $qShop) !== false) return true;
         return false;
     }));
-
-    // If still empty, we don't inject a dummy record for owner either, just let it be empty
 }
 ?>
 
@@ -344,15 +397,23 @@ if ($isOwner) {
             </tr>
           <?php endif; ?>
           <?php foreach ($queue as $req): 
-              $sId = $req['id'] ?? '44';
-              $sName = $req['shopName'] ?? $req['name'] ?? 'Laundry Shop';
-              $oName = $req['ownerName'] ?? $req['owner_name'] ?? 'Owner';
-              $phone = $req['phone'] ?? 'N/A';
+              $sId = $req['id'] ?? $req['shop_id'] ?? '';
+              $sName = $req['shopName'] ?? $req['name'] ?? $req['shop_name'] ?? "Shop #{$sId}";
+              $oName = $req['ownerName'] ?? $req['owner_name'] ?? ($req['owner']['name'] ?? 'Owner');
+              $phone = $req['phone'] ?? ($req['owner']['phone'] ?? 'N/A');
               $city = $req['city'] ?? 'Pune';
-              $status = strtoupper($req['status'] ?? $req['verificationStatus'] ?? 'PENDING');
-              $aadhaar = $req['idProofPhoto'] ?? $req['id_proof_photo'] ?? '/assets/images/docs/aadhaar_sample.svg';
-              $udyam = $req['businessProofPhoto'] ?? $req['business_proof_photo'] ?? '/assets/images/docs/udyam_sample.svg';
-              $bank = $req['bankProofPhoto'] ?? $req['bank_proof_photo'] ?? '/assets/images/docs/bank_statement_sample.svg';
+              $status = strtoupper($req['verification_status'] ?? $req['verificationStatus'] ?? ($req['status'] ?? 'PENDING'));
+
+              // Guard: Skip if approved
+              if ($status === 'APPROVED' || $status === 'VERIFIED' || (!empty($req['is_verified']) && $req['is_verified'] == 1) || !empty($_SESSION['approved_shop_ids'][$sId])) {
+                  continue;
+              }
+
+              $aadhaar = $req['idProofPhoto'] ?? $req['id_proof_photo'] ?? '';
+              $udyam = $req['businessProofPhoto'] ?? $req['business_proof_photo'] ?? '';
+              $bank = $req['bankProofPhoto'] ?? $req['bank_proof_photo'] ?? '';
+              $gstVal = $req['gstNumber'] ?? $req['gst_number'] ?? 'PENDING';
+              $bankAccVal = $req['bankAccount'] ?? $req['bank_account'] ?? ($req['bank_account_number'] ?? 'PENDING');
           ?>
             <tr>
               <td>
@@ -366,21 +427,35 @@ if ($isOwner) {
               <td><span style="font-weight: 700; font-size: 0.85rem;">📍 <?= htmlspecialchars($city) ?></span></td>
               <td>
                 <div style="font-size: 0.8rem;">
-                  <div>GST: <strong><?= htmlspecialchars($req['gstNumber'] ?? '27AABCU9603R1ZM') ?></strong></div>
-                  <div style="font-size: 0.75rem; color: var(--text-muted);">A/C: <?= htmlspecialchars($req['bankAccount'] ?? '50100987654321') ?></div>
+                  <div>GST: <strong><?= htmlspecialchars($gstVal) ?></strong></div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted);">A/C: <?= htmlspecialchars($bankAccVal) ?></div>
                 </div>
               </td>
               <td>
                 <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-                  <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Aadhaar Card Proof', '<?= $aadhaar ?>')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem;">
-                    📄 Aadhaar
-                  </button>
-                  <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Udyam MSME License', '<?= $udyam ?>')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem;">
-                    📜 Udyam MSME
-                  </button>
-                  <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Bank Statement / Cheque', '<?= $bank ?>')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem;">
-                    🏦 Cheque
-                  </button>
+                  <?php if (!empty($aadhaar)): ?>
+                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Aadhaar Card Proof', '<?= htmlspecialchars($aadhaar) ?>')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem;">
+                      📄 Aadhaar
+                    </button>
+                  <?php else: ?>
+                    <span class="badge" style="background: rgba(148, 163, 184, 0.15); color: #64748B; font-size: 0.72rem; padding: 0.25rem 0.5rem;">📄 Aadhaar (Pending)</span>
+                  <?php endif; ?>
+
+                  <?php if (!empty($udyam)): ?>
+                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Udyam MSME License', '<?= htmlspecialchars($udyam) ?>')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem;">
+                      📜 Udyam MSME
+                    </button>
+                  <?php else: ?>
+                    <span class="badge" style="background: rgba(148, 163, 184, 0.15); color: #64748B; font-size: 0.72rem; padding: 0.25rem 0.5rem;">📜 Udyam (Pending)</span>
+                  <?php endif; ?>
+
+                  <?php if (!empty($bank)): ?>
+                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Bank Statement / Cheque', '<?= htmlspecialchars($bank) ?>')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem;">
+                      🏦 Cheque
+                    </button>
+                  <?php else: ?>
+                    <span class="badge" style="background: rgba(148, 163, 184, 0.15); color: #64748B; font-size: 0.72rem; padding: 0.25rem 0.5rem;">🏦 Bank Proof (Pending)</span>
+                  <?php endif; ?>
                 </div>
               </td>
               <td>
