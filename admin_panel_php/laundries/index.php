@@ -460,6 +460,99 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $actionMsg = 'Laundry shop "' . htmlspecialchars($shopName ?: "Shop #{$targetId}") . '" details, brand media & compliance documents updated successfully and saved in database!';
+    } elseif ($action === 'replace_document' && $targetId) {
+        $docField = trim($_POST['doc_field'] ?? '');
+        $allowedFields = [
+            'id_proof_photo',
+            'business_proof_photo',
+            'bank_proof_photo',
+            'shop_board_photo',
+            'logo_url',
+            'cover_url',
+        ];
+
+        if (in_array($docField, $allowedFields, true) && !empty($_FILES['new_document_file']['name']) && $_FILES['new_document_file']['error'] === UPLOAD_ERR_OK) {
+            $uploadDir = __DIR__ . '/../uploads/documents/';
+            if (!is_dir($uploadDir)) {
+                @mkdir($uploadDir, 0777, true);
+            }
+
+            $origName = $_FILES['new_document_file']['name'];
+            $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION)) ?: 'jpg';
+            $fName = 'replaced_' . $docField . '_shop_' . $targetId . '_' . time() . '.' . $ext;
+            $destPath = $uploadDir . $fName;
+
+            if (move_uploaded_file($_FILES['new_document_file']['tmp_name'], $destPath)) {
+                $fileUrl = ADMIN_BASE_URL . '/uploads/documents/' . $fName;
+
+                // Sync file to Laravel public directory
+                $laravelUploadDir = dirname(__DIR__, 2) . '/backend_laravel/public/uploads/documents/';
+                if (is_dir($laravelUploadDir)) {
+                    @copy($destPath, $laravelUploadDir . $fName);
+                }
+
+                // 1. Direct MySQL update in dhobi_db
+                try {
+                    $db = getDb();
+                    if ($db) {
+                        $st = $db->prepare("UPDATE laundry_shops SET {$docField} = :url, updated_at = NOW() WHERE id = :id");
+                        $st->execute([':url' => $fileUrl, ':id' => $targetId]);
+
+                        $docTypeMap = [
+                            'id_proof_photo'       => 'AADHAAR',
+                            'business_proof_photo' => 'UDYAM_LICENSE',
+                            'bank_proof_photo'     => 'BANK_PROOF',
+                            'shop_board_photo'     => 'STORE_SIGNBOARD',
+                            'logo_url'             => 'SHOP_LOGO',
+                            'cover_url'            => 'SHOP_COVER',
+                        ];
+                        $docType = $docTypeMap[$docField] ?? strtoupper($docField);
+
+                        // Upsert in laundry_documents
+                        $checkDoc = $db->prepare("SELECT id FROM laundry_documents WHERE laundry_id = :lid AND document_type = :dtype LIMIT 1");
+                        $checkDoc->execute([':lid' => $targetId, ':dtype' => $docType]);
+                        $existingDocId = $checkDoc->fetchColumn();
+
+                        if ($existingDocId) {
+                            $upDoc = $db->prepare("UPDATE laundry_documents SET file_path = :path, verification_status = 'PENDING', uploaded_at = NOW(), updated_at = NOW() WHERE id = :id");
+                            $upDoc->execute([':path' => $fileUrl, ':id' => $existingDocId]);
+                        } else {
+                            $inDoc = $db->prepare("INSERT INTO laundry_documents (laundry_id, document_type, document_number, file_path, verification_status, uploaded_at, created_at, updated_at) VALUES (:lid, :dtype, 'REPLACED_DOC', :path, 'PENDING', NOW(), NOW(), NOW())");
+                            $inDoc->execute([':lid' => $targetId, ':dtype' => $docType, ':path' => $fileUrl]);
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    error_log("DB update error on replace_document: " . $e->getMessage());
+                }
+
+                // 2. Sync to Laravel REST API
+                try {
+                    apiPut("/admin/laundries/{$targetId}", [$docField => $fileUrl]);
+                } catch (\Throwable $e) {}
+
+                // 3. Update session storage
+                if (!empty($_SESSION['custom_shops'])) {
+                    foreach ($_SESSION['custom_shops'] as &$cs) {
+                        if (strval($cs['id'] ?? '') === strval($targetId)) {
+                            $cs[$docField] = $fileUrl;
+                            if ($docField === 'id_proof_photo') $cs['idProofPhoto'] = $fileUrl;
+                            if ($docField === 'business_proof_photo') $cs['businessProofPhoto'] = $fileUrl;
+                            if ($docField === 'bank_proof_photo') $cs['bankProofPhoto'] = $fileUrl;
+                            if ($docField === 'shop_board_photo') $cs['shopBoardPhoto'] = $fileUrl;
+                            if ($docField === 'logo_url') $cs['logo_url'] = $fileUrl;
+                            if ($docField === 'cover_url') $cs['cover_url'] = $fileUrl;
+                            break;
+                        }
+                    }
+                    unset($cs);
+                }
+
+                $niceName = ucwords(str_replace('_', ' ', $docField));
+                $actionMsg = "Successfully replaced {$niceName} for Shop #{$targetId}! New document stored in database.";
+            } else {
+                $actionError = "Failed to upload replacement document. Please try again.";
+            }
+        }
     }
 }
 
@@ -805,7 +898,7 @@ if ($tab === 'ACTIVE') {
 
 <!-- Modal: Document Preview Lightbox -->
 <div id="docPreviewLightbox" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(10, 15, 30, 0.85); backdrop-filter: blur(10px); align-items: center; justify-content: center; z-index: 100000; padding: 1.5rem;">
-  <div class="modal-content" style="background: var(--bg-card); border-radius: 16px; border: 1px solid rgba(129,98,238,0.3); width: 100%; max-width: 720px; box-shadow: 0 30px 60px rgba(0,0,0,0.6); color: var(--text-primary); overflow: hidden; display: flex; flex-direction: column;">
+  <div class="modal-content" style="background: var(--bg-card); border-radius: 16px; border: 1px solid rgba(129,98,238,0.3); width: 100%; max-width: 740px; box-shadow: 0 30px 60px rgba(0,0,0,0.6); color: var(--text-primary); overflow: hidden; display: flex; flex-direction: column;">
     <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.15);">
       <div style="display: flex; align-items: center; gap: 0.6rem;">
         <i data-lucide="file-text" style="width: 20px; height: 20px; color: #8162EE;"></i>
@@ -814,15 +907,60 @@ if ($tab === 'ACTIVE') {
       <button onclick="closeModal('docPreviewLightbox')" style="background: var(--bg-input); border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted);">✕</button>
     </div>
     
-    <div style="padding: 1.5rem; text-align: center; background: rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; min-height: 320px;">
-      <img id="docPreviewImg" src="" alt="Document Preview" style="max-width: 100%; max-height: 480px; border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 10px 25px rgba(0,0,0,0.3); object-fit: contain; background: #FFF;">
+    <div style="padding: 1.5rem; text-align: center; background: rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; min-height: 320px; max-height: 480px; overflow: hidden;">
+      <img id="docPreviewImg" src="" alt="Document Preview" style="max-width: 100%; max-height: 460px; border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 10px 25px rgba(0,0,0,0.3); object-fit: contain; background: #FFF;">
     </div>
 
-    <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-card);">
+    <!-- Inline Replace Document Panel (Direct DB Update) -->
+    <div id="replaceDocPanel" style="display: none; padding: 1.15rem 1.5rem; background: rgba(245, 158, 11, 0.08); border-top: 1px solid rgba(245, 158, 11, 0.25);">
+      <form id="replaceDocForm" method="POST" action="" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <input type="hidden" name="action" value="replace_document">
+        <input type="hidden" id="replaceShopId" name="shop_id" value="">
+        <input type="hidden" id="replaceDocField" name="doc_field" value="">
+
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+          <span style="font-size: 0.88rem; font-weight: 800; color: #D97706; display: flex; align-items: center; gap: 0.4rem;">
+            <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i> Replace Document (Permanently Saved to Database)
+          </span>
+          <span id="replaceFieldLabel" style="font-size: 0.75rem; font-weight: 700; background: rgba(245,158,11,0.2); color: #B45309; padding: 0.2rem 0.5rem; border-radius: 4px;"></span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div>
+            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Document Slot to Replace:</label>
+            <select id="replaceFieldSelect" class="form-control" style="font-size: 0.82rem; padding: 0.45rem;" onchange="document.getElementById('replaceDocField').value = this.value; document.getElementById('replaceFieldLabel').innerText = 'Slot: ' + this.options[this.selectedIndex].text;">
+              <option value="id_proof_photo">Aadhaar / ID Proof (id_proof_photo)</option>
+              <option value="business_proof_photo">Udyam / Trade License (business_proof_photo)</option>
+              <option value="bank_proof_photo">Bank Cheque / Passbook (bank_proof_photo)</option>
+              <option value="shop_board_photo">Storefront Signboard (shop_board_photo)</option>
+              <option value="logo_url">Shop Logo (logo_url)</option>
+              <option value="cover_url">Shop Cover Banner (cover_url)</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Choose New Document File:</label>
+            <input type="file" id="replaceFileInput" name="new_document_file" accept="image/*,.pdf" required class="form-control" style="font-size: 0.82rem; padding: 0.35rem 0.5rem;">
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 0.25rem;">
+          <button type="button" onclick="toggleReplaceDocPanel(false)" class="btn btn-secondary btn-sm" style="font-weight: 700;">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); border: none; color: #FFF; font-weight: 800; padding: 0.45rem 1.2rem; display: inline-flex; align-items: center; gap: 0.35rem; box-shadow: 0 4px 12px rgba(129,98,238,0.35);">
+            <i data-lucide="check" style="width: 14px; height: 14px;"></i> Upload &amp; Replace in DB
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); flex-wrap: wrap; gap: 0.75rem;">
       <span style="font-size: 0.78rem; color: #10B981; font-weight: 700; display: flex; align-items: center; gap: 0.35rem;">
         <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i> Verified Official KYC Compliance Document
       </span>
-      <div style="display: flex; gap: 0.75rem;">
+      <div style="display: flex; gap: 0.6rem; align-items: center;">
+        <button type="button" id="docPreviewReplaceBtn" onclick="toggleReplaceDocPanel()" class="btn btn-warning btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; background: #F59E0B; color: #FFF; border: none;">
+          <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i> Replace Document
+        </button>
         <a id="docPreviewFullTabBtn" href="#" target="_blank" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700;">
           <i data-lucide="external-link" style="width: 14px; height: 14px;"></i> Open Full Size
         </a>
@@ -2813,11 +2951,48 @@ if ($tab === 'ACTIVE') {
     document.getElementById('mapSearchResults').style.display = 'none';
   }
 
-  function openDocPreview(title, url) {
+  function toggleReplaceDocPanel(force) {
+    const p = document.getElementById('replaceDocPanel');
+    if (!p) return;
+    const shouldShow = force !== undefined ? force : (p.style.display === 'none' || !p.style.display);
+    p.style.display = shouldShow ? 'block' : 'none';
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function openDocPreview(title, url, shopId = '', docField = '') {
     document.getElementById('docPreviewTitle').innerText = title || 'Document Inspection';
-    document.getElementById('docPreviewImg').src = url;
-    document.getElementById('docPreviewFullTabBtn').href = url;
-    document.getElementById('docPreviewDownloadBtn').href = url;
+    const imgEl = document.getElementById('docPreviewImg');
+    if (url) {
+      imgEl.src = url;
+      imgEl.style.display = 'block';
+    } else {
+      imgEl.src = '';
+      imgEl.style.display = 'none';
+    }
+    document.getElementById('docPreviewFullTabBtn').href = url || '#';
+    document.getElementById('docPreviewDownloadBtn').href = url || '#';
+    document.getElementById('docPreviewFullTabBtn').style.display = url ? 'inline-flex' : 'none';
+    document.getElementById('docPreviewDownloadBtn').style.display = url ? 'inline-flex' : 'none';
+
+    // Populate replace panel
+    const shopInput = document.getElementById('replaceShopId');
+    if (shopInput) shopInput.value = shopId || '';
+
+    const fieldInput = document.getElementById('replaceDocField');
+    if (fieldInput) fieldInput.value = docField || 'id_proof_photo';
+
+    const selectField = document.getElementById('replaceFieldSelect');
+    if (selectField && docField) {
+      selectField.value = docField;
+      const lbl = document.getElementById('replaceFieldLabel');
+      if (lbl) {
+        lbl.innerText = 'Slot: ' + selectField.options[selectField.selectedIndex].text;
+      }
+    }
+
+    const panel = document.getElementById('replaceDocPanel');
+    if (panel) panel.style.display = 'none';
+
     openModal('docPreviewLightbox');
     if (window.lucide) lucide.createIcons();
   }
@@ -2978,26 +3153,26 @@ if ($tab === 'ACTIVE') {
             <!-- Document 1: Aadhaar -->
             <div style="background: var(--bg-card); padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color); display: flex; gap: 0.75rem; align-items: center;">
               ${aadhaarImg ? `
-                <img src="${aadhaarImg}" alt="Aadhaar" style="width: 58px; height: 42px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-color); cursor: pointer; background: #fff;" onclick="openDocPreview('${sName} - Aadhaar / ID Proof', '${aadhaarImg}')">
+                <img src="${aadhaarImg}" alt="Aadhaar" style="width: 58px; height: 42px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-color); cursor: pointer; background: #fff;" onclick="openDocPreview('${sName} - Aadhaar / ID Proof', '${aadhaarImg}', '${sId}', 'id_proof_photo')">
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 800; font-size: 0.85rem;">Aadhaar / ID Proof</div>
                   <div style="font-size: 0.72rem; color: var(--text-muted); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">No: ${aadhaarNo || 'Verified'}</div>
-                  <button type="button" class="btn btn-outline btn-sm" onclick="openDocPreview('${sName} - Aadhaar / ID Proof', '${aadhaarImg}')" style="margin-top: 0.35rem; padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;">
-                    <i data-lucide="eye" style="width: 12px; height: 12px;"></i> View Document
-                  </button>
+                  <div style="display: flex; gap: 0.4rem; margin-top: 0.35rem; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="openDocPreview('${sName} - Aadhaar / ID Proof', '${aadhaarImg}', '${sId}', 'id_proof_photo')" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;">
+                      <i data-lucide="eye" style="width: 12px; height: 12px;"></i> View
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="openDocPreview('${sName} - Aadhaar / ID Proof', '${aadhaarImg}', '${sId}', 'id_proof_photo'); toggleReplaceDocPanel(true);" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem; color: #D97706; font-weight: 700;">
+                      <i data-lucide="refresh-cw" style="width: 12px; height: 12px;"></i> Replace
+                    </button>
+                  </div>
                 </div>
               ` : `
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 800; font-size: 0.85rem;">Aadhaar / ID Proof</div>
-                  <span style="font-size: 0.72rem; color: #D97706; font-weight: 700;">⚠️ Document Not Uploaded</span>
-                  <form action="<?= ADMIN_BASE_URL ?>/laundries/verifications.php" method="POST" enctype="multipart/form-data" style="margin-top: 10px;">
-                    <input type="hidden" name="action" value="upload_missing_doc">
-                    <input type="hidden" name="shop_id" value="${sId}">
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                      <input type="file" name="doc_files[aadhaar]" style="font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; flex: 1;" required accept="image/*,.pdf">
-                      <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; border-radius: 6px; white-space: nowrap;">Upload</button>
-                    </div>
-                  </form>
+                  <span style="font-size: 0.72rem; color: #D97706; font-weight: 700; display: block; margin-bottom: 0.3rem;">⚠️ Document Not Uploaded</span>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="openDocPreview('${sName} - Upload Aadhaar', '', '${sId}', 'id_proof_photo'); toggleReplaceDocPanel(true);" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 700;">
+                    <i data-lucide="upload" style="width: 12px; height: 12px;"></i> Upload &amp; Store
+                  </button>
                 </div>
               `}
             </div>
@@ -3005,26 +3180,26 @@ if ($tab === 'ACTIVE') {
             <!-- Document 2: Trade License -->
             <div style="background: var(--bg-card); padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color); display: flex; gap: 0.75rem; align-items: center;">
               ${udyamImg ? `
-                <img src="${udyamImg}" alt="Udyam" style="width: 58px; height: 42px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-color); cursor: pointer; background: #fff;" onclick="openDocPreview('${sName} - Trade License', '${udyamImg}')">
+                <img src="${udyamImg}" alt="Udyam" style="width: 58px; height: 42px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-color); cursor: pointer; background: #fff;" onclick="openDocPreview('${sName} - Trade License', '${udyamImg}', '${sId}', 'business_proof_photo')">
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 800; font-size: 0.85rem;">Trade License / Udyam</div>
                   <div style="font-size: 0.72rem; color: var(--text-muted); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">No: ${udyamNo || 'Verified'}</div>
-                  <button type="button" class="btn btn-outline btn-sm" onclick="openDocPreview('${sName} - Trade License', '${udyamImg}')" style="margin-top: 0.35rem; padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;">
-                    <i data-lucide="eye" style="width: 12px; height: 12px;"></i> View Document
-                  </button>
+                  <div style="display: flex; gap: 0.4rem; margin-top: 0.35rem; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="openDocPreview('${sName} - Trade License', '${udyamImg}', '${sId}', 'business_proof_photo')" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;">
+                      <i data-lucide="eye" style="width: 12px; height: 12px;"></i> View
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="openDocPreview('${sName} - Trade License', '${udyamImg}', '${sId}', 'business_proof_photo'); toggleReplaceDocPanel(true);" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem; color: #D97706; font-weight: 700;">
+                      <i data-lucide="refresh-cw" style="width: 12px; height: 12px;"></i> Replace
+                    </button>
+                  </div>
                 </div>
               ` : `
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 800; font-size: 0.85rem;">Trade License / Udyam</div>
-                  <span style="font-size: 0.72rem; color: #D97706; font-weight: 700;">⚠️ Document Not Uploaded</span>
-                  <form action="<?= ADMIN_BASE_URL ?>/laundries/verifications.php" method="POST" enctype="multipart/form-data" style="margin-top: 10px;">
-                    <input type="hidden" name="action" value="upload_missing_doc">
-                    <input type="hidden" name="shop_id" value="${sId}">
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                      <input type="file" name="doc_files[udyam]" style="font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; flex: 1;" required accept="image/*,.pdf">
-                      <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; border-radius: 6px; white-space: nowrap;">Upload</button>
-                    </div>
-                  </form>
+                  <span style="font-size: 0.72rem; color: #D97706; font-weight: 700; display: block; margin-bottom: 0.3rem;">⚠️ Document Not Uploaded</span>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="openDocPreview('${sName} - Upload Trade License', '', '${sId}', 'business_proof_photo'); toggleReplaceDocPanel(true);" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 700;">
+                    <i data-lucide="upload" style="width: 12px; height: 12px;"></i> Upload &amp; Store
+                  </button>
                 </div>
               `}
             </div>
@@ -3032,26 +3207,26 @@ if ($tab === 'ACTIVE') {
             <!-- Document 3: Bank Cheque -->
             <div style="background: var(--bg-card); padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color); display: flex; gap: 0.75rem; align-items: center;">
               ${bankImg ? `
-                <img src="${bankImg}" alt="Bank Proof" style="width: 58px; height: 42px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-color); cursor: pointer; background: #fff;" onclick="openDocPreview('${sName} - Bank Cheque', '${bankImg}')">
+                <img src="${bankImg}" alt="Bank Proof" style="width: 58px; height: 42px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-color); cursor: pointer; background: #fff;" onclick="openDocPreview('${sName} - Bank Cheque', '${bankImg}', '${sId}', 'bank_proof_photo')">
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 800; font-size: 0.85rem;">Bank Cheque / Passbook</div>
                   <div style="font-size: 0.72rem; color: var(--text-muted); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">A/C: ${acc}</div>
-                  <button type="button" class="btn btn-outline btn-sm" onclick="openDocPreview('${sName} - Bank Cheque', '${bankImg}')" style="margin-top: 0.35rem; padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;">
-                    <i data-lucide="eye" style="width: 12px; height: 12px;"></i> View Document
-                  </button>
+                  <div style="display: flex; gap: 0.4rem; margin-top: 0.35rem; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="openDocPreview('${sName} - Bank Cheque', '${bankImg}', '${sId}', 'bank_proof_photo')" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;">
+                      <i data-lucide="eye" style="width: 12px; height: 12px;"></i> View
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="openDocPreview('${sName} - Bank Cheque', '${bankImg}', '${sId}', 'bank_proof_photo'); toggleReplaceDocPanel(true);" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem; color: #D97706; font-weight: 700;">
+                      <i data-lucide="refresh-cw" style="width: 12px; height: 12px;"></i> Replace
+                    </button>
+                  </div>
                 </div>
               ` : `
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 800; font-size: 0.85rem;">Bank Cheque / Passbook</div>
-                  <span style="font-size: 0.72rem; color: #D97706; font-weight: 700;">⚠️ Document Not Uploaded</span>
-                  <form action="<?= ADMIN_BASE_URL ?>/laundries/verifications.php" method="POST" enctype="multipart/form-data" style="margin-top: 10px;">
-                    <input type="hidden" name="action" value="upload_missing_doc">
-                    <input type="hidden" name="shop_id" value="${sId}">
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                      <input type="file" name="doc_files[bank]" style="font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; flex: 1;" required accept="image/*,.pdf">
-                      <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; border-radius: 6px; white-space: nowrap;">Upload</button>
-                    </div>
-                  </form>
+                  <span style="font-size: 0.72rem; color: #D97706; font-weight: 700; display: block; margin-bottom: 0.3rem;">⚠️ Document Not Uploaded</span>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="openDocPreview('${sName} - Upload Bank Cheque', '', '${sId}', 'bank_proof_photo'); toggleReplaceDocPanel(true);" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 700;">
+                    <i data-lucide="upload" style="width: 12px; height: 12px;"></i> Upload &amp; Store
+                  </button>
                 </div>
               `}
             </div>
@@ -3059,26 +3234,26 @@ if ($tab === 'ACTIVE') {
             <!-- Document 4: Store Front Signboard -->
             <div style="background: var(--bg-card); padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color); display: flex; gap: 0.75rem; align-items: center;">
               ${boardImg ? `
-                <img src="${boardImg}" alt="Signboard" style="width: 58px; height: 42px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-color); cursor: pointer; background: #fff;" onclick="openDocPreview('${sName} - Store Signboard', '${boardImg}')">
+                <img src="${boardImg}" alt="Signboard" style="width: 58px; height: 42px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-color); cursor: pointer; background: #fff;" onclick="openDocPreview('${sName} - Store Signboard', '${boardImg}', '${sId}', 'shop_board_photo')">
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 800; font-size: 0.85rem;">Storefront Signboard</div>
                   <div style="font-size: 0.72rem; color: var(--text-muted);">Physical Outlet Photo</div>
-                  <button type="button" class="btn btn-outline btn-sm" onclick="openDocPreview('${sName} - Store Signboard', '${boardImg}')" style="margin-top: 0.35rem; padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;">
-                    <i data-lucide="eye" style="width: 12px; height: 12px;"></i> View Photo
-                  </button>
+                  <div style="display: flex; gap: 0.4rem; margin-top: 0.35rem; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="openDocPreview('${sName} - Store Signboard', '${boardImg}', '${sId}', 'shop_board_photo')" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;">
+                      <i data-lucide="eye" style="width: 12px; height: 12px;"></i> View
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="openDocPreview('${sName} - Store Signboard', '${boardImg}', '${sId}', 'shop_board_photo'); toggleReplaceDocPanel(true);" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem; color: #D97706; font-weight: 700;">
+                      <i data-lucide="refresh-cw" style="width: 12px; height: 12px;"></i> Replace
+                    </button>
+                  </div>
                 </div>
               ` : `
                 <div style="flex: 1; min-width: 0;">
                   <div style="font-weight: 800; font-size: 0.85rem;">Storefront Signboard</div>
-                  <span style="font-size: 0.72rem; color: #D97706; font-weight: 700;">⚠️ Photo Not Uploaded</span>
-                  <form action="<?= ADMIN_BASE_URL ?>/laundries/verifications.php" method="POST" enctype="multipart/form-data" style="margin-top: 10px;">
-                    <input type="hidden" name="action" value="upload_missing_doc">
-                    <input type="hidden" name="shop_id" value="${sId}">
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                      <input type="file" name="doc_files[signboard]" style="font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; flex: 1;" required accept="image/*">
-                      <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.3rem 0.8rem; border-radius: 6px; white-space: nowrap;">Upload</button>
-                    </div>
-                  </form>
+                  <span style="font-size: 0.72rem; color: #D97706; font-weight: 700; display: block; margin-bottom: 0.3rem;">⚠️ Photo Not Uploaded</span>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="openDocPreview('${sName} - Upload Signboard', '', '${sId}', 'shop_board_photo'); toggleReplaceDocPanel(true);" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 700;">
+                    <i data-lucide="upload" style="width: 12px; height: 12px;"></i> Upload &amp; Store
+                  </button>
                 </div>
               `}
             </div>

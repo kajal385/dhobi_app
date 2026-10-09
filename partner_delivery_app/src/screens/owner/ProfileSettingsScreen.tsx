@@ -21,6 +21,7 @@ import { COLORS, FONTS, SPACING, SIZES } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { partnerService } from '../../services/partnerService';
 import { resolveImageUrl } from '../../constants/config';
+import { launchImageLibrary } from 'react-native-image-picker';
 
 const normalizeImageUrl = (url?: string | null): string => {
   return resolveImageUrl(url);
@@ -30,7 +31,7 @@ export const ProfileSettingsScreen = () => {
   const insets = useSafeAreaInsets();
   const { logout, currentUser, currentShop, updateShop, updateUser } = useAuth();
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
-  const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string; docField?: string } | null>(null);
 
   // State: Shop Profile Info
   const [shopProfile, setShopProfile] = useState({
@@ -68,9 +69,10 @@ export const ProfileSettingsScreen = () => {
 
   // State: Documents
   const [documents, setDocuments] = useState<any[]>([
-    { title: 'Owner ID Proof (Aadhaar)', status: 'VERIFIED', docNo: '123456789012', date: 'Uploaded', photoUrl: '' },
-    { title: 'Shop License / Udyam Certificate', status: 'VERIFIED', docNo: 'UDYAM-MH-01-0001234', date: 'Uploaded', photoUrl: '' },
-    { title: 'GST Registration Certificate', status: 'VERIFIED', docNo: '27AABCU9603R1ZM', date: 'Uploaded', photoUrl: '' },
+    { key: 'id_proof_photo', docField: 'id_proof_photo', title: 'Owner ID Proof (Aadhaar Card)', status: 'VERIFIED', docNo: 'Aadhaar Document', date: 'Uploaded', photoUrl: '' },
+    { key: 'business_proof_photo', docField: 'business_proof_photo', title: 'Shop License / Udyam Certificate', status: 'VERIFIED', docNo: 'Trade License / Udyam', date: 'Uploaded', photoUrl: '' },
+    { key: 'bank_proof_photo', docField: 'bank_proof_photo', title: 'Bank Statement / Cancelled Cheque', status: 'VERIFIED', docNo: 'Bank Proof', date: 'Uploaded', photoUrl: '' },
+    { key: 'shop_board_photo', docField: 'shop_board_photo', title: 'Storefront Signboard Photo', status: 'VERIFIED', docNo: 'Outlet Signboard', date: 'Uploaded', photoUrl: '' },
   ]);
 
   // Load real profile details and documents from backend
@@ -123,26 +125,56 @@ export const ProfileSettingsScreen = () => {
 
           // Build dynamic verified documents list from DB records
           const docList: any[] = [];
-          if (shop.id_proof_photo || shop.id_proof_number) {
-            docList.push({
-              title: 'Owner ID Proof (Aadhaar Card)',
-              status: (shop.verification_status || 'Approved').toUpperCase(),
-              docNo: shop.id_proof_number || '123456789012',
-              date: shop.created_at ? shop.created_at.split('T')[0] : 'Uploaded',
-              photoUrl: normalizeImageUrl(shop.id_proof_photo),
-            });
-          }
-          if (shop.business_proof_photo || shop.business_proof_number) {
-            docList.push({
-              title: 'Shop License / Udyam Certificate',
-              status: (shop.verification_status || 'Approved').toUpperCase(),
-              docNo: shop.business_proof_number || 'UDYAM-MH-01-0001234',
-              date: shop.created_at ? shop.created_at.split('T')[0] : 'Uploaded',
-              photoUrl: normalizeImageUrl(shop.business_proof_photo),
-            });
-          }
+          
+          // 1. Aadhaar / ID Proof
+          docList.push({
+            key: 'id_proof_photo',
+            docField: 'id_proof_photo',
+            title: 'Owner ID Proof (Aadhaar Card)',
+            status: shop.id_proof_photo ? (shop.verification_status || 'Approved').toUpperCase() : 'PENDING',
+            docNo: shop.id_proof_number || 'Aadhaar Document',
+            date: shop.created_at ? shop.created_at.split('T')[0] : 'Uploaded',
+            photoUrl: normalizeImageUrl(shop.id_proof_photo),
+          });
+
+          // 2. Business Proof / Udyam
+          docList.push({
+            key: 'business_proof_photo',
+            docField: 'business_proof_photo',
+            title: 'Shop License / Udyam Certificate',
+            status: shop.business_proof_photo ? (shop.verification_status || 'Approved').toUpperCase() : 'PENDING',
+            docNo: shop.business_proof_number || 'Trade License / Udyam',
+            date: shop.created_at ? shop.created_at.split('T')[0] : 'Uploaded',
+            photoUrl: normalizeImageUrl(shop.business_proof_photo),
+          });
+
+          // 3. Bank Account Proof / Cheque
+          docList.push({
+            key: 'bank_proof_photo',
+            docField: 'bank_proof_photo',
+            title: 'Bank Statement / Cancelled Cheque',
+            status: shop.bank_proof_photo ? (shop.verification_status || 'Approved').toUpperCase() : (shop.bank_account ? 'VERIFIED' : 'PENDING'),
+            docNo: shop.bank_account ? `A/C: ${shop.bank_account}` : 'Bank Passbook / Cheque',
+            date: shop.created_at ? shop.created_at.split('T')[0] : 'Uploaded',
+            photoUrl: normalizeImageUrl(shop.bank_proof_photo),
+          });
+
+          // 4. Storefront Signboard Photo
+          docList.push({
+            key: 'shop_board_photo',
+            docField: 'shop_board_photo',
+            title: 'Storefront Signboard Photo',
+            status: shop.shop_board_photo ? (shop.verification_status || 'Approved').toUpperCase() : 'PENDING',
+            docNo: 'Physical Outlet Proof',
+            date: shop.created_at ? shop.created_at.split('T')[0] : 'Uploaded',
+            photoUrl: normalizeImageUrl(shop.shop_board_photo),
+          });
+
+          // Optional: GST Certificate
           if (shop.gst_number) {
             docList.push({
+              key: 'gst_certificate',
+              docField: 'business_proof_photo',
               title: 'GST Registration Certificate',
               status: (shop.verification_status || 'Approved').toUpperCase(),
               docNo: shop.gst_number,
@@ -150,8 +182,12 @@ export const ProfileSettingsScreen = () => {
               photoUrl: normalizeImageUrl(shop.business_proof_photo || shop.id_proof_photo),
             });
           }
+
+          // Optional: Official Logo & Cover
           if (shop.logo_url) {
             docList.push({
+              key: 'logo_url',
+              docField: 'logo_url',
               title: 'Shop Official Logo / Branding',
               status: 'APPROVED',
               docNo: 'LOGO',
@@ -161,6 +197,8 @@ export const ProfileSettingsScreen = () => {
           }
           if (shop.cover_url) {
             docList.push({
+              key: 'cover_url',
+              docField: 'cover_url',
               title: 'Shop Cover Banner Photo',
               status: 'APPROVED',
               docNo: 'COVER',
@@ -168,11 +206,23 @@ export const ProfileSettingsScreen = () => {
               photoUrl: normalizeImageUrl(shop.cover_url),
             });
           }
+
+          // Dynamic normalized laundry_documents rows
           if (Array.isArray(shop.documents)) {
             shop.documents.forEach((d: any) => {
               const url = normalizeImageUrl(d.file_path);
+              const typeStr = String(d.document_type || '').toUpperCase();
+              let targetField = 'id_proof_photo';
+              if (typeStr.includes('UDYAM') || typeStr.includes('BUSINESS') || typeStr.includes('LICENSE')) targetField = 'business_proof_photo';
+              if (typeStr.includes('BANK') || typeStr.includes('CHEQUE')) targetField = 'bank_proof_photo';
+              if (typeStr.includes('SIGNBOARD') || typeStr.includes('BOARD')) targetField = 'shop_board_photo';
+              if (typeStr.includes('LOGO')) targetField = 'logo_url';
+              if (typeStr.includes('COVER')) targetField = 'cover_url';
+
               if (url && !docList.some((x) => x.photoUrl === url)) {
                 docList.push({
+                  key: d.document_type || 'COMPLIANCE_DOC',
+                  docField: targetField,
                   title: d.document_type || 'Compliance Document',
                   status: (d.verification_status || 'Approved').toUpperCase(),
                   docNo: d.document_number || 'DOC-VERIFIED',
@@ -376,6 +426,56 @@ export const ProfileSettingsScreen = () => {
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setActiveModal(null);
       Alert.alert('Password Changed! 🔐', 'Your account login password has been updated securely.');
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  };
+
+  const handleReplaceDocument = async (docField: string, docTitle: string) => {
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        includeBase64: true,
+      });
+
+      if (result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const newUri = asset.base64
+          ? `data:${asset.type || 'image/jpeg'};base64,${asset.base64}`
+          : (asset.uri || '');
+
+        if (!newUri) return;
+
+        setIsLoadingProfile(true);
+
+        const shopId = currentShop?.id;
+        await partnerService.updateOwnerProfile({
+          shop_id: shopId,
+          phone: shopProfile.phone || currentShop?.phone || currentUser?.phone,
+          [docField]: newUri,
+        });
+
+        // Update local documents list
+        setDocuments((prev) =>
+          prev.map((d) =>
+            d.docField === docField || d.key === docField
+              ? { ...d, photoUrl: newUri, status: 'PENDING', date: 'Just now' }
+              : d
+          )
+        );
+
+        if (previewDoc) {
+          setPreviewDoc({ ...previewDoc, url: newUri, docField });
+        }
+
+        updateShop({ [docField]: newUri });
+        Alert.alert('Success 🎉', `${docTitle} replaced and saved to database! It is now updated in the Admin panel.`);
+      }
+    } catch (err: any) {
+      Alert.alert('Notice', 'Document replacement cancelled or error picking image.');
     } finally {
       setIsLoadingProfile(false);
     }
@@ -815,8 +915,8 @@ export const ProfileSettingsScreen = () => {
                     <Text style={styles.docNo}>Doc No: {doc.docNo}</Text>
                     <Text style={styles.docDate}>Verified on: {doc.date}</Text>
                     {doc.photoUrl ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: SPACING.xs, gap: SPACING.sm }}>
-                        <TouchableOpacity onPress={() => setPreviewDoc({ title: doc.title, url: doc.photoUrl })}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: SPACING.xs, gap: SPACING.sm, flexWrap: 'wrap' }}>
+                        <TouchableOpacity onPress={() => setPreviewDoc({ title: doc.title, url: doc.photoUrl, docField: doc.docField })}>
                           <Image
                             source={{ uri: doc.photoUrl }}
                             style={{ width: 48, height: 48, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border }}
@@ -824,12 +924,27 @@ export const ProfileSettingsScreen = () => {
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={{ paddingVertical: 6, paddingHorizontal: 10, backgroundColor: COLORS.primaryLight + '50', borderRadius: 6 }}
-                          onPress={() => setPreviewDoc({ title: doc.title, url: doc.photoUrl })}
+                          onPress={() => setPreviewDoc({ title: doc.title, url: doc.photoUrl, docField: doc.docField })}
                         >
                           <Text style={{ color: COLORS.primary, fontFamily: FONTS.semiBold, fontSize: 12 }}>👁️ View Full Photo</Text>
                         </TouchableOpacity>
+                        <TouchableOpacity
+                          style={{ paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#FEF3C7', borderRadius: 6, borderWidth: 1, borderColor: '#FDE68A' }}
+                          onPress={() => handleReplaceDocument(doc.docField || 'id_proof_photo', doc.title)}
+                        >
+                          <Text style={{ color: '#B45309', fontFamily: FONTS.semiBold, fontSize: 12 }}>🔄 Replace Document</Text>
+                        </TouchableOpacity>
                       </View>
-                    ) : null}
+                    ) : (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: SPACING.xs, gap: SPACING.sm }}>
+                        <TouchableOpacity
+                          style={{ paddingVertical: 6, paddingHorizontal: 12, backgroundColor: COLORS.primary, borderRadius: 6 }}
+                          onPress={() => handleReplaceDocument(doc.docField || 'id_proof_photo', doc.title)}
+                        >
+                          <Text style={{ color: '#FFFFFF', fontFamily: FONTS.semiBold, fontSize: 12 }}>📤 Upload Document</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 ))}
               </ScrollView>
@@ -859,7 +974,24 @@ export const ProfileSettingsScreen = () => {
                   style={{ width: '100%', height: 340, borderRadius: 8, resizeMode: 'contain', backgroundColor: '#1E293B' }}
                 />
               ) : null}
-              <AppButton title="Close Preview" onPress={() => setPreviewDoc(null)} style={[styles.saveBtn, { marginTop: SPACING.md }]} />
+              <View style={{ flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.md }}>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: '#FEF3C7', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#FDE68A' }}
+                  onPress={() => {
+                    const f = previewDoc?.docField || 'id_proof_photo';
+                    const t = previewDoc?.title || 'Document';
+                    handleReplaceDocument(f, t);
+                  }}
+                >
+                  <Text style={{ color: '#B45309', fontFamily: FONTS.bold, fontSize: 13 }}>🔄 Replace Document</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: COLORS.primary, paddingVertical: 12, borderRadius: 10, alignItems: 'center' }}
+                  onPress={() => setPreviewDoc(null)}
+                >
+                  <Text style={{ color: '#FFFFFF', fontFamily: FONTS.bold, fontSize: 13 }}>Close Preview</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>

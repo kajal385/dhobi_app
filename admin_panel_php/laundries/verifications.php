@@ -3,6 +3,7 @@ $pageTitle = 'Verification Queue';
 // Include API client and auth BEFORE processing forms (to avoid header already sent)
 require_once __DIR__ . '/../includes/api-client.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
 
 // Form actions
 $actionMsg = null;
@@ -64,13 +65,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($_FILES['doc_files']['name']) && is_array($_FILES['doc_files']['name'])) {
             foreach ($_FILES['doc_files']['name'] as $docField => $origName) {
                 if ($_FILES['doc_files']['error'][$docField] === UPLOAD_ERR_OK) {
-                    $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+                    $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION)) ?: 'jpg';
                     $fName = 'resubmit_' . $docField . '_' . time() . '_' . mt_rand(1000, 9999) . '.' . $ext;
                     
                     if (move_uploaded_file($_FILES['doc_files']['tmp_name'][$docField], $uploadDir . $fName)) {
                         $fileUrl = ADMIN_BASE_URL . '/uploads/documents/' . $fName;
                         $uploadedCount++;
                         $apiUpdatePayload[$docField] = $fileUrl;
+
+                        // Sync to Laravel public upload directory
+                        $laravelUploadDir = dirname(__DIR__, 2) . '/backend_laravel/public/uploads/documents/';
+                        if (is_dir($laravelUploadDir)) {
+                            @copy($uploadDir . $fName, $laravelUploadDir . $fName);
+                        }
+
+                        // Direct update to dhobi_db
+                        try {
+                            $db = getDb();
+                            if ($db) {
+                                $st = $db->prepare("UPDATE laundry_shops SET {$docField} = :url, updated_at = NOW() WHERE id = :id");
+                                $st->execute([':url' => $fileUrl, ':id' => $shopId]);
+
+                                $docTypeMap = [
+                                    'id_proof_photo'       => 'AADHAAR',
+                                    'business_proof_photo' => 'UDYAM_LICENSE',
+                                    'bank_proof_photo'     => 'BANK_PROOF',
+                                    'shop_board_photo'     => 'STORE_SIGNBOARD',
+                                    'logo_url'             => 'SHOP_LOGO',
+                                    'cover_url'            => 'SHOP_COVER',
+                                ];
+                                $docType = $docTypeMap[$docField] ?? strtoupper($docField);
+
+                                $checkDoc = $db->prepare("SELECT id FROM laundry_documents WHERE laundry_id = :lid AND document_type = :dtype LIMIT 1");
+                                $checkDoc->execute([':lid' => $shopId, ':dtype' => $docType]);
+                                $existingDocId = $checkDoc->fetchColumn();
+
+                                if ($existingDocId) {
+                                    $upDoc = $db->prepare("UPDATE laundry_documents SET file_path = :path, verification_status = 'PENDING', uploaded_at = NOW(), updated_at = NOW() WHERE id = :id");
+                                    $upDoc->execute([':path' => $fileUrl, ':id' => $existingDocId]);
+                                } else {
+                                    $inDoc = $db->prepare("INSERT INTO laundry_documents (laundry_id, document_type, document_number, file_path, verification_status, uploaded_at, created_at, updated_at) VALUES (:lid, :dtype, 'REPLACED_DOC', :path, 'PENDING', NOW(), NOW(), NOW())");
+                                    $inDoc->execute([':lid' => $shopId, ':dtype' => $docType, ':path' => $fileUrl]);
+                                }
+                            }
+                        } catch (\Throwable $e) {
+                            error_log("DB update error on upload_missing_doc: " . $e->getMessage());
+                        }
                         
                         if (!empty($_SESSION['custom_shops'])) {
                             foreach ($_SESSION['custom_shops'] as &$cs) {
@@ -99,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             if ($uploadedCount > 0) {
-                // Sync the newly uploaded document URLs to the Laravel database
+                // Sync newly uploaded document URLs to the Laravel database
                 if (isLaundryOwner()) {
                     apiPut('/owner/profile', $apiUpdatePayload);
                 } else {
@@ -118,6 +158,99 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 $actionMsg = "{$uploadedCount} requested document(s) uploaded successfully! Submitted to Admin for compliance verification.";
+            }
+        }
+    } elseif ($action === 'replace_document' && $shopId) {
+        $docField = trim($_POST['doc_field'] ?? '');
+        $allowedFields = [
+            'id_proof_photo',
+            'business_proof_photo',
+            'bank_proof_photo',
+            'shop_board_photo',
+            'logo_url',
+            'cover_url',
+        ];
+
+        if (in_array($docField, $allowedFields, true) && !empty($_FILES['new_document_file']['name']) && $_FILES['new_document_file']['error'] === UPLOAD_ERR_OK) {
+            $uploadDir = __DIR__ . '/../uploads/documents/';
+            if (!is_dir($uploadDir)) {
+                @mkdir($uploadDir, 0777, true);
+            }
+
+            $origName = $_FILES['new_document_file']['name'];
+            $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION)) ?: 'jpg';
+            $fName = 'replaced_' . $docField . '_shop_' . $shopId . '_' . time() . '.' . $ext;
+            $destPath = $uploadDir . $fName;
+
+            if (move_uploaded_file($_FILES['new_document_file']['tmp_name'], $destPath)) {
+                $fileUrl = ADMIN_BASE_URL . '/uploads/documents/' . $fName;
+
+                // Sync file to Laravel public directory
+                $laravelUploadDir = dirname(__DIR__, 2) . '/backend_laravel/public/uploads/documents/';
+                if (is_dir($laravelUploadDir)) {
+                    @copy($destPath, $laravelUploadDir . $fName);
+                }
+
+                // 1. Direct MySQL update in dhobi_db
+                try {
+                    $db = getDb();
+                    if ($db) {
+                        $st = $db->prepare("UPDATE laundry_shops SET {$docField} = :url, updated_at = NOW() WHERE id = :id");
+                        $st->execute([':url' => $fileUrl, ':id' => $shopId]);
+
+                        $docTypeMap = [
+                            'id_proof_photo'       => 'AADHAAR',
+                            'business_proof_photo' => 'UDYAM_LICENSE',
+                            'bank_proof_photo'     => 'BANK_PROOF',
+                            'shop_board_photo'     => 'STORE_SIGNBOARD',
+                            'logo_url'             => 'SHOP_LOGO',
+                            'cover_url'            => 'SHOP_COVER',
+                        ];
+                        $docType = $docTypeMap[$docField] ?? strtoupper($docField);
+
+                        // Upsert in laundry_documents
+                        $checkDoc = $db->prepare("SELECT id FROM laundry_documents WHERE laundry_id = :lid AND document_type = :dtype LIMIT 1");
+                        $checkDoc->execute([':lid' => $shopId, ':dtype' => $docType]);
+                        $existingDocId = $checkDoc->fetchColumn();
+
+                        if ($existingDocId) {
+                            $upDoc = $db->prepare("UPDATE laundry_documents SET file_path = :path, verification_status = 'PENDING', uploaded_at = NOW(), updated_at = NOW() WHERE id = :id");
+                            $upDoc->execute([':path' => $fileUrl, ':id' => $existingDocId]);
+                        } else {
+                            $inDoc = $db->prepare("INSERT INTO laundry_documents (laundry_id, document_type, document_number, file_path, verification_status, uploaded_at, created_at, updated_at) VALUES (:lid, :dtype, 'REPLACED_DOC', :path, 'PENDING', NOW(), NOW(), NOW())");
+                            $inDoc->execute([':lid' => $shopId, ':dtype' => $docType, ':path' => $fileUrl]);
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    error_log("DB update error on replace_document: " . $e->getMessage());
+                }
+
+                // 2. Sync to Laravel REST API
+                try {
+                    apiPut("/admin/laundries/{$shopId}", [$docField => $fileUrl]);
+                } catch (\Throwable $e) {}
+
+                // 3. Update session storage
+                if (!empty($_SESSION['custom_shops'])) {
+                    foreach ($_SESSION['custom_shops'] as &$cs) {
+                        if (strval($cs['id'] ?? '') === strval($shopId)) {
+                            $cs[$docField] = $fileUrl;
+                            if ($docField === 'id_proof_photo') $cs['idProofPhoto'] = $fileUrl;
+                            if ($docField === 'business_proof_photo') $cs['businessProofPhoto'] = $fileUrl;
+                            if ($docField === 'bank_proof_photo') $cs['bankProofPhoto'] = $fileUrl;
+                            if ($docField === 'shop_board_photo') $cs['shopBoardPhoto'] = $fileUrl;
+                            if ($docField === 'logo_url') $cs['logo_url'] = $fileUrl;
+                            if ($docField === 'cover_url') $cs['cover_url'] = $fileUrl;
+                            break;
+                        }
+                    }
+                    unset($cs);
+                }
+
+                $niceName = ucwords(str_replace('_', ' ', $docField));
+                $actionMsg = "Successfully replaced {$niceName} for Shop #{$shopId}! New document stored in database.";
+            } else {
+                $actionMsg = "Failed to upload replacement document. Please try again.";
             }
         }
     }
@@ -167,7 +300,41 @@ if (!empty($_SESSION['custom_shops'])) {
 
 // Removed fallback injection because Neha is now seeded directly in api.php's global session array
 
-// Keep genuine documents only - do not inject fake/system-generated sample SVGs
+// Keep genuine documents only - synchronizing directly with dhobi_db
+try {
+    $db = getDb();
+    if ($db) {
+        foreach ($queue as &$qItem) {
+            $qId = $qItem['id'] ?? $qItem['shop_id'] ?? null;
+            if ($qId) {
+                $dbShop = $db->query("SELECT id_proof_photo, business_proof_photo, bank_proof_photo, shop_board_photo, logo_url, cover_url FROM laundry_shops WHERE id = " . intval($qId))->fetch();
+                if ($dbShop) {
+                    if (!empty($dbShop['id_proof_photo'])) $qItem['idProofPhoto'] = $qItem['id_proof_photo'] = $dbShop['id_proof_photo'];
+                    if (!empty($dbShop['business_proof_photo'])) $qItem['businessProofPhoto'] = $qItem['business_proof_photo'] = $dbShop['business_proof_photo'];
+                    if (!empty($dbShop['bank_proof_photo'])) $qItem['bankProofPhoto'] = $qItem['bank_proof_photo'] = $dbShop['bank_proof_photo'];
+                    if (!empty($dbShop['shop_board_photo'])) $qItem['shopBoardPhoto'] = $qItem['shop_board_photo'] = $dbShop['shop_board_photo'];
+                    if (!empty($dbShop['logo_url'])) $qItem['logo_url'] = $dbShop['logo_url'];
+                    if (!empty($dbShop['cover_url'])) $qItem['cover_url'] = $dbShop['cover_url'];
+                }
+                $docRows = $db->query("SELECT document_type, file_path FROM laundry_documents WHERE laundry_id = " . intval($qId))->fetchAll();
+                foreach ($docRows as $dr) {
+                    $dt = strtoupper($dr['document_type']);
+                    if (in_array($dt, ['AADHAAR', 'ID_PROOF']) && empty($qItem['idProofPhoto'])) {
+                        $qItem['idProofPhoto'] = $qItem['id_proof_photo'] = $dr['file_path'];
+                    } elseif (in_array($dt, ['UDYAM_LICENSE', 'BUSINESS_PROOF', 'TRADE_LICENSE']) && empty($qItem['businessProofPhoto'])) {
+                        $qItem['businessProofPhoto'] = $qItem['business_proof_photo'] = $dr['file_path'];
+                    } elseif (in_array($dt, ['BANK_PROOF', 'BANK_CHEQUE']) && empty($qItem['bankProofPhoto'])) {
+                        $qItem['bankProofPhoto'] = $qItem['bank_proof_photo'] = $dr['file_path'];
+                    } elseif (in_array($dt, ['STORE_SIGNBOARD', 'SHOP_BOARD']) && empty($qItem['shopBoardPhoto'])) {
+                        $qItem['shopBoardPhoto'] = $qItem['shop_board_photo'] = $dr['file_path'];
+                    }
+                }
+            }
+        }
+        unset($qItem);
+    }
+} catch (\Throwable $e) {}
+
 foreach ($queue as &$qItem) {
     $qItem['idProofPhoto'] = $qItem['idProofPhoto'] ?? ($qItem['id_proof_photo'] ?? '');
     $qItem['businessProofPhoto'] = $qItem['businessProofPhoto'] ?? ($qItem['business_proof_photo'] ?? '');
@@ -412,6 +579,7 @@ if ($isOwner) {
               $aadhaar = $req['idProofPhoto'] ?? $req['id_proof_photo'] ?? '';
               $udyam = $req['businessProofPhoto'] ?? $req['business_proof_photo'] ?? '';
               $bank = $req['bankProofPhoto'] ?? $req['bank_proof_photo'] ?? '';
+              $board = $req['shopBoardPhoto'] ?? $req['shop_board_photo'] ?? '';
               $gstVal = $req['gstNumber'] ?? $req['gst_number'] ?? 'PENDING';
               $bankAccVal = $req['bankAccount'] ?? $req['bank_account'] ?? ($req['bank_account_number'] ?? 'PENDING');
           ?>
@@ -434,27 +602,43 @@ if ($isOwner) {
               <td>
                 <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
                   <?php if (!empty($aadhaar)): ?>
-                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Aadhaar Card Proof', '<?= htmlspecialchars($aadhaar) ?>')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem;">
+                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Aadhaar Card Proof', '<?= htmlspecialchars($aadhaar) ?>', '<?= htmlspecialchars($sId) ?>', 'id_proof_photo')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.2rem;">
                       📄 Aadhaar
                     </button>
                   <?php else: ?>
-                    <span class="badge" style="background: rgba(148, 163, 184, 0.15); color: #64748B; font-size: 0.72rem; padding: 0.25rem 0.5rem;">📄 Aadhaar (Pending)</span>
+                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Upload Aadhaar Card Proof', '', '<?= htmlspecialchars($sId) ?>', 'id_proof_photo'); toggleReplaceDocPanel(true);" class="badge" style="background: rgba(148, 163, 184, 0.15); color: #64748B; font-size: 0.72rem; padding: 0.25rem 0.5rem; cursor: pointer; border: none;">
+                      📄 Aadhaar (Upload)
+                    </button>
                   <?php endif; ?>
 
                   <?php if (!empty($udyam)): ?>
-                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Udyam MSME License', '<?= htmlspecialchars($udyam) ?>')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem;">
+                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Udyam MSME License', '<?= htmlspecialchars($udyam) ?>', '<?= htmlspecialchars($sId) ?>', 'business_proof_photo')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.2rem;">
                       📜 Udyam MSME
                     </button>
                   <?php else: ?>
-                    <span class="badge" style="background: rgba(148, 163, 184, 0.15); color: #64748B; font-size: 0.72rem; padding: 0.25rem 0.5rem;">📜 Udyam (Pending)</span>
+                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Upload Udyam MSME License', '', '<?= htmlspecialchars($sId) ?>', 'business_proof_photo'); toggleReplaceDocPanel(true);" class="badge" style="background: rgba(148, 163, 184, 0.15); color: #64748B; font-size: 0.72rem; padding: 0.25rem 0.5rem; cursor: pointer; border: none;">
+                      📜 Udyam (Upload)
+                    </button>
                   <?php endif; ?>
 
                   <?php if (!empty($bank)): ?>
-                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Bank Statement / Cheque', '<?= htmlspecialchars($bank) ?>')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem;">
+                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Bank Statement / Cheque', '<?= htmlspecialchars($bank) ?>', '<?= htmlspecialchars($sId) ?>', 'bank_proof_photo')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.2rem;">
                       🏦 Cheque
                     </button>
                   <?php else: ?>
-                    <span class="badge" style="background: rgba(148, 163, 184, 0.15); color: #64748B; font-size: 0.72rem; padding: 0.25rem 0.5rem;">🏦 Bank Proof (Pending)</span>
+                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Upload Bank Statement / Cheque', '', '<?= htmlspecialchars($sId) ?>', 'bank_proof_photo'); toggleReplaceDocPanel(true);" class="badge" style="background: rgba(148, 163, 184, 0.15); color: #64748B; font-size: 0.72rem; padding: 0.25rem 0.5rem; cursor: pointer; border: none;">
+                      🏦 Cheque (Upload)
+                    </button>
+                  <?php endif; ?>
+
+                  <?php if (!empty($board)): ?>
+                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Storefront Signboard', '<?= htmlspecialchars($board) ?>', '<?= htmlspecialchars($sId) ?>', 'shop_board_photo')" class="badge badge-success" style="cursor: pointer; border: none; padding: 0.3rem 0.6rem; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.2rem;">
+                      🏬 Signboard
+                    </button>
+                  <?php else: ?>
+                    <button type="button" onclick="openDocPreview('<?= htmlspecialchars($sName) ?> - Upload Storefront Signboard', '', '<?= htmlspecialchars($sId) ?>', 'shop_board_photo'); toggleReplaceDocPanel(true);" class="badge" style="background: rgba(148, 163, 184, 0.15); color: #64748B; font-size: 0.72rem; padding: 0.25rem 0.5rem; cursor: pointer; border: none;">
+                      🏬 Signboard (Upload)
+                    </button>
                   <?php endif; ?>
                 </div>
               </td>
@@ -532,7 +716,7 @@ if ($isOwner) {
 
 <!-- Modal: Document Preview Lightbox -->
 <div id="docPreviewLightbox" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(10, 15, 30, 0.85); backdrop-filter: blur(10px); align-items: center; justify-content: center; z-index: 100000; padding: 1.5rem;">
-  <div class="modal-content" style="background: var(--bg-card); border-radius: 16px; border: 1px solid rgba(129,98,238,0.3); width: 100%; max-width: 720px; box-shadow: 0 30px 60px rgba(0,0,0,0.6); color: var(--text-primary); overflow: hidden; display: flex; flex-direction: column;">
+  <div class="modal-content" style="background: var(--bg-card); border-radius: 16px; border: 1px solid rgba(129,98,238,0.3); width: 100%; max-width: 740px; box-shadow: 0 30px 60px rgba(0,0,0,0.6); color: var(--text-primary); overflow: hidden; display: flex; flex-direction: column;">
     <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.15);">
       <div style="display: flex; align-items: center; gap: 0.6rem;">
         <i data-lucide="file-text" style="width: 20px; height: 20px; color: #8162EE;"></i>
@@ -541,15 +725,60 @@ if ($isOwner) {
       <button onclick="closeModal('docPreviewLightbox')" style="background: var(--bg-input); border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted);">✕</button>
     </div>
     
-    <div style="padding: 1.5rem; text-align: center; background: rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; min-height: 320px;">
-      <img id="docPreviewImg" src="" alt="Document Preview" style="max-width: 100%; max-height: 480px; border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 10px 25px rgba(0,0,0,0.3); object-fit: contain; background: #FFF;">
+    <div style="padding: 1.5rem; text-align: center; background: rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; min-height: 320px; max-height: 480px; overflow: hidden;">
+      <img id="docPreviewImg" src="" alt="Document Preview" style="max-width: 100%; max-height: 460px; border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 10px 25px rgba(0,0,0,0.3); object-fit: contain; background: #FFF;">
     </div>
 
-    <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-card);">
+    <!-- Inline Replace Document Panel (Direct DB Update) -->
+    <div id="replaceDocPanel" style="display: none; padding: 1.15rem 1.5rem; background: rgba(245, 158, 11, 0.08); border-top: 1px solid rgba(245, 158, 11, 0.25);">
+      <form id="replaceDocForm" method="POST" action="" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <input type="hidden" name="action" value="replace_document">
+        <input type="hidden" id="replaceShopId" name="shop_id" value="">
+        <input type="hidden" id="replaceDocField" name="doc_field" value="">
+
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+          <span style="font-size: 0.88rem; font-weight: 800; color: #D97706; display: flex; align-items: center; gap: 0.4rem;">
+            <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i> Replace Document (Permanently Saved to Database)
+          </span>
+          <span id="replaceFieldLabel" style="font-size: 0.75rem; font-weight: 700; background: rgba(245,158,11,0.2); color: #B45309; padding: 0.2rem 0.5rem; border-radius: 4px;"></span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div>
+            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Document Slot to Replace:</label>
+            <select id="replaceFieldSelect" class="form-control" style="font-size: 0.82rem; padding: 0.45rem;" onchange="document.getElementById('replaceDocField').value = this.value; document.getElementById('replaceFieldLabel').innerText = 'Slot: ' + this.options[this.selectedIndex].text;">
+              <option value="id_proof_photo">Aadhaar / ID Proof (id_proof_photo)</option>
+              <option value="business_proof_photo">Udyam / Trade License (business_proof_photo)</option>
+              <option value="bank_proof_photo">Bank Cheque / Passbook (bank_proof_photo)</option>
+              <option value="shop_board_photo">Storefront Signboard (shop_board_photo)</option>
+              <option value="logo_url">Shop Logo (logo_url)</option>
+              <option value="cover_url">Shop Cover Banner (cover_url)</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Choose New Document File:</label>
+            <input type="file" id="replaceFileInput" name="new_document_file" accept="image/*,.pdf" required class="form-control" style="font-size: 0.82rem; padding: 0.35rem 0.5rem;">
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 0.25rem;">
+          <button type="button" onclick="toggleReplaceDocPanel(false)" class="btn btn-secondary btn-sm" style="font-weight: 700;">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); border: none; color: #FFF; font-weight: 800; padding: 0.45rem 1.2rem; display: inline-flex; align-items: center; gap: 0.35rem; box-shadow: 0 4px 12px rgba(129,98,238,0.35);">
+            <i data-lucide="check" style="width: 14px; height: 14px;"></i> Upload &amp; Replace in DB
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); flex-wrap: wrap; gap: 0.75rem;">
       <span style="font-size: 0.78rem; color: #10B981; font-weight: 700; display: flex; align-items: center; gap: 0.35rem;">
         <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i> Verified Official KYC Compliance Document
       </span>
-      <div style="display: flex; gap: 0.75rem;">
+      <div style="display: flex; gap: 0.6rem; align-items: center;">
+        <button type="button" id="docPreviewReplaceBtn" onclick="toggleReplaceDocPanel()" class="btn btn-warning btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; background: #F59E0B; color: #FFF; border: none;">
+          <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i> Replace Document
+        </button>
         <a id="docPreviewFullTabBtn" href="#" target="_blank" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700;">
           <i data-lucide="external-link" style="width: 14px; height: 14px;"></i> Open Full Size
         </a>
@@ -587,11 +816,48 @@ if ($isOwner) {
     openModal('rejectModal');
   }
 
-  function openDocPreview(title, url) {
+  function toggleReplaceDocPanel(force) {
+    const p = document.getElementById('replaceDocPanel');
+    if (!p) return;
+    const shouldShow = force !== undefined ? force : (p.style.display === 'none' || !p.style.display);
+    p.style.display = shouldShow ? 'block' : 'none';
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function openDocPreview(title, url, shopId = '', docField = '') {
     document.getElementById('docPreviewTitle').innerText = title || 'Document Inspection';
-    document.getElementById('docPreviewImg').src = url;
-    document.getElementById('docPreviewFullTabBtn').href = url;
-    document.getElementById('docPreviewDownloadBtn').href = url;
+    const imgEl = document.getElementById('docPreviewImg');
+    if (url) {
+      imgEl.src = url;
+      imgEl.style.display = 'block';
+    } else {
+      imgEl.src = '';
+      imgEl.style.display = 'none';
+    }
+    document.getElementById('docPreviewFullTabBtn').href = url || '#';
+    document.getElementById('docPreviewDownloadBtn').href = url || '#';
+    document.getElementById('docPreviewFullTabBtn').style.display = url ? 'inline-flex' : 'none';
+    document.getElementById('docPreviewDownloadBtn').style.display = url ? 'inline-flex' : 'none';
+
+    // Populate replace panel
+    const shopInput = document.getElementById('replaceShopId');
+    if (shopInput) shopInput.value = shopId || '';
+
+    const fieldInput = document.getElementById('replaceDocField');
+    if (fieldInput) fieldInput.value = docField || 'id_proof_photo';
+
+    const selectField = document.getElementById('replaceFieldSelect');
+    if (selectField && docField) {
+      selectField.value = docField;
+      const lbl = document.getElementById('replaceFieldLabel');
+      if (lbl) {
+        lbl.innerText = 'Slot: ' + selectField.options[selectField.selectedIndex].text;
+      }
+    }
+
+    const panel = document.getElementById('replaceDocPanel');
+    if (panel) panel.style.display = 'none';
+
     openModal('docPreviewLightbox');
     if (window.lucide) lucide.createIcons();
   }
@@ -623,17 +889,22 @@ if ($isOwner) {
     const bankImg = shop.bankProofPhoto || '';
     const boardImg = shop.shopBoardPhoto || '';
 
-    const renderDocCard = (title, docNumber, imgUrl, docTypeLabel) => {
+    const renderDocCard = (title, docNumber, imgUrl, docField) => {
       if (imgUrl) {
         return `
           <div style="background: var(--bg-card); padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color); display: flex; gap: 0.75rem; align-items: center;">
-            <img src="${imgUrl}" alt="${title}" style="width: 58px; height: 42px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-color); cursor: pointer; background: #fff;" onclick="openDocPreview('${sName} - ${title}', '${imgUrl}')">
+            <img src="${imgUrl}" alt="${title}" style="width: 58px; height: 42px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-color); cursor: pointer; background: #fff;" onclick="openDocPreview('${sName} - ${title}', '${imgUrl}', '${sId}', '${docField}')">
             <div style="flex: 1; min-width: 0;">
               <div style="font-weight: 800; font-size: 0.85rem;">${title}</div>
               <div style="font-size: 0.72rem; color: var(--text-muted); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${docNumber}</div>
-              <button type="button" class="btn btn-outline btn-sm" onclick="openDocPreview('${sName} - ${title}', '${imgUrl}')" style="margin-top: 0.35rem; padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;">
-                <i data-lucide="eye" style="width: 12px; height: 12px;"></i> View Document
-              </button>
+              <div style="display: flex; gap: 0.4rem; margin-top: 0.35rem; flex-wrap: wrap;">
+                <button type="button" class="btn btn-outline btn-sm" onclick="openDocPreview('${sName} - ${title}', '${imgUrl}', '${sId}', '${docField}')" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;">
+                  <i data-lucide="eye" style="width: 12px; height: 12px;"></i> View
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="openDocPreview('${sName} - ${title}', '${imgUrl}', '${sId}', '${docField}'); toggleReplaceDocPanel(true);" style="padding: 0.2rem 0.6rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem; color: #D97706; border-color: rgba(217,119,6,0.3); font-weight: 700;">
+                  <i data-lucide="refresh-cw" style="width: 12px; height: 12px;"></i> Replace
+                </button>
+              </div>
             </div>
           </div>
         `;
@@ -646,9 +917,14 @@ if ($isOwner) {
           <div style="flex: 1; min-width: 0;">
             <div style="font-weight: 800; font-size: 0.85rem;">${title}</div>
             <div style="font-size: 0.72rem; color: var(--text-muted);">${docNumber}</div>
-            <span style="display: inline-block; margin-top: 0.35rem; font-size: 0.72rem; font-weight: 700; color: #EF4444; background: rgba(239, 68, 68, 0.1); padding: 0.15rem 0.5rem; border-radius: 4px;">
-              ⚠️ Document Not Uploaded
-            </span>
+            <div style="display: flex; gap: 0.4rem; align-items: center; margin-top: 0.35rem;">
+              <span style="font-size: 0.72rem; font-weight: 700; color: #EF4444; background: rgba(239, 68, 68, 0.1); padding: 0.15rem 0.5rem; border-radius: 4px;">
+                ⚠️ Not Uploaded
+              </span>
+              <button type="button" class="btn btn-primary btn-sm" onclick="openDocPreview('${sName} - Upload ${title}', '', '${sId}', '${docField}'); toggleReplaceDocPanel(true);" style="padding: 0.15rem 0.55rem; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.2rem; font-weight: 700;">
+                <i data-lucide="upload" style="width: 11px; height: 11px;"></i> Upload
+              </button>
+            </div>
           </div>
         </div>
       `;
@@ -700,10 +976,10 @@ if ($isOwner) {
             📄 Uploaded KYC Documents &amp; Business Proofs
           </h4>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
-            ${renderDocCard('Aadhaar / ID Proof', `Doc: ${aadhaarNo}`, aadhaarImg)}
-            ${renderDocCard('Udyam MSME License', `Doc: ${udyamNo}`, udyamImg)}
-            ${renderDocCard('Bank Account Cheque', `A/C: ${acc}`, bankImg)}
-            ${renderDocCard('Storefront Signboard', 'Physical Outlet Proof', boardImg)}
+            ${renderDocCard('Aadhaar / ID Proof', `Doc: ${aadhaarNo}`, aadhaarImg, 'id_proof_photo')}
+            ${renderDocCard('Udyam MSME License', `Doc: ${udyamNo}`, udyamImg, 'business_proof_photo')}
+            ${renderDocCard('Bank Account Cheque', `A/C: ${acc}`, bankImg, 'bank_proof_photo')}
+            ${renderDocCard('Storefront Signboard', 'Physical Outlet Proof', boardImg, 'shop_board_photo')}
           </div>
         </div>
       </div>

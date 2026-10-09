@@ -59,6 +59,8 @@ class LaundryShop extends Model
         'id_proof_photo',
         'business_proof_number',
         'business_proof_photo',
+        'bank_proof_photo',
+        'shop_board_photo',
         'pickup_radius_km',
         'working_hours',
     ];
