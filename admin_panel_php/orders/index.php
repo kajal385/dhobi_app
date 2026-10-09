@@ -349,7 +349,7 @@ $viewMode = $_GET['view'] ?? 'table';
               <th>Amount & Payment</th>
               <th>Assigned Driver</th>
               <th>Status</th>
-              <th>Actions & Flow</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -413,54 +413,26 @@ $viewMode = $_GET['view'] ?? 'table';
                   </span>
                 </td>
                 <td>
-                  <div style="display: flex; gap: 0.35rem; align-items: center; white-space: nowrap;">
-                    <button type="button" onclick="viewOrderDetails(<?= htmlspecialchars(json_encode($o)) ?>)" class="btn btn-secondary btn-sm" title="Inspect Order Details" style="padding: 0.3rem 0.5rem;">
-                      <i data-lucide="eye" style="width: 14px; height: 14px;"></i>
+                  <div style="display: flex; gap: 0.5rem; align-items: center; white-space: nowrap;">
+                    <button type="button" onclick="viewOrderDetails(<?= htmlspecialchars(json_encode($o)) ?>)" class="btn btn-secondary btn-sm" title="Inspect Order Details" style="padding: 0.4rem 0.6rem; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;">
+                      <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
                     </button>
 
-                    <!-- Direct Action Status Selector (Change directly from row) -->
+                    <!-- Direct Action Status Selector (Admin can easily select any status) -->
                     <form method="POST" action="" style="display: inline-block; margin: 0;">
                       <input type="hidden" name="action" value="status">
                       <input type="hidden" name="order_id" value="<?= htmlspecialchars($ordId) ?>">
                       <input type="hidden" name="order_number" value="<?= htmlspecialchars($num) ?>">
-                      <select name="status" data-original="<?= $status ?>" onchange="handleDirectStatusChange(this, '<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>', '<?= htmlspecialchars($driver) ?>')" class="form-control form-control-sm" style="font-size: 0.75rem; font-weight: 700; padding: 0.28rem 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); cursor: pointer;" title="Change Order Status Directly">
+                      <select name="status" data-original="<?= $status ?>" onchange="handleDirectStatusChange(this, '<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>', '<?= htmlspecialchars($driver) ?>')" class="form-control form-control-sm" style="font-size: 0.8rem; font-weight: 700; padding: 0.4rem 0.75rem; border-radius: 8px; border: 1.5px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); cursor: pointer; min-width: 160px; outline: none; transition: border-color 0.2s;" title="Select Order Status">
                         <option value="PENDING" <?= $status === 'PENDING' ? 'selected' : '' ?>>⏳ Pending</option>
                         <option value="CONFIRMED" <?= $status === 'CONFIRMED' ? 'selected' : '' ?>>✓ Confirmed</option>
                         <option value="WASHING" <?= ($status === 'WASHING' || $status === 'PROCESSING') ? 'selected' : '' ?>>🔄 Washing</option>
                         <option value="READY" <?= $status === 'READY' ? 'selected' : '' ?>>✨ Ready</option>
-                        <option value="OUT_FOR_DELIVERY" <?= $status === 'OUT_FOR_DELIVERY' ? 'selected' : '' ?>>🛵 Dispatched</option>
+                        <option value="OUT_FOR_DELIVERY" <?= $status === 'OUT_FOR_DELIVERY' ? 'selected' : '' ?>>🛵 Out For Delivery</option>
                         <option value="DELIVERED" <?= $status === 'DELIVERED' ? 'selected' : '' ?>>🎉 Delivered</option>
-                        <option value="CANCELLED" <?= $status === 'CANCELLED' ? 'selected' : '' ?>>❌ Cancel</option>
+                        <option value="CANCELLED" <?= $status === 'CANCELLED' ? 'selected' : '' ?>>❌ Cancelled</option>
                       </select>
                     </form>
-
-                    <!-- Contextual Flow Shortcut Button -->
-                    <?php if ($status === 'PENDING' || $status === 'CONFIRMED'): ?>
-                      <form method="POST" action="" style="display: inline;">
-                        <input type="hidden" name="action" value="status">
-                        <input type="hidden" name="order_id" value="<?= htmlspecialchars($ordId) ?>">
-                        <input type="hidden" name="status" value="WASHING">
-                        <button type="submit" class="btn btn-primary btn-sm" style="background: #2563EB; border: none; font-size: 0.72rem; padding: 0.28rem 0.55rem;">Start Wash</button>
-                      </form>
-                    <?php elseif ($status === 'WASHING' || $status === 'PROCESSING'): ?>
-                      <form method="POST" action="" style="display: inline;">
-                        <input type="hidden" name="action" value="status">
-                        <input type="hidden" name="order_id" value="<?= htmlspecialchars($ordId) ?>">
-                        <input type="hidden" name="status" value="READY">
-                        <button type="submit" class="btn btn-primary btn-sm" style="background: #10B981; border: none; font-size: 0.72rem; padding: 0.28rem 0.55rem;">Mark Ready</button>
-                      </form>
-                    <?php elseif ($status === 'READY'): ?>
-                      <button type="button" onclick="openAssignModal('<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>')" class="btn btn-primary btn-sm" style="background: #0284C7; border: none; font-size: 0.72rem; padding: 0.28rem 0.55rem;">
-                        Dispatch 🛵
-                      </button>
-                    <?php elseif ($status === 'OUT_FOR_DELIVERY'): ?>
-                      <form method="POST" action="" style="display: inline;" onsubmit="return confirm('Confirm delivery of order #<?= htmlspecialchars($num) ?>?');">
-                        <input type="hidden" name="action" value="status">
-                        <input type="hidden" name="order_id" value="<?= htmlspecialchars($ordId) ?>">
-                        <input type="hidden" name="status" value="DELIVERED">
-                        <button type="submit" class="btn btn-success btn-sm" style="font-size: 0.72rem; padding: 0.28rem 0.55rem;">Mark Delivered</button>
-                      </form>
-                    <?php endif; ?>
                   </div>
                 </td>
               </tr>
@@ -901,15 +873,24 @@ $viewMode = $_GET['view'] ?? 'table';
 
   function handleDirectStatusChange(selectEl, orderId, orderNum, driver) {
     const val = selectEl.value;
+    const orig = selectEl.getAttribute('data-original') || 'PENDING';
+    if (val === orig) return;
+
     if (val === 'OUT_FOR_DELIVERY' && (!driver || driver === 'Unassigned' || driver.trim() === '')) {
-      alert("⚠️ Please assign a delivery partner before marking this order as Dispatched.");
-      selectEl.value = selectEl.getAttribute('data-original') || 'READY';
+      alert("⚠️ Please assign a delivery partner before marking this order as Out For Delivery.");
+      selectEl.value = orig;
       openAssignModal(orderId, orderNum);
       return false;
     }
+    if (val === 'DELIVERED') {
+      if (!confirm("Are you sure you want to mark Order #" + orderNum + " as DELIVERED?")) {
+        selectEl.value = orig;
+        return false;
+      }
+    }
     if (val === 'CANCELLED') {
-      if (!confirm("Are you sure you want to cancel order #" + orderNum + "?")) {
-        selectEl.value = selectEl.getAttribute('data-original') || 'PENDING';
+      if (!confirm("Are you sure you want to cancel Order #" + orderNum + "?")) {
+        selectEl.value = orig;
         return false;
       }
     }
