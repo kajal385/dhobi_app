@@ -408,32 +408,35 @@ $viewMode = $_GET['view'] ?? 'table';
                   <?php endif; ?>
                 </td>
                 <td>
-                  <span class="badge" style="background: <?= $status === 'DELIVERED' ? '#D1FAE5' : ($status === 'OUT_FOR_DELIVERY' ? '#E0F2FE' : ($status === 'CANCELLED' ? '#FEE2E2' : '#FEF3C7')) ?>; color: <?= $status === 'DELIVERED' ? '#059669' : ($status === 'OUT_FOR_DELIVERY' ? '#0284C7' : ($status === 'CANCELLED' ? '#DC2626' : '#D97706')) ?>; font-weight: 800;">
-                    <?= $status ?>
+                  <?php
+                    $badgeBg = '#FEF3C7';
+                    $badgeColor = '#D97706';
+                    $statusLabel = $status;
+                    if ($status === 'DELIVERED') {
+                        $badgeBg = '#D1FAE5'; $badgeColor = '#059669'; $statusLabel = 'Delivered';
+                    } elseif ($status === 'OUT_FOR_DELIVERY') {
+                        $badgeBg = '#E0F2FE'; $badgeColor = '#0284C7'; $statusLabel = 'Out For Delivery';
+                    } elseif ($status === 'READY') {
+                        $badgeBg = '#FEF3C7'; $badgeColor = '#D97706'; $statusLabel = 'Ready';
+                    } elseif ($status === 'WASHING' || $status === 'PROCESSING') {
+                        $badgeBg = 'rgba(37, 99, 235, 0.12)'; $badgeColor = '#2563EB'; $statusLabel = 'Washing';
+                    } elseif ($status === 'CONFIRMED') {
+                        $badgeBg = 'rgba(129, 98, 238, 0.12)'; $badgeColor = '#8162EE'; $statusLabel = 'Confirmed';
+                    } elseif ($status === 'CANCELLED') {
+                        $badgeBg = '#FEE2E2'; $badgeColor = '#DC2626'; $statusLabel = 'Cancelled';
+                    } elseif ($status === 'PENDING') {
+                        $badgeBg = 'rgba(245, 158, 11, 0.12)'; $badgeColor = '#D97706'; $statusLabel = 'Pending';
+                    }
+                  ?>
+                  <span class="badge" style="background: <?= $badgeBg ?>; color: <?= $badgeColor ?>; font-weight: 800; font-size: 0.78rem; padding: 0.35rem 0.75rem; border-radius: 20px; display: inline-flex; align-items: center; letter-spacing: 0.3px;">
+                    <?= htmlspecialchars($statusLabel) ?>
                   </span>
                 </td>
                 <td>
-                  <div style="display: flex; gap: 0.5rem; align-items: center; white-space: nowrap;">
-                    <button type="button" onclick="viewOrderDetails(<?= htmlspecialchars(json_encode($o)) ?>)" class="btn btn-secondary btn-sm" title="Inspect Order Details" style="padding: 0.4rem 0.6rem; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;">
-                      <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
-                    </button>
-
-                    <!-- Direct Action Status Selector (Admin can easily select any status) -->
-                    <form method="POST" action="" style="display: inline-block; margin: 0;">
-                      <input type="hidden" name="action" value="status">
-                      <input type="hidden" name="order_id" value="<?= htmlspecialchars($ordId) ?>">
-                      <input type="hidden" name="order_number" value="<?= htmlspecialchars($num) ?>">
-                      <select name="status" data-original="<?= $status ?>" onchange="handleDirectStatusChange(this, '<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>', '<?= htmlspecialchars($driver) ?>')" class="form-control form-control-sm" style="font-size: 0.8rem; font-weight: 700; padding: 0.4rem 0.75rem; border-radius: 8px; border: 1.5px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); cursor: pointer; min-width: 160px; outline: none; transition: border-color 0.2s;" title="Select Order Status">
-                        <option value="PENDING" <?= $status === 'PENDING' ? 'selected' : '' ?>>⏳ Pending</option>
-                        <option value="CONFIRMED" <?= $status === 'CONFIRMED' ? 'selected' : '' ?>>✓ Confirmed</option>
-                        <option value="WASHING" <?= ($status === 'WASHING' || $status === 'PROCESSING') ? 'selected' : '' ?>>🔄 Washing</option>
-                        <option value="READY" <?= $status === 'READY' ? 'selected' : '' ?>>✨ Ready</option>
-                        <option value="OUT_FOR_DELIVERY" <?= $status === 'OUT_FOR_DELIVERY' ? 'selected' : '' ?>>🛵 Out For Delivery</option>
-                        <option value="DELIVERED" <?= $status === 'DELIVERED' ? 'selected' : '' ?>>🎉 Delivered</option>
-                        <option value="CANCELLED" <?= $status === 'CANCELLED' ? 'selected' : '' ?>>❌ Cancelled</option>
-                      </select>
-                    </form>
-                  </div>
+                  <button type="button" onclick="viewOrderDetails(<?= htmlspecialchars(json_encode($o)) ?>)" class="btn btn-secondary btn-sm" title="View Overall Order Details" style="padding: 0.4rem 0.75rem; border-radius: 8px; display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; font-size: 0.8rem; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--brand-purple); cursor: pointer; transition: all 0.2s;">
+                    <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
+                    <span>View Order</span>
+                  </button>
                 </td>
               </tr>
             <?php endforeach; ?>
