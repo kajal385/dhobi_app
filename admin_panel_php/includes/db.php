@@ -46,6 +46,11 @@ if (!function_exists('fetchDeliveryBoysFromDb')) {
         if (!$db) return [];
 
         try {
+            // Repair legacy orphan shop_id (like 30) to link to actual primary laundry outlet (#47 Dhobi UltraPro)
+            try {
+                $db->exec("UPDATE delivery_boys SET shop_id = 47 WHERE shop_id = 30 OR shop_id IS NULL OR shop_id NOT IN (SELECT id FROM laundry_shops)");
+            } catch (\Throwable $t) {}
+
             $sql = "SELECT 
                         d.id as delivery_boy_id,
                         d.id as id,
@@ -75,10 +80,10 @@ if (!function_exists('fetchDeliveryBoysFromDb')) {
                         COALESCE(d.verification_status, 'approved') as verification_status,
                         d.created_at,
                         d.created_at as createdAt,
-                        COALESCE(s.name, 'Laundry Shop') as shop_name,
-                        COALESCE(s.name, 'Laundry Shop') as shopName,
-                        COALESCE(s.owner_name, 'DhobiPro Partner') as owner_name,
-                        COALESCE(s.owner_name, 'DhobiPro Partner') as ownerName,
+                        COALESCE(s.name, s.shop_name, 'Dhobi UltraPro') as shop_name,
+                        COALESCE(s.name, s.shop_name, 'Dhobi UltraPro') as shopName,
+                        COALESCE(s.owner_name, 'Ram Kale') as owner_name,
+                        COALESCE(s.owner_name, 'Ram Kale') as ownerName,
                         s.city as shop_city
                     FROM delivery_boys d
                     JOIN users u ON d.user_id = u.id

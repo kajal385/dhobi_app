@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/api.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/db.php';
 
 // Protect pages that include header
 requireAuth();

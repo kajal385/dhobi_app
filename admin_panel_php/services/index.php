@@ -2,6 +2,7 @@
 $pageTitle = 'Service & Category Catalog';
 require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/api-client.php';
+require_once __DIR__ . '/../includes/db.php';
 
 $isOwner = isLaundryOwner();
 $shopId = currentShopId();
