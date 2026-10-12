@@ -253,7 +253,7 @@ export const ShopDetailScreen = ({ navigation, route }: any) => {
   const isDark = useColorScheme() === 'dark';
   const colors = isDark ? DARK_COLORS : COLORS;
   const insets = useSafeAreaInsets();
-  const { shopId = 1, shopName } = route.params || {};
+  const { shopId = 1, shopName, initialTab, selectedCategory, categoryKey } = route.params || {};
 
   const user = useSelector((state: RootState) => state.auth.user);
   const [custCoords, setCustCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -261,9 +261,17 @@ export const ShopDetailScreen = ({ navigation, route }: any) => {
   const [data, setData] = useState<ShopProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('Overview');
+  const [activeTab, setActiveTab] = useState<TabType>(
+    initialTab && (TABS as readonly string[]).includes(initialTab) ? (initialTab as TabType) : 'Overview'
+  );
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (initialTab && (TABS as readonly string[]).includes(initialTab)) {
+      setActiveTab(initialTab as TabType);
+    }
+  }, [initialTab]);
 
   useEffect(() => {
     if (user?.latitude && user?.longitude) {
@@ -543,12 +551,14 @@ export const ShopDetailScreen = ({ navigation, route }: any) => {
       </View>
 
       {/* Gallery */}
-      {shop.gallery?.length > 0 && (
+      {((shop.gallery && shop.gallery.length > 0) || ((shop as any).shop_photos && (shop as any).shop_photos.length > 0)) && (
         <>
           <SectionHeader title="Shop Facility Photos & Gallery" colors={colors} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.galleryScroll}>
-            {shop.gallery.map((uriItem, i) => {
-              const imageSrc = (typeof uriItem === 'string' && uriItem.startsWith('http')) ? { uri: uriItem } : (typeof uriItem === 'string' ? { uri: uriItem } : uriItem);
+            {(shop.gallery || (shop as any).shop_photos || []).map((uriItem: any, i: number) => {
+              const rawUrl = typeof uriItem === 'string' ? uriItem : (uriItem?.url || uriItem?.thumbnail_url || uriItem?.image);
+              const resolved = resolveImageUrl(rawUrl);
+              const imageSrc = resolved ? { uri: resolved } : STORE_COVERS[i % STORE_COVERS.length];
               return (
                 <Image key={i} source={imageSrc} style={styles.galleryImage} resizeMode="cover" />
               );
@@ -581,6 +591,19 @@ export const ShopDetailScreen = ({ navigation, route }: any) => {
 
   const renderServices = () => (
     <View style={styles.tabContent}>
+      {selectedCategory ? (
+        <View style={{ backgroundColor: '#EDE8FF', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 16 }}>✨</Text>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#321D8C' }}>
+              Selected Category: {selectedCategory}
+            </Text>
+          </View>
+          <View style={{ backgroundColor: '#321D8C', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+            <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>Active</Text>
+          </View>
+        </View>
+      ) : null}
       {services.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyIcon}>🧺</Text>
@@ -850,7 +873,13 @@ export const ShopDetailScreen = ({ navigation, route }: any) => {
         <TouchableOpacity
           activeOpacity={0.88}
           style={styles.ctaBtnWrapper}
-          onPress={() => navigation.navigate('Booking', { shopId: shop.id, shopName: shop.name })}
+          onPress={() => navigation.navigate('Booking', {
+            shopId: shop.id,
+            shopName: shop.name,
+            shop: shop,
+            serviceType: categoryKey,
+            selectedCategory: selectedCategory,
+          })}
         >
           <LinearGradient
             colors={['#8162EE', '#A672D6', '#E18C8E', '#FE9A5D']}

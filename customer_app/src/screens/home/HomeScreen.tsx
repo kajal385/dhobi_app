@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Image,
   Dimensions,
+  Modal,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,7 +33,7 @@ import { SkeletonLoader } from '../../components/SkeletonLoader';
 import LocationAccuracyModal from '../../components/LocationAccuracyModal';
 import Toast from 'react-native-toast-message';
 import { requestLocationPermission, getCurrentLocation, reverseGeocode, calculateDistance } from '../../utils/locationUtils';
-import { shopService, ShopListItem, DEFAULT_SHOPS } from '../../services/shopService';
+import { shopService, ShopListItem, DEFAULT_SHOPS, isApprovedShop } from '../../services/shopService';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { walletService } from '../../services/walletService';
 import { setWallet } from '../../store/walletSlice';
@@ -81,12 +82,25 @@ export const DEFAULT_BANNERS = (Array.isArray(bannersJson) && bannersJson.length
   },
 ]);
 
+const LOCAL_BANNER_ASSETS: Record<string, any> = {
+  'banner_47_1791545229.png': require('../../../assets/myimages/banner_47_1791545229.png'),
+  'banner_30_1791351874.png': require('../../../assets/myimages/banner_30_1791351874.png'),
+  'admin_banner_super_clean.png': require('../../../assets/myimages/admin_banner_super_clean.png'),
+  'admin_banner_dry_clean.jpg': require('../../../assets/myimages/admin_banner_dry_clean.jpg'),
+  'admin_banner_wash_fold.jpg': require('../../../assets/myimages/admin_banner_wash_fold.jpg'),
+};
+
 const SafeBannerImage = ({ banner, index = 0, style, cardWidth, cardHeight }: any) => {
   const fallbackAsset = banner?.localAsset || BANNER_FALLBACKS[index % BANNER_FALLBACKS.length];
 
   const getSource = () => {
     const raw = String(banner?.image || banner?.image_url || banner?.url || banner?.banner_url || '').trim();
     if (raw.length > 0) {
+      for (const [key, asset] of Object.entries(LOCAL_BANNER_ASSETS)) {
+        if (raw.toLowerCase().includes(key.toLowerCase())) {
+          return asset;
+        }
+      }
       const uri = resolveImageUrl(raw);
       if (uri) return { uri };
     }
@@ -399,13 +413,10 @@ const SafeShopCoverImage = ({ shop, index = 0, style, resizeMode = 'cover' }: an
   const getSource = () => {
     const raw = shop?.cover_url || shop?.cover_image || shop?.cover || shop?.banner_url || shop?.shop_banner;
     if (raw && typeof raw === 'string' && raw.trim().length > 0) {
-      const img = raw.trim();
-      if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:image')) {
-        return { uri: img };
+      const uri = resolveImageUrl(raw);
+      if (uri) {
+        return { uri };
       }
-      const host = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
-      const cleanPath = img.startsWith('/') ? img : `/${img}`;
-      return { uri: `${host}${cleanPath}` };
     }
     return fallbackAsset;
   };
@@ -465,14 +476,14 @@ const SafeShopLogoImage = ({ shop, index = 0, style, resizeMode = 'cover' }: any
 };
 
 const getShopCoverImage = (shop: ShopListItem, index: number = 0) => {
-  const url = resolveImageUrl(shop?.cover_image);
+  const url = resolveImageUrl(shop?.cover_image || (shop as any)?.cover_url || (shop as any)?.cover);
   if (url) return { uri: url };
   const id = typeof shop.id === 'number' && shop.id > 0 ? shop.id : (index + 1);
   return STORE_COVERS[(id - 1) % STORE_COVERS.length];
 };
 
 const getShopLogoImage = (shop: ShopListItem, index: number = 0) => {
-  const url = resolveImageUrl(shop?.logo);
+  const url = resolveImageUrl(shop?.logo || (shop as any)?.logo_url);
   if (url) return { uri: url };
   const id = typeof shop.id === 'number' && shop.id > 0 ? shop.id : (index + 1);
   return STORE_LOGOS[(id - 1) % STORE_LOGOS.length];
@@ -514,6 +525,59 @@ export const HomeScreen = ({ navigation }: any) => {
   const [nearbyShops, setNearbyShops] = useState<ShopListItem[]>(DEFAULT_SHOPS);
   const [shopsLoading, setShopsLoading] = useState(false);
   const [banners, setBanners] = useState<any[]>(DEFAULT_BANNERS);
+  const [selectedCategoryForShops, setSelectedCategoryForShops] = useState<Category | null>(null);
+
+  const availableShopsForCategory = React.useMemo(() => {
+    if (!selectedCategoryForShops) return [];
+
+    const combined = [...popularShops, ...nearbyShops, ...DEFAULT_SHOPS];
+    const map = new Map<number, ShopListItem>();
+    for (const s of combined) {
+      if (s && s.id && !map.has(s.id)) {
+        // Only include approved, active shops verified by admin panel
+        if (isApprovedShop(s)) {
+          map.set(s.id, s);
+        }
+      }
+    }
+    const allValidShops = Array.from(map.values());
+
+    const catId = Number(selectedCategoryForShops.id);
+    const catKey = (selectedCategoryForShops.key || (selectedCategoryForShops as any).slug || '').toLowerCase();
+    const catName = (selectedCategoryForShops.name || '').toLowerCase();
+
+    return allValidShops.filter((shop) => {
+      // 1. Check category ID match from backend shop_services
+      if (shop.service_category_ids && shop.service_category_ids.length > 0) {
+        if (shop.service_category_ids.includes(catId)) return true;
+      }
+      // 2. Check category slug/key match
+      if (shop.category_slugs && shop.category_slugs.length > 0) {
+        if (shop.category_slugs.some((sl) => sl.toLowerCase() === catKey || catKey.includes(sl.toLowerCase()) || sl.toLowerCase().includes(catKey))) {
+          return true;
+        }
+      }
+      // 3. Check service name match
+      if (shop.services_list && shop.services_list.length > 0) {
+        if (shop.services_list.some((sName) => sName.toLowerCase().includes(catName) || catName.includes(sName.toLowerCase()))) {
+          return true;
+        }
+      }
+      // Fallback matching for the registered DB shops
+      if (shop.id === 47) {
+        // Shop 47 provides: Wash & Fold (1), Wash & Iron (2), Dry Clean (3), Steam Iron (4), Shoe Cleaning (5), Blanket Cleaning (7)
+        if ([1, 2, 3, 4, 5, 7].includes(catId)) return true;
+        if (['wash_fold', 'wash_iron', 'dry_clean', 'steam_iron', 'shoe_cleaning', 'blanket_cleaning'].includes(catKey)) return true;
+      }
+      if (shop.id === 44) {
+        // Shop 44 provides: Wash & Fold (1), Wash & Iron (2), Dry Clean (3)
+        if ([1, 2, 3].includes(catId)) return true;
+        if (['wash_fold', 'wash_iron', 'dry_clean'].includes(catKey)) return true;
+      }
+
+      return false;
+    });
+  }, [selectedCategoryForShops, popularShops, nearbyShops]);
 
   const getShopDistance = useCallback((shop: ShopListItem) => {
     const userLat = Number(user?.latitude || 18.5980);
@@ -1161,9 +1225,7 @@ export const HomeScreen = ({ navigation }: any) => {
                 key={cat.key}
                 item={cat}
                 colors={colors}
-                onPress={() =>
-                  navigation.navigate('Booking', { serviceType: cat.key })
-                }
+                onPress={() => setSelectedCategoryForShops(cat)}
               />
             ))}
           </ScrollView>
@@ -1329,6 +1391,194 @@ export const HomeScreen = ({ navigation }: any) => {
         <View style={{ height: 0 }} />
       </ScrollView>
 
+
+      {/* ── Category Laundries Selection Modal ── */}
+      <Modal
+        visible={selectedCategoryForShops !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSelectedCategoryForShops(null)}
+      >
+        <View style={styles.catModalOverlay}>
+          <TouchableOpacity
+            style={styles.catModalBackdrop}
+            activeOpacity={1}
+            onPress={() => setSelectedCategoryForShops(null)}
+          />
+          <View style={[styles.catModalContent, { backgroundColor: colors.card }]}>
+            {/* Top Drag Handle */}
+            <View style={styles.catModalHandle} />
+
+            {/* Modal Header */}
+            <View style={styles.catModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
+                <View style={[styles.catCircle, { width: 50, height: 50, backgroundColor: '#FFFFFF', borderColor: '#F0EEFA', borderWidth: 2, justifyContent: 'center', alignItems: 'center' }]}>
+                  {selectedCategoryForShops && CATEGORY_IMAGES[selectedCategoryForShops.key || (selectedCategoryForShops as any).slug] ? (
+                    <Image
+                      source={CATEGORY_IMAGES[selectedCategoryForShops.key || (selectedCategoryForShops as any).slug]}
+                      style={{ width: 40, height: 36 }}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <Text style={{ fontSize: 24 }}>{selectedCategoryForShops?.icon || '🧺'}</Text>
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.catModalTitle, { color: '#321D8C' }]} numberOfLines={1}>
+                    {selectedCategoryForShops?.name}
+                  </Text>
+                  <Text style={[styles.catModalSubtitle, { color: colors.textSecondary }]}>
+                    Select a laundry shop offering this service
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[styles.catModalCloseBtn, { backgroundColor: colors.border }]}
+                onPress={() => setSelectedCategoryForShops(null)}
+              >
+                <Text style={[styles.catModalCloseText, { color: colors.text }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Location & Count Banner */}
+            <View style={[styles.catModalBadgeBar, { backgroundColor: '#EDE8FF' }]}>
+              <Text style={styles.catModalBadgeText}>
+                📍 {availableShopsForCategory.length} laundries available in {currentLocationLabel || 'Pune'}
+              </Text>
+            </View>
+
+            {/* List of Laundry Shops providing this service */}
+            {availableShopsForCategory.length === 0 ? (
+              <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 45, paddingHorizontal: 24 }}>
+                <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#F3E8FF', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                  <Text style={{ fontSize: 32 }}>🧺</Text>
+                </View>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: '#321D8C', textAlign: 'center', marginBottom: 6 }}>
+                  No Approved Laundries Yet
+                </Text>
+                <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: 'center', lineHeight: 19 }}>
+                  Currently no verified laundry in your area provides {selectedCategoryForShops?.name}. Please select another service category!
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={{ maxHeight: Dimensions.get('window').height * 0.62 }}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 24 }}
+              >
+                {availableShopsForCategory.map((shop, index) => (
+                  <TouchableOpacity
+                    key={shop.id}
+                    style={[styles.catShopCard, { backgroundColor: colors.background, borderColor: colors.border }]}
+                    activeOpacity={0.9}
+                    onPress={() => {
+                      const cat = selectedCategoryForShops;
+                      setSelectedCategoryForShops(null);
+                      navigation.navigate('ShopDetail', {
+                        shopId: shop.id,
+                        shopName: shop.name,
+                        initialTab: 'Services',
+                        selectedCategory: cat?.name,
+                        categoryKey: cat?.key,
+                      });
+                    }}
+                  >
+                    {/* Shop Cover + Badges */}
+                    <View style={styles.catShopImageWrap}>
+                      <SafeShopCoverImage
+                        shop={shop}
+                        index={index}
+                        style={styles.catShopImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.catShopBadgesRow}>
+                        {shop.is_verified && (
+                          <View style={[styles.vtBadgeVerified, { backgroundColor: '#321D8C' }]}>
+                            <Text style={styles.vtBadgeText}>✓ Verified</Text>
+                          </View>
+                        )}
+                        <View style={[styles.vtBadgeOpen, { backgroundColor: shop.is_open !== false ? '#22C55E' : '#EF4444' }]}>
+                          <Text style={styles.vtBadgeText}>{shop.is_open !== false ? 'OPEN' : 'CLOSED'}</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Shop Details */}
+                    <View style={styles.catShopInfo}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={[styles.catShopName, { color: '#321D8C' }]} numberOfLines={1}>
+                          {shop.name}
+                        </Text>
+                        <View style={styles.catRatingPill}>
+                          <Text style={{ fontSize: 12 }}>⭐</Text>
+                          <Text style={[styles.catRatingText, { color: colors.text }]}>
+                            {Number(shop.rating || 4.8).toFixed(1)} ({shop.review_count || 120})
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.vtLocationRow}>
+                        <Text style={styles.vtPinEmoji}>📍</Text>
+                        <Text style={[styles.vtAddressText, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {formatShopLocation(shop)}
+                        </Text>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 12 }}>
+                        <Text style={[styles.catDistanceTag, { color: '#5B52E8' }]}>
+                          📍 {getShopDistance(shop)}
+                        </Text>
+                        <Text style={[styles.catServiceTag, { color: '#10B981' }]}>
+                          ✓ {selectedCategoryForShops?.name} Available
+                        </Text>
+                      </View>
+
+                      {/* Action Buttons Row */}
+                      <View style={styles.catShopActionRow}>
+                        <TouchableOpacity
+                          style={styles.catSelectShopBtn}
+                          activeOpacity={0.85}
+                          onPress={() => {
+                            const cat = selectedCategoryForShops;
+                            setSelectedCategoryForShops(null);
+                            navigation.navigate('ShopDetail', {
+                              shopId: shop.id,
+                              shopName: shop.name,
+                              initialTab: 'Services',
+                              selectedCategory: cat?.name,
+                              categoryKey: cat?.key,
+                            });
+                          }}
+                        >
+                          <Text style={styles.catSelectShopBtnText}>Select Laundry & View Menu ➔</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.catQuickBookBtn}
+                          activeOpacity={0.85}
+                          onPress={() => {
+                            const cat = selectedCategoryForShops;
+                            setSelectedCategoryForShops(null);
+                            navigation.navigate('Booking', {
+                              shopId: shop.id,
+                              shopName: shop.name,
+                              shop: shop,
+                              serviceType: cat?.key,
+                              selectedCategory: cat?.name,
+                            });
+                          }}
+                        >
+                          <Text style={styles.catQuickBookBtnText}>⚡ Book</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Location Accuracy Permission Dialog Modal */}
       <LocationAccuracyModal
@@ -2061,6 +2311,159 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
+  },
+  catModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  catModalBackdrop: {
+    flex: 1,
+  },
+  catModalContent: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 12,
+    paddingHorizontal: 18,
+    paddingBottom: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 20,
+  },
+  catModalHandle: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  catModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  catModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  catModalSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  catModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catModalCloseText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  catModalBadgeBar: {
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 14,
+  },
+  catModalBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#321D8C',
+  },
+  catShopCard: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    marginBottom: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  catShopImageWrap: {
+    width: '100%',
+    height: 120,
+    position: 'relative',
+  },
+  catShopImage: {
+    width: '100%',
+    height: '100%',
+  },
+  catShopBadgesRow: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  catShopInfo: {
+    padding: 12,
+  },
+  catShopName: {
+    fontSize: 16,
+    fontWeight: '800',
+    flex: 1,
+    marginRight: 8,
+  },
+  catRatingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  catRatingText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  catDistanceTag: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  catServiceTag: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  catShopActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  catSelectShopBtn: {
+    flex: 1,
+    backgroundColor: '#321D8C',
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catSelectShopBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  catQuickBookBtn: {
+    backgroundColor: '#10B981',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catQuickBookBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
   },
 });
 

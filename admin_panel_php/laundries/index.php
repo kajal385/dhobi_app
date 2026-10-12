@@ -16,6 +16,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $targetId = $_POST['shop_id'] ?? '';
 
     if ($action === 'approve' && $targetId) {
+        $db = getDb();
+        if ($db) {
+            try {
+                $st = $db->prepare("UPDATE laundry_shops SET verification_status = 'approved', is_verified = 1, is_active = 1, account_status = 'ACTIVE', updated_at = NOW() WHERE id = ?");
+                $st->execute([$targetId]);
+            } catch (\Throwable $e) {}
+        }
         if (!empty($_SESSION['custom_shops'])) {
             foreach ($_SESSION['custom_shops'] as &$s) {
                 if (strval($s['id'] ?? '') === strval($targetId)) {
@@ -27,11 +34,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             unset($s);
         }
-        $res = apiPost("/admin/laundries/{$targetId}/approve");
-        $actionMsg = 'Laundry shop successfully approved and verified!';
+        try { apiPost("/admin/laundries/{$targetId}/approve"); } catch (\Throwable $e) {}
+        $actionMsg = 'Laundry shop successfully approved and verified! It is now visible on the Customer App.';
+    } elseif ($action === 'reject' && $targetId) {
+        $db = getDb();
+        if ($db) {
+            try {
+                $st = $db->prepare("UPDATE laundry_shops SET verification_status = 'rejected', is_verified = 0, updated_at = NOW() WHERE id = ?");
+                $st->execute([$targetId]);
+            } catch (\Throwable $e) {}
+        }
+        if (!empty($_SESSION['custom_shops'])) {
+            foreach ($_SESSION['custom_shops'] as &$s) {
+                if (strval($s['id'] ?? '') === strval($targetId)) {
+                    $s['verificationStatus'] = 'REJECTED';
+                    $s['verification_status'] = 'REJECTED';
+                }
+            }
+            unset($s);
+        }
+        $actionMsg = "Laundry shop marked as rejected.";
     } elseif ($action === 'status' && $targetId) {
         $newStatus = $_POST['status'] ?? 'ACTIVE';
-        $res = apiPost("/admin/laundries/{$targetId}/status", ['status' => $newStatus]);
+        $db = getDb();
+        if ($db) {
+            try {
+                $isActiveVal = ($newStatus === 'ACTIVE') ? 1 : 0;
+                $st = $db->prepare("UPDATE laundry_shops SET account_status = ?, is_active = ?, updated_at = NOW() WHERE id = ?");
+                $st->execute([$newStatus, $isActiveVal, $targetId]);
+            } catch (\Throwable $e) {}
+        }
+        try { apiPost("/admin/laundries/{$targetId}/status", ['status' => $newStatus]); } catch (\Throwable $e) {}
         $actionMsg = "Shop status updated to {$newStatus}.";
     } elseif ($action === 'delete' && $targetId) {
         if (!empty($_SESSION['custom_shops'])) {
@@ -556,56 +589,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch live laundries
+// 1. Fetch live laundries from MySQL database first
+$dbLaundries = [];
+$db = getDb();
+if ($db) {
+    try {
+        $st = $db->query("SELECT * FROM laundry_shops ORDER BY id DESC");
+        $dbLaundries = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (\Throwable $e) {}
+}
+
 if ($isOwner && $shopId) {
     $res = apiGet('/owner/profile', ['shop_id' => $shopId]);
     $laundries = !empty($res['data']) ? (isset($res['data'][0]) ? $res['data'] : [$res['data']]) : [];
     if (empty($laundries)) {
-        $resAll = apiGet('/admin/laundries');
-        $all = apiExtractList($resAll);
-        $laundries = array_filter($all, fn($l) => strval($l['id'] ?? '') === strval($shopId));
+        $laundries = array_filter($dbLaundries, fn($l) => strval($l['id'] ?? '') === strval($shopId));
     }
 } else {
     $res = apiGet('/admin/laundries');
-    $laundries = apiExtractList($res);
+    $apiLaundries = apiExtractList($res);
+    $laundries = $dbLaundries;
+    foreach ($apiLaundries as $al) {
+        $aId = strval($al['id'] ?? '');
+        if ($aId && !array_filter($laundries, fn($l) => strval($l['id'] ?? '') === $aId)) {
+            $laundries[] = $al;
+        }
+    }
 }
 
-// Merge session custom shops safely to prevent duplicates
+// 2. Normalize and merge session custom shops
 if (!empty($_SESSION['custom_shops'])) {
-    $existingEmails = array_map(function($l) { return strtolower(trim($l['email'] ?? '')); }, $laundries);
-    $existingPhones = array_map(function($l) { return trim($l['phone'] ?? ''); }, $laundries);
-
     foreach (array_reverse($_SESSION['custom_shops']) as $cs) {
+        $csId = strval($cs['id'] ?? '');
         $csEmail = strtolower(trim($cs['email'] ?? ''));
         $csPhone = trim($cs['phone'] ?? '');
 
         $foundIndex = -1;
         foreach ($laundries as $idx => $l) {
+            $lId = strval($l['id'] ?? '');
             $lEmail = strtolower(trim($l['email'] ?? ''));
             $lPhone = trim($l['phone'] ?? '');
-            if (($csEmail && $lEmail === $csEmail) || ($csPhone && $lPhone === $csPhone)) {
+            if (($csId && $lId === $csId) || ($csEmail && $lEmail === $csEmail) || ($csPhone && $lPhone === $csPhone)) {
                 $foundIndex = $idx;
                 break;
             }
         }
 
         if ($foundIndex !== -1) {
-            // Merge session fields (like uploaded logos) into API record if API didn't save them
             $laundries[$foundIndex]['logo_url'] = !empty($cs['logo_url']) ? $cs['logo_url'] : ($laundries[$foundIndex]['logo_url'] ?? '');
             $laundries[$foundIndex]['cover_url'] = !empty($cs['cover_url']) ? $cs['cover_url'] : ($laundries[$foundIndex]['cover_url'] ?? '');
-            $laundries[$foundIndex]['idProofPhoto'] = !empty($cs['idProofPhoto']) ? $cs['idProofPhoto'] : ($laundries[$foundIndex]['idProofPhoto'] ?? '');
-            $laundries[$foundIndex]['businessProofPhoto'] = !empty($cs['businessProofPhoto']) ? $cs['businessProofPhoto'] : ($laundries[$foundIndex]['businessProofPhoto'] ?? '');
-            $laundries[$foundIndex]['bankProofPhoto'] = !empty($cs['bankProofPhoto']) ? $cs['bankProofPhoto'] : ($laundries[$foundIndex]['bankProofPhoto'] ?? '');
-            $laundries[$foundIndex]['shopBoardPhoto'] = !empty($cs['shopBoardPhoto']) ? $cs['shopBoardPhoto'] : ($laundries[$foundIndex]['shopBoardPhoto'] ?? '');
             $laundries[$foundIndex]['verificationStatus'] = $cs['verificationStatus'] ?? $laundries[$foundIndex]['verificationStatus'] ?? 'APPROVED';
         } else {
-            // Not in API, prepend it
             array_unshift($laundries, $cs);
         }
     }
 }
 
-// If logged in as Laundry Owner, STRICTLY isolate and filter out all other laundries!
+// 3. Normalize field keys across all shops
+foreach ($laundries as &$l) {
+    if (empty($l['shopName'])) $l['shopName'] = $l['name'] ?? $l['shop_name'] ?? 'Laundry Shop #' . ($l['id'] ?? '');
+    if (empty($l['ownerName'])) $l['ownerName'] = $l['owner_name'] ?? 'Shop Owner';
+    if (empty($l['verificationStatus'])) $l['verificationStatus'] = strtoupper($l['verification_status'] ?? 'APPROVED');
+    if (empty($l['accountStatus'])) $l['accountStatus'] = strtoupper($l['account_status'] ?? (!empty($l['is_active']) ? 'ACTIVE' : 'ACTIVE'));
+    if (empty($l['status'])) $l['status'] = $l['accountStatus'];
+}
+unset($l);
+
+// 4. Strict owner isolation
 if ($isOwner) {
     $myShopId = currentShopId();
     $myShopName = currentShopName();
@@ -627,9 +677,25 @@ if ($isOwner) {
     }));
 }
 
-// Removed base demo record for Star Wash Ultra Premium because it is now globally seeded in config/api.php
+// 5. Store all available shops for the Particular Laundry Filter dropdown
+$allAvailableShops = $laundries;
 
-$totalLaundriesCount = count($laundries);
+// 6. Filter by Particular Laundry Shop
+$selectedShopId = $_GET['shop_id'] ?? 'all';
+$particularShop = null;
+if ($selectedShopId !== 'all' && !empty($selectedShopId)) {
+    foreach ($allAvailableShops as $s) {
+        if (strval($s['id'] ?? $s['shop_id'] ?? '') === strval($selectedShopId)) {
+            $particularShop = $s;
+            break;
+        }
+    }
+    if ($particularShop) {
+        $laundries = [$particularShop];
+    }
+}
+
+$totalLaundriesCount = count($allAvailableShops);
 $tab = $_GET['tab'] ?? 'ALL';
 
 if ($tab === 'ACTIVE') {
@@ -698,6 +764,120 @@ if ($tab === 'ACTIVE') {
     <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #DC2626; padding: 0.75rem 1rem; border-radius: 8px; font-weight: 700; font-size: 0.85rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
       <i data-lucide="alert-circle" style="width: 18px; height: 18px;"></i> <?= htmlspecialchars($actionError) ?>
     </div>
+  <?php endif; ?>
+
+  <!-- PARTICULAR LAUNDRY SHOP SELECTOR (SUPER ADMIN ONLY) -->
+  <?php if (!$isOwner): ?>
+  <div style="background: linear-gradient(135deg, rgba(129,98,238,0.08) 0%, rgba(166,114,214,0.05) 100%); border: 1.5px solid rgba(129,98,238,0.3); border-radius: 14px; padding: 1.1rem 1.4rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 0.85rem;">
+      <div style="width: 44px; height: 44px; border-radius: 10px; background: linear-gradient(135deg, #8162EE 0%, #A672D6 100%); color: #FFF; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(129,98,238,0.35);">
+        <i data-lucide="store" style="width: 22px; height: 22px;"></i>
+      </div>
+      <div>
+        <div style="font-weight: 800; font-size: 0.95rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.4rem;">
+          Filter by Particular Laundry Shop
+          <?php if (!empty($particularShop)): ?>
+            <span style="background: #10B981; color: #FFF; font-size: 0.68rem; font-weight: 800; padding: 0.15rem 0.5rem; border-radius: 20px;">PARTICULAR LAUNDRY ACTIVE</span>
+          <?php endif; ?>
+        </div>
+        <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.15rem;">
+          Select any registered laundry to inspect its KYC status, pricing, documents, and customer app visibility.
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+      <select id="particular_shop_select" onchange="window.location.href='?shop_id=' + this.value + '<?= !empty($_GET['tab']) ? '&tab=' . htmlspecialchars($_GET['tab']) : '' ?>'" class="form-control" style="min-width: 280px; max-width: 360px; font-weight: 700; border: 1.5px solid #8162EE;">
+        <option value="all" <?= ($selectedShopId === 'all') ? 'selected' : '' ?>>🏪 All Laundry Shops (Overall Platform View)</option>
+        <?php foreach ($allAvailableShops as $as):
+          $asId = strval($as['id'] ?? $as['shop_id'] ?? '');
+          $asName = $as['shopName'] ?? $as['name'] ?? ('Shop #' . $asId);
+          $asOwner = $as['ownerName'] ?? $as['owner_name'] ?? 'Owner';
+          $asStat = strtoupper($as['verificationStatus'] ?? $as['verification_status'] ?? 'APPROVED');
+        ?>
+          <option value="<?= htmlspecialchars($asId) ?>" <?= ($selectedShopId === $asId) ? 'selected' : '' ?>>
+            <?= htmlspecialchars($asName) ?> (Owner: <?= htmlspecialchars($asOwner) ?> - #<?= htmlspecialchars($asId) ?>) [<?= $asStat ?>]
+          </option>
+        <?php endforeach; ?>
+      </select>
+
+      <?php if ($selectedShopId !== 'all'): ?>
+        <a href="?" class="btn btn-secondary btn-sm" style="font-weight: 700; padding: 0.55rem 0.9rem; display: inline-flex; align-items: center; gap: 0.35rem;">
+          <i data-lucide="rotate-ccw" style="width: 14px; height: 14px;"></i> View All
+        </a>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <?php if (!empty($particularShop)): 
+    $pId = $particularShop['id'] ?? $particularShop['shop_id'] ?? '';
+    $pName = $particularShop['shopName'] ?? $particularShop['name'] ?? ('Shop #' . $pId);
+    $pOwner = $particularShop['ownerName'] ?? $particularShop['owner_name'] ?? 'Owner';
+    $pPhone = $particularShop['phone'] ?? 'N/A';
+    $pEmail = $particularShop['email'] ?? 'N/A';
+    $pAddress = $particularShop['address'] ?? ($particularShop['city'] ?? 'Location');
+    $pVerif = strtoupper($particularShop['verificationStatus'] ?? $particularShop['verification_status'] ?? 'APPROVED');
+    $isApproved = ($pVerif === 'APPROVED');
+  ?>
+  <!-- PARTICULAR LAUNDRY HERO CARD -->
+  <div class="card" style="padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; border: 2px solid <?= $isApproved ? '#10B981' : '#F59E0B' ?>; border-radius: 14px; background: radial-gradient(ellipse at top left, <?= $isApproved ? 'rgba(16,185,129,0.06)' : 'rgba(245,158,11,0.06)' ?> 0%, var(--bg-card) 70%);">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+      <div style="display: flex; gap: 1rem; align-items: center;">
+        <?php if (!empty($particularShop['logo_url']) || !empty($particularShop['logo'])): ?>
+          <img src="<?= htmlspecialchars($particularShop['logo_url'] ?: $particularShop['logo']) ?>" alt="" style="width: 60px; height: 60px; border-radius: 12px; object-fit: cover; border: 2px solid var(--border-color); background: #FFF;">
+        <?php else: ?>
+          <div style="width: 60px; height: 60px; border-radius: 12px; background: linear-gradient(135deg,#8162EE 0%,#FE9A5D 100%); color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900;">
+            <?= strtoupper(substr($pName, 0, 1)) ?>
+          </div>
+        <?php endif; ?>
+        <div>
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <h2 style="margin: 0; font-size: 1.2rem; font-weight: 800;"><?= htmlspecialchars($pName) ?></h2>
+            <span style="font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 20px; text-transform: uppercase; background: <?= $isApproved ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)' ?>; color: <?= $isApproved ? '#059669' : '#D97706' ?>; border: 1px solid <?= $isApproved ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)' ?>;">
+              <?= $isApproved ? '✓ APPROVED ON CUSTOMER APP' : '⏳ PENDING APPROVAL' ?>
+            </span>
+            <span style="background: rgba(99,102,241,0.1); color: #4F46E5; font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.55rem; border-radius: 6px;">
+              SHOP #<?= htmlspecialchars($pId) ?>
+            </span>
+          </div>
+          <div style="color: var(--text-secondary); font-size: 0.82rem; margin-top: 0.35rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+            <span>👤 Owner: <strong><?= htmlspecialchars($pOwner) ?></strong></span>
+            <span>📞 <strong><?= htmlspecialchars($pPhone) ?></strong></span>
+            <span>✉️ <?= htmlspecialchars($pEmail) ?></span>
+            <span>📍 <?= htmlspecialchars($pAddress) ?></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Action Buttons for Particular Laundry -->
+      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <?php if (!$isApproved): ?>
+          <form method="POST" style="margin:0;">
+            <input type="hidden" name="action" value="approve">
+            <input type="hidden" name="shop_id" value="<?= htmlspecialchars($pId) ?>">
+            <button type="submit" class="btn btn-primary btn-sm" style="background: #10B981; border-color: #10B981; font-weight: 800; padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="check" style="width: 15px; height: 15px;"></i> Approve Laundry
+            </button>
+          </form>
+        <?php else: ?>
+          <form method="POST" style="margin:0;" onsubmit="return confirm('Suspend or unapprove this laundry shop?')">
+            <input type="hidden" name="action" value="reject">
+            <input type="hidden" name="shop_id" value="<?= htmlspecialchars($pId) ?>">
+            <button type="submit" class="btn btn-secondary btn-sm" style="font-weight: 700; color: #EF4444; border-color: rgba(239,68,68,0.3);">
+              <i data-lucide="x" style="width: 14px; height: 14px;"></i> Reject / Suspend
+            </button>
+          </form>
+        <?php endif; ?>
+        <button type="button" onclick="openEditShop(<?= htmlspecialchars(json_encode($particularShop)) ?>)" class="btn btn-primary btn-sm" style="font-weight: 800; padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.35rem; background: #8162EE; border-color: #8162EE;">
+          <i data-lucide="edit-2" style="width: 14px; height: 14px;"></i> Edit KYC &amp; Store
+        </button>
+        <a href="<?= ADMIN_BASE_URL ?>/shop-app/index.php?shop_id=<?= htmlspecialchars($pId) ?>" class="btn btn-secondary btn-sm" style="font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem;">
+          <i data-lucide="clapperboard" style="width: 14px; height: 14px;"></i> Videos &amp; Banners
+        </a>
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
   <?php endif; ?>
 
   <!-- Tabs Navigation -->
@@ -898,8 +1078,8 @@ if ($tab === 'ACTIVE') {
 
 <!-- Modal: Document Preview Lightbox -->
 <div id="docPreviewLightbox" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(10, 15, 30, 0.85); backdrop-filter: blur(10px); align-items: center; justify-content: center; z-index: 100000; padding: 1.5rem;">
-  <div class="modal-content" style="background: var(--bg-card); border-radius: 16px; border: 1px solid rgba(129,98,238,0.3); width: 100%; max-width: 740px; box-shadow: 0 30px 60px rgba(0,0,0,0.6); color: var(--text-primary); overflow: hidden; display: flex; flex-direction: column;">
-    <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.15);">
+  <div class="modal-content" style="background: var(--bg-card); border-radius: 16px; border: 1px solid rgba(129,98,238,0.3); width: 100%; max-width: 720px; max-height: 90vh; box-shadow: 0 30px 60px rgba(0,0,0,0.6); color: var(--text-primary); display: flex; flex-direction: column; overflow: hidden;">
+    <div style="padding: 1.15rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.15); flex-shrink: 0;">
       <div style="display: flex; align-items: center; gap: 0.6rem;">
         <i data-lucide="file-text" style="width: 20px; height: 20px; color: #8162EE;"></i>
         <h3 id="docPreviewTitle" style="font-size: 1.15rem; font-weight: 800; margin: 0; color: var(--text-primary);">Document Preview</h3>
@@ -907,67 +1087,72 @@ if ($tab === 'ACTIVE') {
       <button onclick="closeModal('docPreviewLightbox')" style="background: var(--bg-input); border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted);">✕</button>
     </div>
     
-    <div style="padding: 1.5rem; text-align: center; background: rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; min-height: 320px; max-height: 480px; overflow: hidden;">
-      <img id="docPreviewImg" src="" alt="Document Preview" style="max-width: 100%; max-height: 460px; border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 10px 25px rgba(0,0,0,0.3); object-fit: contain; background: #FFF;">
-    </div>
+    <div style="flex: 1; overflow-y: auto; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+      <div style="text-align: center; background: rgba(0,0,0,0.25); border-radius: 12px; padding: 0.75rem; display: flex; align-items: center; justify-content: center; min-height: 180px; max-height: 280px; overflow: hidden;">
+        <img id="docPreviewImg" src="" alt="Document Preview" style="max-width: 100%; max-height: 260px; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 8px 20px rgba(0,0,0,0.3); object-fit: contain; background: #FFF;">
+      </div>
 
-    <!-- Inline Replace Document Panel (Direct DB Update) -->
-    <div id="replaceDocPanel" style="display: none; padding: 1.15rem 1.5rem; background: rgba(245, 158, 11, 0.08); border-top: 1px solid rgba(245, 158, 11, 0.25);">
-      <form id="replaceDocForm" method="POST" action="" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 0.75rem;">
-        <input type="hidden" name="action" value="replace_document">
-        <input type="hidden" id="replaceShopId" name="shop_id" value="">
-        <input type="hidden" id="replaceDocField" name="doc_field" value="">
+      <!-- Inline Replace Document Panel (Direct DB Update) -->
+      <div id="replaceDocPanel" style="display: none; padding: 1.25rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px;">
+        <form id="replaceDocForm" method="POST" action="" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 0.85rem;">
+          <input type="hidden" name="action" value="replace_document">
+          <input type="hidden" id="replaceShopId" name="shop_id" value="">
+          <input type="hidden" id="replaceDocField" name="doc_field" value="">
 
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
-          <span style="font-size: 0.88rem; font-weight: 800; color: #D97706; display: flex; align-items: center; gap: 0.4rem;">
-            <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i> Replace Document (Permanently Saved to Database)
-          </span>
-          <span id="replaceFieldLabel" style="font-size: 0.75rem; font-weight: 700; background: rgba(245,158,11,0.2); color: #B45309; padding: 0.2rem 0.5rem; border-radius: 4px;"></span>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-          <div>
-            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Document Slot to Replace:</label>
-            <select id="replaceFieldSelect" class="form-control" style="font-size: 0.82rem; padding: 0.45rem;" onchange="document.getElementById('replaceDocField').value = this.value; document.getElementById('replaceFieldLabel').innerText = 'Slot: ' + this.options[this.selectedIndex].text;">
-              <option value="id_proof_photo">Aadhaar / ID Proof (id_proof_photo)</option>
-              <option value="business_proof_photo">Udyam / Trade License (business_proof_photo)</option>
-              <option value="bank_proof_photo">Bank Cheque / Passbook (bank_proof_photo)</option>
-              <option value="shop_board_photo">Storefront Signboard (shop_board_photo)</option>
-              <option value="logo_url">Shop Logo (logo_url)</option>
-              <option value="cover_url">Shop Cover Banner (cover_url)</option>
-            </select>
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+            <span style="font-size: 0.9rem; font-weight: 800; color: #D97706; display: flex; align-items: center; gap: 0.4rem;">
+              <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i> Replace Document (Saved to Database)
+            </span>
+            <span id="replaceFieldLabel" style="font-size: 0.75rem; font-weight: 700; background: rgba(245,158,11,0.2); color: #B45309; padding: 0.2rem 0.55rem; border-radius: 6px;"></span>
           </div>
 
-          <div>
-            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Choose New Document File:</label>
-            <input type="file" id="replaceFileInput" name="new_document_file" accept="image/*,.pdf" required class="form-control" style="font-size: 0.82rem; padding: 0.35rem 0.5rem;">
-          </div>
-        </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+            <div>
+              <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Document Slot to Replace:</label>
+              <select id="replaceFieldSelect" class="form-control" style="font-size: 0.84rem; padding: 0.5rem; width: 100%; border-radius: 8px;" onchange="document.getElementById('replaceDocField').value = this.value; document.getElementById('replaceFieldLabel').innerText = 'Slot: ' + this.options[this.selectedIndex].text;">
+                <option value="id_proof_photo">Aadhaar / ID Proof (id_proof_photo)</option>
+                <option value="business_proof_photo">Udyam / Trade License (business_proof_photo)</option>
+                <option value="bank_proof_photo">Bank Cheque / Passbook (bank_proof_photo)</option>
+                <option value="shop_board_photo">Storefront Signboard (shop_board_photo)</option>
+                <option value="logo_url">Shop Logo (logo_url)</option>
+                <option value="cover_url">Shop Cover Banner (cover_url)</option>
+              </select>
+            </div>
 
-        <div style="display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 0.25rem;">
-          <button type="button" onclick="toggleReplaceDocPanel(false)" class="btn btn-secondary btn-sm" style="font-weight: 700;">Cancel</button>
-          <button type="submit" class="btn btn-primary btn-sm" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); border: none; color: #FFF; font-weight: 800; padding: 0.45rem 1.2rem; display: inline-flex; align-items: center; gap: 0.35rem; box-shadow: 0 4px 12px rgba(129,98,238,0.35);">
-            <i data-lucide="check" style="width: 14px; height: 14px;"></i> Upload &amp; Replace in DB
-          </button>
-        </div>
-      </form>
+            <div>
+              <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Choose New Document File:</label>
+              <input type="file" id="replaceFileInput" name="new_document_file" accept="image/*,.pdf" required class="form-control" style="font-size: 0.82rem; padding: 0.4rem 0.5rem; width: 100%; border-radius: 8px;">
+            </div>
+          </div>
+
+          <!-- PROPER UPLOAD BUTTONS -->
+          <div style="display: flex; justify-content: flex-end; align-items: center; gap: 0.75rem; margin-top: 0.5rem; padding-top: 0.75rem; border-top: 1px solid rgba(245,158,11,0.25);">
+            <button type="button" onclick="toggleReplaceDocPanel(false)" class="btn btn-secondary" style="font-weight: 700; padding: 0.55rem 1.25rem; border-radius: 8px; font-size: 0.85rem;">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); border: none; color: #FFF; font-weight: 800; padding: 0.55rem 1.5rem; border-radius: 8px; display: inline-flex; align-items: center; gap: 0.45rem; box-shadow: 0 4px 14px rgba(129,98,238,0.4); cursor: pointer; font-size: 0.85rem;">
+              <i data-lucide="upload-cloud" style="width: 16px; height: 16px;"></i> Upload &amp; Replace in DB
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
 
-    <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); flex-wrap: wrap; gap: 0.75rem;">
+    <div style="padding: 0.85rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); flex-wrap: wrap; gap: 0.75rem; flex-shrink: 0;">
       <span style="font-size: 0.78rem; color: #10B981; font-weight: 700; display: flex; align-items: center; gap: 0.35rem;">
         <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i> Verified Official KYC Compliance Document
       </span>
       <div style="display: flex; gap: 0.6rem; align-items: center;">
-        <button type="button" id="docPreviewReplaceBtn" onclick="toggleReplaceDocPanel()" class="btn btn-warning btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; background: #F59E0B; color: #FFF; border: none;">
+        <button type="button" id="docPreviewReplaceBtn" onclick="toggleReplaceDocPanel()" class="btn btn-warning btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; background: #F59E0B; color: #FFF; border: none; padding: 0.45rem 0.85rem; border-radius: 6px;">
           <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i> Replace Document
         </button>
-        <a id="docPreviewFullTabBtn" href="#" target="_blank" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700;">
+        <a id="docPreviewFullTabBtn" href="#" target="_blank" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; padding: 0.45rem 0.85rem; border-radius: 6px;">
           <i data-lucide="external-link" style="width: 14px; height: 14px;"></i> Open Full Size
         </a>
-        <a id="docPreviewDownloadBtn" href="#" download class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); color: #FFF; border: none;">
+        <a id="docPreviewDownloadBtn" href="#" download class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); color: #FFF; border: none; padding: 0.45rem 0.85rem; border-radius: 6px;">
           <i data-lucide="download" style="width: 14px; height: 14px;"></i> Download
         </a>
-        <button onclick="closeModal('docPreviewLightbox')" class="btn btn-secondary btn-sm" style="font-weight: 700;">Close</button>
+        <button onclick="closeModal('docPreviewLightbox')" class="btn btn-secondary btn-sm" style="font-weight: 700; padding: 0.45rem 0.85rem; border-radius: 6px;">Close</button>
       </div>
     </div>
   </div>
@@ -1344,10 +1529,20 @@ if ($tab === 'ACTIVE') {
               Subscription Tier
             </label>
             <select name="subscription_plan" class="form-control" style="width: 100%;">
-              <option value="Starter">Starter (15% Commission / Pay As You Go)</option>
-              <option value="Silver Pro">Silver Pro (₹999/mo • 10% Commission)</option>
-              <option value="Gold Business">Gold Business (₹1999/mo • 8% Commission)</option>
-              <option value="Platinum Max">Platinum Enterprise (₹3999/mo • 5% Commission)</option>
+              <?php 
+              $adminPlans = function_exists('getAdminSubscriptionPlans') ? getAdminSubscriptionPlans() : [];
+              foreach ($adminPlans as $pKey => $pInfo): 
+                  $pName = $pInfo['name'] ?? $pKey;
+                  $pPrice = floatval($pInfo['price'] ?? 0);
+                  $pCycle = strtolower($pInfo['billingCycle'] ?? 'monthly');
+                  $cycleSuffix = ($pCycle === 'annual' || $pCycle === 'yearly') ? '/yr' : '/mo';
+                  $pQuota = ($pInfo['orderLimit'] ?? 0) >= 99999 ? 'Unlimited Orders' : (($pInfo['orderLimit'] ?? 100) . ' Orders/mo');
+                  if (strtoupper($pInfo['status'] ?? 'ACTIVE') !== 'ACTIVE') continue;
+              ?>
+                <option value="<?= htmlspecialchars($pName) ?>">
+                  <?= htmlspecialchars($pName) ?> (₹<?= number_format($pPrice) ?><?= $cycleSuffix ?> • <?= $pQuota ?>)
+                </option>
+              <?php endforeach; ?>
             </select>
           </div>
           <div>
@@ -2339,10 +2534,20 @@ if ($tab === 'ACTIVE') {
               Subscription Tier
             </label>
             <select id="es_subscription_plan" name="subscription_plan" class="form-control" style="width: 100%;">
-              <option value="Starter">Starter (15% Comm.)</option>
-              <option value="Silver Pro">Silver Pro (10% Comm.)</option>
-              <option value="Gold Business">Gold Business (8% Comm.)</option>
-              <option value="Platinum Max">Platinum Max (5% Comm.)</option>
+              <?php 
+              $adminPlans = function_exists('getAdminSubscriptionPlans') ? getAdminSubscriptionPlans() : [];
+              foreach ($adminPlans as $pKey => $pInfo): 
+                  $pName = $pInfo['name'] ?? $pKey;
+                  $pPrice = floatval($pInfo['price'] ?? 0);
+                  $pCycle = strtolower($pInfo['billingCycle'] ?? 'monthly');
+                  $cycleSuffix = ($pCycle === 'annual' || $pCycle === 'yearly') ? '/yr' : '/mo';
+                  $pQuota = ($pInfo['orderLimit'] ?? 0) >= 99999 ? 'Unlimited Orders' : (($pInfo['orderLimit'] ?? 100) . ' Orders/mo');
+                  if (strtoupper($pInfo['status'] ?? 'ACTIVE') !== 'ACTIVE') continue;
+              ?>
+                <option value="<?= htmlspecialchars($pName) ?>">
+                  <?= htmlspecialchars($pName) ?> (₹<?= number_format($pPrice) ?><?= $cycleSuffix ?> • <?= $pQuota ?>)
+                </option>
+              <?php endforeach; ?>
             </select>
           </div>
         </div>

@@ -431,24 +431,104 @@ if (!function_exists('getDriverNameById')) {
 
 if (!function_exists('updateOrderStatusInDb')) {
     /**
-     * Update order status in dhobi_db.
+     * Update order status in dhobi_db and synchronize with status history and customer notifications.
      */
-    function updateOrderStatusInDb($orderId, $status): bool {
+    function updateOrderStatusInDb($orderId, $status, $notes = null, $cancellationReason = null): bool {
         $db = getDb();
         if (!$db) return false;
 
         try {
-            $up = $db->prepare("UPDATE orders 
-                                SET status = :st, 
-                                    updated_at = NOW() 
-                                WHERE id = :oid OR order_number = :onum");
-            $up->execute([
-                ':st'   => $status,
-                ':oid'  => is_numeric($orderId) ? (int)$orderId : 0,
-                ':onum' => $orderId
-            ]);
-            return true;
+            // Normalize status to canonical uppercase
+            $norm = strtoupper(trim(str_replace(['-', ' '], '_', $status)));
+            $statusMap = [
+                'PLACED'             => 'PLACED',
+                'PENDING'            => 'PLACED',
+                'RECEIVED'           => 'RECEIVED',
+                'ACCEPTED'           => 'RECEIVED',
+                'CONFIRMED'          => 'RECEIVED',
+                'IN_PROCESS'         => 'IN_PROCESS',
+                'INPROCESS'          => 'IN_PROCESS',
+                'WASHING'            => 'IN_PROCESS',
+                'PROCESSING'         => 'IN_PROCESS',
+                'READY'              => 'READY',
+                'READY_FOR_DELIVERY' => 'READY',
+                'CUSTOMER_CONFIRMED' => 'READY',
+                'OUT_FOR_DELIVERY'   => 'OUT_FOR_DELIVERY',
+                'DISPATCHED'         => 'OUT_FOR_DELIVERY',
+                'DELIVERED'          => 'DELIVERED',
+                'COMPLETED'          => 'DELIVERED',
+                'CANCELLED'          => 'CANCELLED',
+                'REJECTED'           => 'CANCELLED',
+            ];
+            $canonicalStatus = $statusMap[$norm] ?? $norm;
+
+            $oidInt = is_numeric($orderId) ? (int)$orderId : 0;
+            $stmt = $db->prepare("SELECT id, order_number, user_id, status FROM orders WHERE id = :oid OR order_number = :onum LIMIT 1");
+            $stmt->execute([':oid' => $oidInt, ':onum' => $orderId]);
+            $ord = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($ord) {
+                $actualId = (int)$ord['id'];
+                $orderNum = $ord['order_number'] ?: "ORD-{$actualId}";
+                $userId   = (int)($ord['user_id'] ?? 0);
+
+                $sql = "UPDATE orders SET status = :st, updated_at = NOW()";
+                $params = [':st' => $canonicalStatus, ':id' => $actualId];
+
+                if ($canonicalStatus === 'CANCELLED' && !empty($cancellationReason)) {
+                    $sql .= ", cancellation_reason = :cr, cancel_reason = :cr, cancelled_at = NOW()";
+                    $params[':cr'] = $cancellationReason;
+                }
+                if ($canonicalStatus === 'DELIVERED') {
+                    $sql .= ", delivered_at = NOW()";
+                }
+                $sql .= " WHERE id = :id";
+
+                $up = $db->prepare($sql);
+                $up->execute($params);
+
+                // Insert into order_status_history
+                try {
+                    $histStmt = $db->prepare("INSERT INTO order_status_history (order_id, status, updated_by, user_role, notes, created_at, updated_at) 
+                                              VALUES (:oid, :st, 1, 'admin', :notes, NOW(), NOW())");
+                    $histStmt->execute([
+                        ':oid'   => $actualId,
+                        ':st'    => $canonicalStatus,
+                        ':notes' => $notes ?: ($cancellationReason ?: "Status updated to {$canonicalStatus}")
+                    ]);
+                } catch (\Throwable $th) {}
+
+                // Insert notification for customer
+                if ($userId > 0) {
+                    try {
+                        $isCanc = ($canonicalStatus === 'CANCELLED');
+                        $msg = $isCanc 
+                            ? "Your order #{$orderNum} was cancelled. Reason: " . ($cancellationReason ?: "Cancelled by laundry management")
+                            : "Your order #{$orderNum} is now " . ucwords(strtolower(str_replace('_', ' ', $canonicalStatus)));
+
+                        $notifStmt = $db->prepare("INSERT INTO notifications (user_id, title, message, type, is_read, created_at, updated_at) 
+                                                   VALUES (:uid, :title, :msg, :type, 0, NOW(), NOW())");
+                        $notifStmt->execute([
+                            ':uid'   => $userId,
+                            ':title' => $isCanc ? "Order Cancelled #{$orderNum}" : "Order Update: " . ucwords(strtolower(str_replace('_', ' ', $canonicalStatus))),
+                            ':msg'   => $msg,
+                            ':type'  => $isCanc ? 'ORDER_CANCELLED' : 'STATUS_UPDATE'
+                        ]);
+                    } catch (\Throwable $nt) {}
+                }
+
+                return true;
+            } else {
+                $up = $db->prepare("UPDATE orders SET status = :st, updated_at = NOW() WHERE id = :oid OR order_number = :onum");
+                $up->execute([
+                    ':st'   => $canonicalStatus,
+                    ':oid'  => $oidInt,
+                    ':onum' => $orderId
+                ]);
+                return true;
+            }
         } catch (\Throwable $e) {
+            error_log("updateOrderStatusInDb error: " . $e->getMessage());
             return false;
         }
     }
@@ -478,26 +558,25 @@ if (!function_exists('fetchOrdersFromDb')) {
                         COALESCE(s.name, 'Laundry Shop') as shop_name,
                         COALESCE(s.owner_name, '') as owner_name,
                         COALESCE(s.phone, '') as shop_phone,
-                        COALESCE(o.city, s.city, 'Pune') as city,
+                        COALESCE(s.city, 'Pune') as city,
                         COALESCE(o.pickup_address, 'Pune') as pickupAddress,
                         COALESCE(o.pickup_address, 'Pune') as pickup_address,
-                        COALESCE(o.delivery_address, o.pickup_address, 'Pune') as delivery_address,
-                        COALESCE(o.total_amount, o.amount, o.total, 0) as amount,
-                        COALESCE(o.total_amount, o.amount, o.total, 0) as total_amount,
-                        COALESCE(o.total_amount, o.amount, o.total, 0) as total,
+                        COALESCE(o.pickup_address, 'Pune') as delivery_address,
+                        COALESCE(o.total_amount, o.total, 0) as amount,
+                        COALESCE(o.total_amount, o.total, 0) as total_amount,
+                        COALESCE(o.total_amount, o.total, 0) as total,
                         UPPER(COALESCE(o.payment_method, 'COD')) as paymentMethod,
                         UPPER(COALESCE(o.payment_method, 'COD')) as payment_method,
                         UPPER(COALESCE(o.payment_status, 'PENDING')) as paymentStatus,
                         UPPER(COALESCE(o.payment_status, 'PENDING')) as payment_status,
-                        UPPER(COALESCE(o.status, 'PENDING')) as status,
+                        UPPER(COALESCE(o.status, 'PLACED')) as status,
                         COALESCE(du.name, dbu.name, 'Unassigned') as deliveryBoyName,
                         COALESCE(du.name, dbu.name, 'Unassigned') as delivery_boy_name,
                         COALESCE(du.phone, dbu.phone, '') as delivery_boy_phone,
                         DATE_FORMAT(o.created_at, '%d %b %Y %h:%i %p') as createdAt,
                         o.created_at,
                         o.notes,
-                        o.customer_available,
-                        o.customer_availability_notes
+                        COALESCE(o.special_instructions, o.notes, '') as special_instructions
                     FROM orders o
                     LEFT JOIN users u ON o.user_id = u.id
                     LEFT JOIN laundry_shops s ON o.shop_id = s.id
@@ -547,3 +626,50 @@ if (!function_exists('fetchOrdersFromDb')) {
         }
     }
 }
+
+if (!function_exists('getAdminSubscriptionPlans')) {
+    /**
+     * Retrieve all active subscription plans created or managed by Admin.
+     * Synchronizes across session storage and admin subscription manager.
+     */
+    function getAdminSubscriptionPlans(): array {
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
+            @session_start();
+        }
+
+        if (empty($_SESSION['subscription_plans_store']) || !is_array($_SESSION['subscription_plans_store'])) {
+            $_SESSION['subscription_plans_store'] = [
+                'PLAN-01' => [
+                    'id' => 'PLAN-01',
+                    'name' => 'Basic Starter Plan',
+                    'price' => 999,
+                    'billingCycle' => 'MONTHLY',
+                    'orderLimit' => 100,
+                    'status' => 'ACTIVE',
+                    'features' => ['Direct Laundry Listing', 'Driver Dispatch Tracking', 'Online Customer Bookings', 'Standard Support']
+                ],
+                'PLAN-02' => [
+                    'id' => 'PLAN-02',
+                    'name' => 'Professional Growth',
+                    'price' => 2499,
+                    'billingCycle' => 'MONTHLY',
+                    'orderLimit' => 999999,
+                    'status' => 'ACTIVE',
+                    'features' => ['Direct Laundry Listing', 'Driver Dispatch Tracking', 'Online Customer Bookings', 'Priority Search Ranking', 'Custom Shop Banner']
+                ],
+                'PLAN-03' => [
+                    'id' => 'PLAN-03',
+                    'name' => 'Enterprise VIP Platinum',
+                    'price' => 19999,
+                    'billingCycle' => 'ANNUAL',
+                    'orderLimit' => 999999,
+                    'status' => 'ACTIVE',
+                    'features' => ['All Professional Features', 'Featured Homepage Spotlight', 'Dedicated Account Manager', '0% Processing Surcharge', 'Unlimited Pickup Radius']
+                ],
+            ];
+        }
+
+        return $_SESSION['subscription_plans_store'];
+    }
+}
+

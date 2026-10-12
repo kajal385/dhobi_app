@@ -71,7 +71,7 @@ $categories = array_values($_SESSION['category_commission']);
         </span>
       </div>
       <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.25rem; margin-bottom: 0;">
-        Configure localized platform revenue share percentages across Pune operational delivery zones and wash categories.
+        Configure localized platform revenue share percentages across Pune operational delivery zones.
       </p>
     </div>
   </div>
@@ -107,7 +107,6 @@ $categories = array_values($_SESSION['category_commission']);
     </div>
   </div>
 
-  <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.5rem;">
     <!-- Pune City Operational Zones Commission Table -->
     <div class="card" style="padding: 1.5rem; border-radius: 16px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
@@ -176,67 +175,6 @@ $categories = array_values($_SESSION['category_commission']);
         </table>
       </div>
     </div>
-
-    <!-- Category-Wise Commission Rates -->
-    <div class="card" style="padding: 1.5rem; border-radius: 16px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <div>
-          <h3 style="font-size: 1.15rem; font-weight: 800; margin: 0; color: var(--brand-purple);">
-            Category-Wise Commission Rates
-          </h3>
-          <p style="margin: 0.15rem 0 0 0; font-size: 0.78rem; color: var(--text-secondary);">
-            Default platform cut based on wash treatment complexity
-          </p>
-        </div>
-      </div>
-
-      <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Service Category</th>
-              <th>SLA Target</th>
-              <th>Commission %</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($categories as $cat): 
-                $catId = $cat['id'];
-                $catName = $cat['category'];
-                $catRate = floatval($cat['commissionPercentage']);
-                $catSla = $cat['sla'] ?? '24h';
-            ?>
-              <tr>
-                <td>
-                  <strong style="font-size: 0.9rem; color: var(--text-primary);">
-                    🧺 <?= htmlspecialchars($catName) ?>
-                  </strong>
-                </td>
-                <td>
-                  <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">
-                    ⏱ <?= htmlspecialchars($catSla) ?>
-                  </span>
-                </td>
-                <td>
-                  <strong style="color: #10B981; font-size: 1.1rem; font-weight: 900;"><?= $catRate ?>%</strong>
-                </td>
-                <td>
-                  <button 
-                    type="button" 
-                    onclick="openCatCommModal('<?= htmlspecialchars($catId) ?>', '<?= htmlspecialchars(addslashes($catName)) ?>', <?= $catRate ?>)" 
-                    class="btn btn-secondary btn-sm"
-                    style="font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;"
-                  >
-                    <i data-lucide="sliders" style="width: 12px; height: 12px;"></i> Set Rate
-                  </button>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -275,53 +213,12 @@ $categories = array_values($_SESSION['category_commission']);
   </div>
 </div>
 
-<!-- Modal: Configure Category Commission Rate -->
-<div id="catCommModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(8px); align-items: center; justify-content: center; z-index: 99999; padding: 1.5rem;">
-  <div class="modal-content" style="background: var(--bg-card); border-radius: 16px; border: 1px solid var(--border-color); width: 100%; max-width: 460px; padding: 1.75rem; color: var(--text-primary); box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
-      <h3 style="margin: 0; font-size: 1.2rem; font-weight: 800; color: var(--brand-purple);">Set Category Commission</h3>
-      <button onclick="closeModal('catCommModal')" style="background: var(--bg-input); border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer;">✕</button>
-    </div>
-    <form method="POST" action="">
-      <input type="hidden" name="action" value="update_cat_commission">
-      <input type="hidden" id="catCommId" name="cat_id" value="">
-      
-      <div style="background: var(--bg-input); padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border-color); margin-bottom: 1.25rem;">
-        <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 800;">Wash Category:</span>
-        <div id="catCommName" style="font-weight: 800; font-size: 0.95rem; color: var(--text-primary); margin-top: 0.2rem;"></div>
-      </div>
-
-      <div class="form-group" style="margin-bottom: 1.5rem;">
-        <label class="form-label" style="display: block; margin-bottom: 0.4rem; font-weight: 700;">Category Commission Rate (%) *</label>
-        <div style="position: relative;">
-          <input type="number" id="catCommRate" name="rate" class="form-control" min="1" max="50" step="0.5" required style="width: 100%; font-size: 1.1rem; font-weight: 800; color: #10B981; padding-right: 2rem;">
-          <span style="position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); font-weight: 800; color: var(--text-muted);">%</span>
-        </div>
-      </div>
-
-      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
-        <button type="button" onclick="closeModal('catCommModal')" class="btn btn-secondary" style="font-weight: 700;">Cancel</button>
-        <button type="submit" class="btn btn-primary" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); color: #FFF; border: none; padding: 0.65rem 1.5rem; border-radius: 8px; font-weight: 800;">
-          Save Rate
-        </button>
-      </div>
-    </form>
-  </div>
-</div>
-
 <script>
   function openPuneZoneModal(id, name, rate) {
     document.getElementById('puneZoneId').value = id;
     document.getElementById('puneZoneName').innerText = name;
     document.getElementById('puneZoneRate').value = rate;
     openModal('puneZoneModal');
-  }
-
-  function openCatCommModal(id, name, rate) {
-    document.getElementById('catCommId').value = id;
-    document.getElementById('catCommName').innerText = name;
-    document.getElementById('catCommRate').value = rate;
-    openModal('catCommModal');
   }
 </script>
 

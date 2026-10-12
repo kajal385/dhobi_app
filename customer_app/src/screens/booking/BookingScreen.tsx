@@ -14,6 +14,7 @@ import {
   Alert,
   Dimensions,
   Image,
+  Modal,
 } from 'react-native';
 import AppScreen from '../../components/AppScreen';
 import { useDispatch, useSelector } from 'react-redux';
@@ -21,7 +22,7 @@ import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
 import { addOrder } from '../../store/orderSlice';
 import { orderService } from '../../services/orderService';
 import { addressService } from '../../services/addressService';
-import { DEFAULT_SHOPS, shopService } from '../../services/shopService';
+import { DEFAULT_SHOPS, shopService, ShopService, ServiceItem } from '../../services/shopService';
 import { Address } from '../../types';
 import { useFocusEffect } from '@react-navigation/native';
 import Toast from 'react-native-toast-message';
@@ -222,8 +223,23 @@ const BookingScreenInner = ({ navigation, route }: any) => {
 
   // Step 1: Selected Services & Items
   const [addedCombinations, setAddedCombinations] = useState<Array<{ id: string; serviceKey: string; itemKey: string; quantity: number }>>(initialCombinations);
+
+  const resolveServiceKey = (rawKey?: string) => {
+    if (!rawKey) return 'wash_fold';
+    const s = rawKey.toLowerCase();
+    if (s.includes('fold') || s === 'wash_fold') return 'wash_fold';
+    if (s.includes('iron') && s.includes('wash')) return 'wash_iron';
+    if (s.includes('iron') || s.includes('press') || s === 'steam_iron') return 'iron_only';
+    if (s.includes('dry') || s.includes('clean')) return 'dry_clean';
+    if (s.includes('shoe')) return 'shoe_laundry';
+    if (s.includes('only') && s.includes('wash')) return 'only_wash';
+    return rawKey;
+  };
+
   const [activeService, setActiveService] = useState<string | null>(
-    reorderItems && reorderItems.length > 0 ? (initialCombinations[0]?.serviceKey || 'wash_fold') : null
+    reorderItems && reorderItems.length > 0
+      ? (initialCombinations[0]?.serviceKey || 'wash_fold')
+      : resolveServiceKey(route.params?.serviceType || route.params?.selectedCategory)
   );
 
   // Step 3: Add-ons
@@ -244,12 +260,179 @@ const BookingScreenInner = ({ navigation, route }: any) => {
 
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [showShopPickerModal, setShowShopPickerModal] = useState(false);
 
-  // Calculations
+  // ── Shop Info & Dynamic Owner Services ─────────────────
+  const initialShopId = Number(route.params?.shopId || route.params?.shop_id || (route.params?.shop?.id) || DEFAULT_SHOPS[0]?.id || 47);
+  const [selectedShopId, setSelectedShopId] = useState<number>(initialShopId);
+  const targetShopId = selectedShopId;
+  const [availableShops, setAvailableShops] = useState<any[]>(DEFAULT_SHOPS);
+  const targetShop = route.params?.shop || route.params?.reorderShop || availableShops.find(s => s.id === selectedShopId) || DEFAULT_SHOPS[0];
+  const [shopDetails, setShopDetails] = useState<any>(targetShop);
+
+  React.useEffect(() => {
+    if (route.params?.shop) {
+      setShopDetails(route.params.shop);
+      if (route.params.shop.id) setSelectedShopId(Number(route.params.shop.id));
+    } else if (route.params?.shopId) {
+      const sid = Number(route.params.shopId);
+      setSelectedShopId(sid);
+      const found = availableShops.find(s => s.id === sid) || DEFAULT_SHOPS.find(s => s.id === sid);
+      if (found) setShopDetails(found);
+    }
+  }, [route.params?.shopId, route.params?.shop, availableShops]);
+  const [shopServices, setShopServices] = useState<ShopService[]>([]);
+  const targetShopName = shopDetails?.name || shopDetails?.shop_name || route.params?.shopName || (targetShop as any)?.name || 'Dhobi UltraPro';
+  const targetOwnerName = shopDetails?.owner_name || shopDetails?.ownerName || route.params?.ownerName || (targetShop as any)?.owner_name || 'Ram Kale';
+  const targetShopAddress = shopDetails?.address || shopDetails?.location || route.params?.shopLocation || (targetShop as any)?.address || 'Kalewadi, Pimpri-Chinchwad, Pune';
+
+  // Fetch available shops from API
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const resp = await shopService.getShops();
+        if (resp?.data && resp.data.length > 0) {
+          setAvailableShops(resp.data);
+        }
+      } catch (e) {}
+    })();
+  }, []);
+
+  // Fetch live shop profile to sync working hours, weekly off days, and owner-set categories & item prices
+  React.useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const profile = await shopService.getShopProfile(selectedShopId);
+        if (isMounted) {
+          if (profile?.shop) {
+            setShopDetails(profile.shop);
+          }
+          if (profile?.services && Array.isArray(profile.services) && profile.services.length > 0) {
+            setShopServices(profile.services);
+          }
+        }
+      } catch (err) {
+        // Fallback to targetShop
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [selectedShopId]);
+
+  // Dynamic services & items set by laundry owner
+  const availableServices = React.useMemo(() => {
+    if (shopServices && shopServices.length > 0) {
+      return shopServices.map(svc => {
+        const key = (svc.name || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+        let iconName = 'tshirt-crew-outline';
+        const lower = (svc.name || '').toLowerCase();
+        if (lower.includes('fold')) iconName = 'tshirt-crew-outline';
+        else if (lower.includes('iron') && lower.includes('wash')) iconName = 'washing-machine';
+        else if (lower.includes('iron') || lower.includes('press')) iconName = 'iron-outline';
+        else if (lower.includes('dry')) iconName = 'hanger';
+        else if (lower.includes('shoe')) iconName = 'shoe-sneaker';
+        else if (lower.includes('blanket') || lower.includes('woolen')) iconName = 'bed-empty';
+        else if (lower.includes('wash')) iconName = 'bucket-outline';
+
+        const items = (svc.items || []).map(item => {
+          const itemKey = (item.name || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+          const price = (item.price_per_piece != null && !isNaN(Number(item.price_per_piece)))
+            ? Number(item.price_per_piece)
+            : (item.price_per_kg != null && !isNaN(Number(item.price_per_kg)))
+              ? Number(item.price_per_kg)
+              : 50;
+          return {
+            id: item.id,
+            key: itemKey,
+            label: item.name,
+            price,
+            pricing_type: item.pricing_type || 'per_piece',
+            unit: item.pricing_type === 'per_kg' ? 'kg' : 'pc',
+          };
+        });
+
+        return {
+          id: svc.id,
+          key,
+          title: svc.name,
+          desc: svc.description || 'Cleaned, dried & neatly folded',
+          icon: iconName,
+          items: items.length > 0 ? items : CLOTHES_ITEMS.map(ci => ({
+            id: 0,
+            key: ci.key,
+            label: ci.label,
+            price: ci.price,
+            pricing_type: 'per_piece' as const,
+            unit: 'pc',
+          })),
+        };
+      });
+    }
+
+    return SERVICES.map(s => ({
+      id: 0,
+      key: s.key,
+      title: s.title,
+      desc: s.desc,
+      icon: s.icon,
+      items: CLOTHES_ITEMS.map(ci => ({
+        id: 0,
+        key: ci.key,
+        label: ci.label,
+        price: ci.price,
+        pricing_type: 'per_piece' as const,
+        unit: 'pc',
+      })),
+    }));
+  }, [shopServices]);
+
+  // Helper: Retrieve owner-set price and garment details
+  const getItemInfo = React.useCallback((serviceKey: string, itemKey: string) => {
+    const s = availableServices.find(srv => srv.key === serviceKey || srv.title.toLowerCase() === serviceKey.toLowerCase());
+    if (s) {
+      const found = s.items.find(i => i.key === itemKey || i.label.toLowerCase() === itemKey.toLowerCase());
+      if (found) return found;
+    }
+    const fallback = CLOTHES_ITEMS.find(c => c.key === itemKey);
+    if (fallback) {
+      return {
+        id: 0,
+        key: fallback.key,
+        label: fallback.label,
+        price: fallback.price,
+        pricing_type: 'per_piece' as const,
+        unit: 'pc',
+      };
+    }
+    return {
+      id: 0,
+      key: itemKey,
+      label: itemKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      price: 50,
+      pricing_type: 'per_piece' as const,
+      unit: 'pc',
+    };
+  }, [availableServices]);
+
+  // Helper: Garment visual icon
+  const getItemImage = (key: string, name?: string) => {
+    if (ITEM_IMAGES[key]) return ITEM_IMAGES[key];
+    const n = (name || key).toLowerCase();
+    if (n.includes('t-shirt') || n.includes('tshirt')) return require('../../../assets/myimages/row1_1.png');
+    if (n.includes('trouser') || n.includes('pant')) return require('../../../assets/myimages/row1_2.png');
+    if (n.includes('kurta') || n.includes('suit') || n.includes('blazer')) return require('../../../assets/myimages/row1_3.png');
+    if (n.includes('jean')) return require('../../../assets/myimages/row2_1.png');
+    if (n.includes('saree') || n.includes('sari')) return require('../../../assets/myimages/row2_2.png');
+    if (n.includes('towel')) return require('../../../assets/myimages/row2_3.png');
+    if (n.includes('shirt')) return require('../../../assets/myimages/row3_1.png');
+    return require('../../../assets/myimages/row1_1.png');
+  };
+
+  // Calculations using owner prices
   const selectedItemsCount = addedCombinations.reduce((sum, item) => sum + item.quantity, 0);
   const itemsSubtotal = addedCombinations.reduce((sum, comb) => {
-    const itemInfo = CLOTHES_ITEMS.find(c => c.key === comb.itemKey);
-    return sum + (itemInfo ? itemInfo.price * comb.quantity : 0);
+    const itemInfo = getItemInfo(comb.serviceKey, comb.itemKey);
+    return sum + (itemInfo.price * comb.quantity);
   }, 0);
   const addonsSubtotal = selectedAddons.reduce((sum, addonKey) => {
     const addon = ADDONS_LIST.find(a => a.key === addonKey);
@@ -257,14 +440,6 @@ const BookingScreenInner = ({ navigation, route }: any) => {
   }, 0);
   const pickupDeliveryFee = itemsSubtotal > 199 ? 0 : 30; // Free above 199
   const totalAmount = itemsSubtotal + addonsSubtotal + pickupDeliveryFee;
-
-  // ── Shop Info (component-level so step 1, 3, 6 can access them) ─────────────────
-  const targetShopId = Number(route.params?.shopId || route.params?.shop_id || (route.params?.shop?.id) || 44);
-  const targetShop = route.params?.shop || route.params?.reorderShop || DEFAULT_SHOPS.find(s => s.id === targetShopId) || DEFAULT_SHOPS[0];
-  const [shopDetails, setShopDetails] = useState<any>(targetShop);
-  const targetShopName = shopDetails?.name || shopDetails?.shop_name || route.params?.shopName || (targetShop as any)?.name || 'Star Wash Ultra Premium';
-  const targetOwnerName = shopDetails?.owner_name || shopDetails?.ownerName || route.params?.ownerName || (targetShop as any)?.owner_name || 'Ashish Bhosale';
-  const targetShopAddress = shopDetails?.address || shopDetails?.location || route.params?.shopLocation || (targetShop as any)?.address || 'Tathawade,pune';
 
   // Closed Days parsing (e.g. [0] for Sunday Off)
   const closedDays = React.useMemo(() => getClosedDaysFromShop(shopDetails), [shopDetails]);
@@ -287,22 +462,6 @@ const BookingScreenInner = ({ navigation, route }: any) => {
     }
     return days;
   }, [closedDays]);
-
-  // Fetch live shop profile to sync working hours and weekly off days
-  React.useEffect(() => {
-    let isMounted = true;
-    (async () => {
-      try {
-        const profile = await shopService.getShopProfile(targetShopId);
-        if (isMounted && profile?.shop) {
-          setShopDetails(profile.shop);
-        }
-      } catch (err) {
-        // Fallback to targetShop
-      }
-    })();
-    return () => { isMounted = false; };
-  }, [targetShopId]);
 
   // Auto-advance pickup date if current date is a closed day
   React.useEffect(() => {
@@ -442,13 +601,13 @@ const BookingScreenInner = ({ navigation, route }: any) => {
     };
 
     const items = addedCombinations.map(comb => {
-      const service = SERVICES.find(s => s.key === comb.serviceKey);
-      const item = CLOTHES_ITEMS.find(c => c.key === comb.itemKey);
-      const unitPrice = item?.price || 50;
+      const service = availableServices.find(s => s.key === comb.serviceKey);
+      const itemInfo = getItemInfo(comb.serviceKey, comb.itemKey);
+      const unitPrice = itemInfo.price;
       return {
-        name: `${service?.title || comb.serviceKey} - ${item?.label || comb.itemKey}`,
+        name: `${service?.title || comb.serviceKey} - ${itemInfo.label}`,
         service_name: service?.title || comb.serviceKey,
-        item_name: item?.label || comb.itemKey,
+        item_name: itemInfo.label,
         quantity: comb.quantity,
         price: unitPrice,
         unit_price: unitPrice,
@@ -565,6 +724,71 @@ const BookingScreenInner = ({ navigation, route }: any) => {
     </View>
   );
 
+  const renderShopPickerModal = () => (
+    <Modal
+      visible={showShopPickerModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowShopPickerModal(false)}
+    >
+      <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'flex-end' }}>
+        <TouchableOpacity
+          style={{ flex: 1 }}
+          activeOpacity={1}
+          onPress={() => setShowShopPickerModal(false)}
+        />
+        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '80%' }}>
+          <View style={{ width: 40, height: 4, backgroundColor: '#CBD5E1', borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>Choose Laundry Store</Text>
+            <TouchableOpacity onPress={() => setShowShopPickerModal(false)} style={{ padding: 6 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textSecondary }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {availableShops.map((s) => {
+              const isCurrent = (selectedShopId === s.id) || (shopDetails?.id === s.id) || (targetShopName === s.name);
+              return (
+                <TouchableOpacity
+                  key={s.id}
+                  onPress={() => {
+                    setSelectedShopId(s.id);
+                    setShopDetails(s);
+                    setShowShopPickerModal(false);
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: 14,
+                    borderRadius: 14,
+                    marginBottom: 10,
+                    backgroundColor: isCurrent ? '#EDE8FF' : colors.background,
+                    borderWidth: isCurrent ? 2 : 1,
+                    borderColor: isCurrent ? '#5B52E8' : colors.border,
+                  }}
+                >
+                  <View style={{ width: 42, height: 42, borderRadius: 10, backgroundColor: '#5B52E8', alignItems: 'center', justifyContent: 'center' }}>
+                    <MaterialCommunityIcons name="storefront-outline" size={22} color="#FFF" />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: isCurrent ? '#321D8C' : colors.text }}>{s.name}</Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary }}>📍 {s.address || s.area || 'Pune'}</Text>
+                    <Text style={{ fontSize: 11, color: '#5B52E8', marginTop: 2 }}>⭐ {s.rating} • {s.distance || 'Near you'}</Text>
+                  </View>
+                  {isCurrent ? (
+                    <View style={{ backgroundColor: '#5B52E8', width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '900' }}>✓</Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+
   // STEP 1: Service Selection
   if (step === 1) {
     return (
@@ -578,10 +802,16 @@ const BookingScreenInner = ({ navigation, route }: any) => {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           {/* Selected Laundry Store & Owner Card */}
           <View style={[styles.selectedShopCard, { backgroundColor: colors.card, borderColor: '#5B52E8' }]}>
-            <View style={styles.selectedShopCardHeader}>
+            <View style={[styles.selectedShopCardHeader, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
               <View style={styles.selectedShopBadge}>
                 <Text style={styles.selectedShopBadgeText}>SELECTED LAUNDRY STORE</Text>
               </View>
+              <TouchableOpacity
+                onPress={() => setShowShopPickerModal(true)}
+                style={{ backgroundColor: '#EDE8FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}
+              >
+                <Text style={{ color: '#5B52E8', fontSize: 11, fontWeight: '700' }}>Change Laundry ▾</Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.selectedShopRow}>
               <View style={styles.selectedShopIconCircle}>
@@ -604,8 +834,8 @@ const BookingScreenInner = ({ navigation, route }: any) => {
           </View>
 
           <View style={styles.servicesContainer}>
-            {SERVICES.map(service => {
-              const isSelected = activeService === service.key;
+            {availableServices.map(service => {
+              const isSelected = activeService === service.key || (activeService && service.title.toLowerCase() === activeService.toLowerCase());
               return (
                 <View key={service.key} style={{ marginBottom: 16 }}>
                   <TouchableOpacity
@@ -643,23 +873,25 @@ const BookingScreenInner = ({ navigation, route }: any) => {
                     )}
                   </TouchableOpacity>
 
-                  {/* Dropdown Items List */}
+                  {/* Dropdown Items List with Owner-set Prices */}
                   {isSelected && (
                     <View style={[styles.itemsListContainer, { marginTop: 10, paddingHorizontal: 10, paddingBottom: 10, backgroundColor: isDark ? '#1a1830' : '#f9f9f9', borderRadius: 12 }]}>
-                      {CLOTHES_ITEMS.map(item => {
+                      {service.items.map(item => {
                         const qty = getQtyForActiveService(item.key);
                         return (
                           <View key={item.key} style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border, marginBottom: 12 }]}>
                             <View style={styles.itemImageContainer}>
                               <Image
-                                source={ITEM_IMAGES[item.key]}
+                                source={getItemImage(item.key, item.label)}
                                 style={styles.itemImage}
                                 resizeMode="contain"
                               />
                             </View>
                             <View style={styles.itemMeta}>
                               <Text style={[styles.itemLabelName, { color: colors.text }]}>{item.label}</Text>
-                              <Text style={[styles.itemLabelPrice, { color: colors.textSecondary }]}>₹{item.price}</Text>
+                              <Text style={[styles.itemLabelPrice, { color: colors.textSecondary }]}>
+                                ₹{item.price}{item.pricing_type === 'per_kg' ? ' / kg' : ''}
+                              </Text>
                             </View>
                             <View style={styles.qtyRowContainer}>
                               <TouchableOpacity
@@ -738,13 +970,15 @@ const BookingScreenInner = ({ navigation, route }: any) => {
             </LinearGradient>
           </TouchableOpacity>
         </View>
+
+        {renderShopPickerModal()}
       </LinearGradient>
     );
   }
 
   // STEP 3: Review Order
   if (step === 3) {
-    const currentService = SERVICES.find(s => s.key === activeService) || SERVICES[0];
+    const currentService = availableServices.find(s => s.key === activeService) || availableServices[0] || SERVICES[0];
     return (
       <LinearGradient
         colors={isDark ? ['#0F0E1A', '#1A1830'] : ['#EDE8FF', '#FFF0EA']}
@@ -776,10 +1010,16 @@ const BookingScreenInner = ({ navigation, route }: any) => {
           )}
           {/* Selected Laundry Store & Owner Card */}
           <View style={[styles.selectedShopCard, { backgroundColor: colors.card, borderColor: '#5B52E8' }]}>
-            <View style={styles.selectedShopCardHeader}>
+            <View style={[styles.selectedShopCardHeader, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
               <View style={styles.selectedShopBadge}>
                 <Text style={styles.selectedShopBadgeText}>SELECTED LAUNDRY STORE</Text>
               </View>
+              <TouchableOpacity
+                onPress={() => setShowShopPickerModal(true)}
+                style={{ backgroundColor: '#EDE8FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}
+              >
+                <Text style={{ color: '#5B52E8', fontSize: 11, fontWeight: '700' }}>Change Laundry ▾</Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.selectedShopRow}>
               <View style={styles.selectedShopIconCircle}>
@@ -831,13 +1071,13 @@ const BookingScreenInner = ({ navigation, route }: any) => {
           {/* Items List */}
           <View style={[styles.reviewItemsBox, { backgroundColor: colors.card }]}>
             {addedCombinations.map(comb => {
-              const itemInfo = CLOTHES_ITEMS.find(c => c.key === comb.itemKey);
-              if (!itemInfo) return null;
+              const itemInfo = getItemInfo(comb.serviceKey, comb.itemKey);
+              const serviceTitle = availableServices.find(s => s.key === comb.serviceKey)?.title || comb.serviceKey;
               return (
                 <View key={comb.id} style={styles.reviewItemRow}>
                   <View style={styles.reviewItemImageContainer}>
                     <Image
-                      source={ITEM_IMAGES[itemInfo.key]}
+                      source={getItemImage(itemInfo.key, itemInfo.label)}
                       style={styles.reviewItemImage}
                       resizeMode="contain"
                     />
@@ -847,7 +1087,7 @@ const BookingScreenInner = ({ navigation, route }: any) => {
                       {itemInfo.label}
                     </Text>
                     <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-                      {SERVICES.find(s => s.key === comb.serviceKey)?.title || ''} • ₹{itemInfo.price}
+                      {serviceTitle} • ₹{itemInfo.price}{itemInfo.pricing_type === 'per_kg' ? ' / kg' : ''}
                     </Text>
                   </View>
                   <View style={styles.qtyRowContainerSmall}>
@@ -937,6 +1177,8 @@ const BookingScreenInner = ({ navigation, route }: any) => {
             </LinearGradient>
           </TouchableOpacity>
         </View>
+
+        {renderShopPickerModal()}
       </LinearGradient>
     );
   }

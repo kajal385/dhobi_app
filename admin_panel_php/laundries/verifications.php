@@ -716,8 +716,8 @@ if ($isOwner) {
 
 <!-- Modal: Document Preview Lightbox -->
 <div id="docPreviewLightbox" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(10, 15, 30, 0.85); backdrop-filter: blur(10px); align-items: center; justify-content: center; z-index: 100000; padding: 1.5rem;">
-  <div class="modal-content" style="background: var(--bg-card); border-radius: 16px; border: 1px solid rgba(129,98,238,0.3); width: 100%; max-width: 740px; box-shadow: 0 30px 60px rgba(0,0,0,0.6); color: var(--text-primary); overflow: hidden; display: flex; flex-direction: column;">
-    <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.15);">
+  <div class="modal-content" style="background: var(--bg-card); border-radius: 16px; border: 1px solid rgba(129,98,238,0.3); width: 100%; max-width: 720px; max-height: 90vh; box-shadow: 0 30px 60px rgba(0,0,0,0.6); color: var(--text-primary); display: flex; flex-direction: column; overflow: hidden;">
+    <div style="padding: 1.15rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.15); flex-shrink: 0;">
       <div style="display: flex; align-items: center; gap: 0.6rem;">
         <i data-lucide="file-text" style="width: 20px; height: 20px; color: #8162EE;"></i>
         <h3 id="docPreviewTitle" style="font-size: 1.15rem; font-weight: 800; margin: 0; color: var(--text-primary);">Document Preview</h3>
@@ -725,67 +725,72 @@ if ($isOwner) {
       <button onclick="closeModal('docPreviewLightbox')" style="background: var(--bg-input); border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted);">✕</button>
     </div>
     
-    <div style="padding: 1.5rem; text-align: center; background: rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; min-height: 320px; max-height: 480px; overflow: hidden;">
-      <img id="docPreviewImg" src="" alt="Document Preview" style="max-width: 100%; max-height: 460px; border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 10px 25px rgba(0,0,0,0.3); object-fit: contain; background: #FFF;">
-    </div>
+    <div style="flex: 1; overflow-y: auto; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+      <div style="text-align: center; background: rgba(0,0,0,0.25); border-radius: 12px; padding: 0.75rem; display: flex; align-items: center; justify-content: center; min-height: 180px; max-height: 280px; overflow: hidden;">
+        <img id="docPreviewImg" src="" alt="Document Preview" style="max-width: 100%; max-height: 260px; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 8px 20px rgba(0,0,0,0.3); object-fit: contain; background: #FFF;">
+      </div>
 
-    <!-- Inline Replace Document Panel (Direct DB Update) -->
-    <div id="replaceDocPanel" style="display: none; padding: 1.15rem 1.5rem; background: rgba(245, 158, 11, 0.08); border-top: 1px solid rgba(245, 158, 11, 0.25);">
-      <form id="replaceDocForm" method="POST" action="" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 0.75rem;">
-        <input type="hidden" name="action" value="replace_document">
-        <input type="hidden" id="replaceShopId" name="shop_id" value="">
-        <input type="hidden" id="replaceDocField" name="doc_field" value="">
+      <!-- Inline Replace Document Panel (Direct DB Update) -->
+      <div id="replaceDocPanel" style="display: none; padding: 1.25rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px;">
+        <form id="replaceDocForm" method="POST" action="" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 0.85rem;">
+          <input type="hidden" name="action" value="replace_document">
+          <input type="hidden" id="replaceShopId" name="shop_id" value="">
+          <input type="hidden" id="replaceDocField" name="doc_field" value="">
 
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
-          <span style="font-size: 0.88rem; font-weight: 800; color: #D97706; display: flex; align-items: center; gap: 0.4rem;">
-            <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i> Replace Document (Permanently Saved to Database)
-          </span>
-          <span id="replaceFieldLabel" style="font-size: 0.75rem; font-weight: 700; background: rgba(245,158,11,0.2); color: #B45309; padding: 0.2rem 0.5rem; border-radius: 4px;"></span>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-          <div>
-            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Document Slot to Replace:</label>
-            <select id="replaceFieldSelect" class="form-control" style="font-size: 0.82rem; padding: 0.45rem;" onchange="document.getElementById('replaceDocField').value = this.value; document.getElementById('replaceFieldLabel').innerText = 'Slot: ' + this.options[this.selectedIndex].text;">
-              <option value="id_proof_photo">Aadhaar / ID Proof (id_proof_photo)</option>
-              <option value="business_proof_photo">Udyam / Trade License (business_proof_photo)</option>
-              <option value="bank_proof_photo">Bank Cheque / Passbook (bank_proof_photo)</option>
-              <option value="shop_board_photo">Storefront Signboard (shop_board_photo)</option>
-              <option value="logo_url">Shop Logo (logo_url)</option>
-              <option value="cover_url">Shop Cover Banner (cover_url)</option>
-            </select>
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+            <span style="font-size: 0.9rem; font-weight: 800; color: #D97706; display: flex; align-items: center; gap: 0.4rem;">
+              <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i> Replace Document (Saved to Database)
+            </span>
+            <span id="replaceFieldLabel" style="font-size: 0.75rem; font-weight: 700; background: rgba(245,158,11,0.2); color: #B45309; padding: 0.2rem 0.55rem; border-radius: 6px;"></span>
           </div>
 
-          <div>
-            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">Choose New Document File:</label>
-            <input type="file" id="replaceFileInput" name="new_document_file" accept="image/*,.pdf" required class="form-control" style="font-size: 0.82rem; padding: 0.35rem 0.5rem;">
-          </div>
-        </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+            <div>
+              <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Document Slot to Replace:</label>
+              <select id="replaceFieldSelect" class="form-control" style="font-size: 0.84rem; padding: 0.5rem; width: 100%; border-radius: 8px;" onchange="document.getElementById('replaceDocField').value = this.value; document.getElementById('replaceFieldLabel').innerText = 'Slot: ' + this.options[this.selectedIndex].text;">
+                <option value="id_proof_photo">Aadhaar / ID Proof (id_proof_photo)</option>
+                <option value="business_proof_photo">Udyam / Trade License (business_proof_photo)</option>
+                <option value="bank_proof_photo">Bank Cheque / Passbook (bank_proof_photo)</option>
+                <option value="shop_board_photo">Storefront Signboard (shop_board_photo)</option>
+                <option value="logo_url">Shop Logo (logo_url)</option>
+                <option value="cover_url">Shop Cover Banner (cover_url)</option>
+              </select>
+            </div>
 
-        <div style="display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 0.25rem;">
-          <button type="button" onclick="toggleReplaceDocPanel(false)" class="btn btn-secondary btn-sm" style="font-weight: 700;">Cancel</button>
-          <button type="submit" class="btn btn-primary btn-sm" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); border: none; color: #FFF; font-weight: 800; padding: 0.45rem 1.2rem; display: inline-flex; align-items: center; gap: 0.35rem; box-shadow: 0 4px 12px rgba(129,98,238,0.35);">
-            <i data-lucide="check" style="width: 14px; height: 14px;"></i> Upload &amp; Replace in DB
-          </button>
-        </div>
-      </form>
+            <div>
+              <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Choose New Document File:</label>
+              <input type="file" id="replaceFileInput" name="new_document_file" accept="image/*,.pdf" required class="form-control" style="font-size: 0.82rem; padding: 0.4rem 0.5rem; width: 100%; border-radius: 8px;">
+            </div>
+          </div>
+
+          <!-- PROPER UPLOAD BUTTONS -->
+          <div style="display: flex; justify-content: flex-end; align-items: center; gap: 0.75rem; margin-top: 0.5rem; padding-top: 0.75rem; border-top: 1px solid rgba(245,158,11,0.25);">
+            <button type="button" onclick="toggleReplaceDocPanel(false)" class="btn btn-secondary" style="font-weight: 700; padding: 0.55rem 1.25rem; border-radius: 8px; font-size: 0.85rem;">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); border: none; color: #FFF; font-weight: 800; padding: 0.55rem 1.5rem; border-radius: 8px; display: inline-flex; align-items: center; gap: 0.45rem; box-shadow: 0 4px 14px rgba(129,98,238,0.4); cursor: pointer; font-size: 0.85rem;">
+              <i data-lucide="upload-cloud" style="width: 16px; height: 16px;"></i> Upload &amp; Replace in DB
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
 
-    <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); flex-wrap: wrap; gap: 0.75rem;">
+    <div style="padding: 0.85rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); flex-wrap: wrap; gap: 0.75rem; flex-shrink: 0;">
       <span style="font-size: 0.78rem; color: #10B981; font-weight: 700; display: flex; align-items: center; gap: 0.35rem;">
         <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i> Verified Official KYC Compliance Document
       </span>
       <div style="display: flex; gap: 0.6rem; align-items: center;">
-        <button type="button" id="docPreviewReplaceBtn" onclick="toggleReplaceDocPanel()" class="btn btn-warning btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; background: #F59E0B; color: #FFF; border: none;">
+        <button type="button" id="docPreviewReplaceBtn" onclick="toggleReplaceDocPanel()" class="btn btn-warning btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; background: #F59E0B; color: #FFF; border: none; padding: 0.45rem 0.85rem; border-radius: 6px;">
           <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i> Replace Document
         </button>
-        <a id="docPreviewFullTabBtn" href="#" target="_blank" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700;">
+        <a id="docPreviewFullTabBtn" href="#" target="_blank" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; padding: 0.45rem 0.85rem; border-radius: 6px;">
           <i data-lucide="external-link" style="width: 14px; height: 14px;"></i> Open Full Size
         </a>
-        <a id="docPreviewDownloadBtn" href="#" download class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); color: #FFF; border: none;">
+        <a id="docPreviewDownloadBtn" href="#" download class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); color: #FFF; border: none; padding: 0.45rem 0.85rem; border-radius: 6px;">
           <i data-lucide="download" style="width: 14px; height: 14px;"></i> Download
         </a>
-        <button onclick="closeModal('docPreviewLightbox')" class="btn btn-secondary btn-sm" style="font-weight: 700;">Close</button>
+        <button onclick="closeModal('docPreviewLightbox')" class="btn btn-secondary btn-sm" style="font-weight: 700; padding: 0.45rem 0.85rem; border-radius: 6px;">Close</button>
       </div>
     </div>
   </div>

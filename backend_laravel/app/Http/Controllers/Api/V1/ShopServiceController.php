@@ -16,7 +16,12 @@ class ShopServiceController extends Controller
         if ($shopId) {
             $query->where('shop_id', $shopId);
         }
-        $services = $query->orderBy('id', 'desc')->get();
+        $services = $query->orderBy('id', 'desc')->get()->map(function ($s) {
+            $firstItem = $s->items->first();
+            $s->price = $firstItem ? ($firstItem->price_per_piece ?: $firstItem->price_per_kg) : 50;
+            $s->unit = $firstItem ? ($firstItem->pricing_type === 'per_kg' ? 'kg' : 'piece') : 'piece';
+            return $s;
+        });
 
         return response()->json([
             'success' => true,
@@ -34,6 +39,20 @@ class ShopServiceController extends Controller
 
         $service = ShopService::create($request->all());
 
+        if ($request->has('price') && floatval($request->input('price')) > 0) {
+            $unit = strtolower($request->input('unit', 'piece'));
+            $pt = ($unit === 'kg' || $request->input('pricing_type') === 'per_kg') ? 'per_kg' : 'per_piece';
+            ServiceItem::create([
+                'shop_service_id' => $service->id,
+                'name' => $service->name,
+                'pricing_type' => $pt,
+                'price_per_piece' => ($pt === 'per_piece') ? floatval($request->input('price')) : null,
+                'price_per_kg' => ($pt === 'per_kg') ? floatval($request->input('price')) : null,
+                'is_active' => 1,
+                'sort_order' => 1,
+            ]);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Service created successfully',
@@ -48,6 +67,29 @@ class ShopServiceController extends Controller
             return response()->json(['success' => false, 'message' => 'Not found'], 404);
         }
         $service->update($request->all());
+
+        if ($request->has('price')) {
+            $unit = strtolower($request->input('unit', 'piece'));
+            $pt = ($unit === 'kg' || $request->input('pricing_type') === 'per_kg') ? 'per_kg' : 'per_piece';
+            $firstItem = $service->items()->first();
+            if ($firstItem) {
+                $firstItem->update([
+                    'price_per_piece' => ($pt === 'per_piece') ? floatval($request->input('price')) : null,
+                    'price_per_kg' => ($pt === 'per_kg') ? floatval($request->input('price')) : null,
+                    'pricing_type' => $pt,
+                ]);
+            } else {
+                ServiceItem::create([
+                    'shop_service_id' => $service->id,
+                    'name' => $service->name,
+                    'pricing_type' => $pt,
+                    'price_per_piece' => ($pt === 'per_piece') ? floatval($request->input('price')) : null,
+                    'price_per_kg' => ($pt === 'per_kg') ? floatval($request->input('price')) : null,
+                    'is_active' => 1,
+                    'sort_order' => 1,
+                ]);
+            }
+        }
 
         return response()->json([
             'success' => true,

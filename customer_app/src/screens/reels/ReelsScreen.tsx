@@ -21,6 +21,7 @@ import { BASE_URL, resolveImageUrl } from '../../constants/config';
 const { width, height } = Dimensions.get('window');
 
 const LOCAL_VIDEOS: Record<string, any> = {
+  'vid_47_1791546762.mp4': require('../../../assets/myvideos/vid_47_1791546762.mp4'),
   'vid_44_1791365128.mp4': require('../../../assets/myvideos/vid_44_1791365128.mp4'),
   'vid_30_1791363480.mp4': require('../../../assets/myvideos/vid_30_1791363480.mp4'),
   'vid_30_1791358743.mp4': require('../../../assets/myvideos/vid_30_1791358743.mp4'),
@@ -39,13 +40,15 @@ const ReelVideoPlayer = ({
   const filename = videoUrl.split('/').pop()?.split('?')[0] || '';
   const resolvedVideoUri = resolveImageUrl(videoUrl);
   const resolvedPosterUri = resolveImageUrl(posterUrl);
-  const initialSource = LOCAL_VIDEOS[filename] || (resolvedVideoUri ? { uri: resolvedVideoUri } : LOCAL_VIDEOS['vid_44_1791365128.mp4']);
+  const initialSource = LOCAL_VIDEOS[filename] || (resolvedVideoUri ? { uri: resolvedVideoUri } : LOCAL_VIDEOS['vid_47_1791546762.mp4'] || LOCAL_VIDEOS['vid_44_1791365128.mp4']);
   const [source, setSource] = useState<any>(initialSource);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     const fName = videoUrl.split('/').pop()?.split('?')[0] || '';
     const uri = resolveImageUrl(videoUrl);
-    setSource(LOCAL_VIDEOS[fName] || (uri ? { uri } : LOCAL_VIDEOS['vid_44_1791365128.mp4']));
+    setSource(LOCAL_VIDEOS[fName] || (uri ? { uri } : LOCAL_VIDEOS['vid_47_1791546762.mp4'] || LOCAL_VIDEOS['vid_44_1791365128.mp4']));
+    setLoadError(false);
   }, [videoUrl]);
 
   return (
@@ -61,10 +64,17 @@ const ReelVideoPlayer = ({
       playInBackground={false}
       playWhenInactive={false}
       ignoreSilentSwitch="ignore"
+      bufferConfig={{
+        minBufferMs: 1500,
+        maxBufferMs: 8000,
+        bufferForPlaybackMs: 1000,
+        bufferForPlaybackAfterRebufferMs: 1500,
+      }}
       onError={() => {
-        // If remote URL fails, fallback to bundled video
-        if (source?.uri) {
-          setSource(LOCAL_VIDEOS['vid_44_1791365128.mp4']);
+        // If remote URL fails or stalls, fallback to bundled video
+        if (!loadError && source?.uri) {
+          setLoadError(true);
+          setSource(LOCAL_VIDEOS['vid_47_1791546762.mp4'] || LOCAL_VIDEOS['vid_44_1791365128.mp4']);
         }
       }}
     />

@@ -1,5 +1,18 @@
 [
     {
+        "id": "4",
+        "shopId": "47",
+        "shopName": "Dhobi UltraPro",
+        "title": "offer",
+        "subtitle": "Diwali Offer",
+        "tag": "ACTIVE",
+        "tagColor": "#10B981",
+        "url": "\/uploads\/banners\/banner_47_1791545229.png",
+        "image": "\/uploads\/banners\/banner_47_1791545229.png",
+        "active": true,
+        "added": "09 Oct 2026"
+    },
+    {
         "id": "1",
         "shopId": "30",
         "shopName": "My Laundry Shop",
@@ -20,18 +33,6 @@
         "tag": "ACTIVE",
         "tagColor": "#10B981",
         "image": "https:\/\/images.unsplash.com\/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=80",
-        "active": true,
-        "added": "07 Oct 2026"
-    },
-    {
-        "id": "3",
-        "shopId": "30",
-        "shopName": "My Laundry Shop",
-        "title": "Express 24-Hour Wash & Fold Service",
-        "subtitle": "Doorstep pickup & next-day delivery",
-        "tag": "ACTIVE",
-        "tagColor": "#10B981",
-        "image": "https:\/\/images.unsplash.com\/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=800&q=80",
         "active": true,
         "added": "07 Oct 2026"
     }

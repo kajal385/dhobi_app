@@ -36,22 +36,37 @@ const STEPPER_STATUSES: { status: string; label: string; subtitle: string; icon:
 const STATUS_MAPPING: Record<string, number> = {
   placed: 0,
   pending: 0,
+  PLACED: 0,
+  PENDING: 0,
   received: 1,
   accepted: 1,
   confirmed: 1,
+  RECEIVED: 1,
+  ACCEPTED: 1,
+  CONFIRMED: 1,
   in_process: 2,
   processing: 2,
   washing: 2,
   ironing: 2,
   picked_up: 2,
+  IN_PROCESS: 2,
+  PROCESSING: 2,
+  WASHING: 2,
   ready_for_delivery: 3,
   ready: 3,
   customer_confirmed: 3,  // customer confirmed, owner not yet assigned
+  READY: 3,
+  READY_FOR_DELIVERY: 3,
   delivery_assigned: 4,   // owner assigned delivery boy → show delivery boy card
   out_for_delivery: 4,
+  DELIVERY_ASSIGNED: 4,
+  OUT_FOR_DELIVERY: 4,
   delivered: 5,
   completed: 5,
+  DELIVERED: 5,
+  COMPLETED: 5,
   cancelled: -1,
+  CANCELLED: -1,
 };
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -216,7 +231,8 @@ export const TrackingScreen = ({ navigation, route }: any) => {
     );
   };
 
-  const currentStep = order ? (STATUS_MAPPING[order.status] ?? 1) : 1;
+  const normOrderStatus = String(order?.status || '').toLowerCase().replace(/[- ]/g, '_');
+  const currentStep = order ? (STATUS_MAPPING[normOrderStatus] ?? STATUS_MAPPING[order.status] ?? 1) : 1;
 
   const totalItemsCount = (() => {
     if (!order?.items || !Array.isArray(order.items)) return 2;
@@ -292,22 +308,22 @@ export const TrackingScreen = ({ navigation, route }: any) => {
     4.9;
 
   const isDelivered =
-    order?.status === 'delivered' ||
-    order?.status === 'completed' ||
-    (STATUS_MAPPING[order?.status || ''] ?? 1) >= 5;
+    normOrderStatus === 'delivered' ||
+    normOrderStatus === 'completed' ||
+    (STATUS_MAPPING[normOrderStatus] ?? STATUS_MAPPING[order?.status || ''] ?? 1) >= 5;
 
   // ── Delivery Boy Visibility ─────────────────────────────────────────────────
   // Show delivery boy card ONLY after laundry owner assigns a delivery partner.
   // Statuses that mean assignment happened: delivery_assigned, out_for_delivery, delivered/completed
   const isDeliveryAssigned =
-    order?.status === 'delivery_assigned' ||
-    order?.status === 'out_for_delivery' ||
-    order?.status === 'delivered' ||
-    order?.status === 'completed' ||
+    normOrderStatus === 'delivery_assigned' ||
+    normOrderStatus === 'out_for_delivery' ||
+    normOrderStatus === 'delivered' ||
+    normOrderStatus === 'completed' ||
     Boolean((order as any)?.delivery_boy_assigned) ||
-    Boolean(deliveryBoyObj?.name && order?.status !== 'placed' && order?.status !== 'received' &&
-      order?.status !== 'in_process' && order?.status !== 'ready_for_delivery' &&
-      order?.status !== 'ready' && order?.status !== 'customer_confirmed');
+    Boolean(deliveryBoyObj?.name && normOrderStatus !== 'placed' && normOrderStatus !== 'received' &&
+      normOrderStatus !== 'in_process' && normOrderStatus !== 'ready_for_delivery' &&
+      normOrderStatus !== 'ready' && normOrderStatus !== 'customer_confirmed');
 
   // Waiting for assignment: customer confirmed but owner hasn't assigned yet
   const isWaitingForAssignment =

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/api.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
 
 if (isLoggedIn()) {
     header('Location: ' . ADMIN_BASE_URL . '/dashboard/index.php');
@@ -539,10 +540,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               Subscription Tier
             </label>
             <select name="subscription_plan" class="form-control" style="width: 100%;">
-              <option value="Starter">Starter (15% Commission / Pay As You Go)</option>
-              <option value="Silver Pro">Silver Pro (₹999/mo • 10% Commission)</option>
-              <option value="Gold Business">Gold Business (₹1999/mo • 8% Commission)</option>
-              <option value="Platinum Max">Platinum Enterprise (₹3999/mo • 5% Commission)</option>
+              <?php 
+              $adminPlans = function_exists('getAdminSubscriptionPlans') ? getAdminSubscriptionPlans() : [];
+              foreach ($adminPlans as $pKey => $pInfo): 
+                  $pName = $pInfo['name'] ?? $pKey;
+                  $pPrice = floatval($pInfo['price'] ?? 0);
+                  $pCycle = strtolower($pInfo['billingCycle'] ?? 'monthly');
+                  $cycleSuffix = ($pCycle === 'annual' || $pCycle === 'yearly') ? '/yr' : '/mo';
+                  $pQuota = ($pInfo['orderLimit'] ?? 0) >= 99999 ? 'Unlimited Orders' : (($pInfo['orderLimit'] ?? 100) . ' Orders/mo');
+                  if (strtoupper($pInfo['status'] ?? 'ACTIVE') !== 'ACTIVE') continue;
+              ?>
+                <option value="<?= htmlspecialchars($pName) ?>">
+                  <?= htmlspecialchars($pName) ?> (₹<?= number_format($pPrice) ?><?= $cycleSuffix ?> • <?= $pQuota ?>)
+                </option>
+              <?php endforeach; ?>
             </select>
           </div>
           <div>

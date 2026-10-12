@@ -16,12 +16,25 @@ class ShopController extends Controller
     {
         $city = $request->input('city');
         $search = $request->input('search');
+        $categoryId = $request->input('category_id');
+        $categorySlug = $request->input('category') ?: $request->input('category_slug');
 
         $query = LaundryShop::where('is_active', 1)
             ->whereIn('verification_status', ['approved', 'APPROVED']);
 
         if ($city) {
             $query->where('city', 'like', "%{$city}%");
+        }
+
+        if ($categoryId) {
+            $shopIds = DB::table('shop_services')->where('category_id', $categoryId)->where('is_active', 1)->pluck('shop_id');
+            $query->whereIn('id', $shopIds);
+        } elseif ($categorySlug) {
+            $cat = DB::table('categories')->where('slug', $categorySlug)->first();
+            if ($cat) {
+                $shopIds = DB::table('shop_services')->where('category_id', $cat->id)->where('is_active', 1)->pluck('shop_id');
+                $query->whereIn('id', $shopIds);
+            }
         }
 
         if ($search) {
@@ -318,30 +331,20 @@ class ShopController extends Controller
         }
     }
 
-    /**
-     * Get nearby shops for Customer App.
-     */
     public function nearby(Request $request)
     {
         $lat = (float) $request->input('lat', 18.5590);
         $lng = (float) $request->input('lng', 73.7868);
         $city = $request->input('city');
 
-        $query = LaundryShop::query();
+        $query = LaundryShop::where('is_active', 1)
+            ->whereIn('verification_status', ['approved', 'APPROVED']);
 
         if ($city) {
             $query->where('city', 'like', "%{$city}%");
         }
 
         $shops = $query->get();
-
-        if ($shops->isEmpty()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Nearby registered shops retrieved successfully',
-                'data'    => $this->getDefaultShops($lat, $lng),
-            ]);
-        }
 
         $formatted = $shops->map(function ($shop) use ($lat, $lng) {
             $item = $this->formatShopForCustomer($shop);
@@ -513,6 +516,17 @@ class ShopController extends Controller
         $logo = $shop->logo_url ?: $shop->logo;
         $cover = $shop->cover_url ?: $shop->cover_image;
 
+        $shopServices = DB::table('shop_services')
+            ->leftJoin('categories', 'categories.id', '=', 'shop_services.category_id')
+            ->where('shop_services.shop_id', $shop->id)
+            ->where('shop_services.is_active', 1)
+            ->select('shop_services.category_id', 'shop_services.name as service_name', 'categories.slug as cat_slug', 'categories.name as cat_name')
+            ->get();
+
+        $catIds = $shopServices->pluck('category_id')->filter()->unique()->values()->map(function($v) { return (int)$v; })->all();
+        $catSlugs = $shopServices->pluck('cat_slug')->filter()->unique()->values()->all();
+        $serviceNames = $shopServices->pluck('service_name')->filter()->unique()->values()->all();
+
         return [
             'id'                       => (int) $shop->id,
             'uuid'                     => (string) $shop->uuid,
@@ -555,6 +569,9 @@ class ShopController extends Controller
             'cod_available'            => true,
             'total_orders'             => (int) ($shop->total_orders ?: 0),
             'gallery'                  => !empty($shop->shop_photos) ? (is_string($shop->shop_photos) ? json_decode($shop->shop_photos, true) : $shop->shop_photos) : [],
+            'service_category_ids'     => $catIds,
+            'category_slugs'           => $catSlugs,
+            'services_list'            => $serviceNames,
         ];
     }
 

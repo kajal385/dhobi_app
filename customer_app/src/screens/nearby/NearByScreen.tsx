@@ -19,7 +19,7 @@ import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
 import { resolveImageUrl } from '../../constants/config';
 import { requestLocationPermission, getCurrentLocation, reverseGeocode, GeocodedAddress, calculateDistance } from '../../utils/locationUtils';
 import Toast from 'react-native-toast-message';
-import { shopService, ShopListItem, DEFAULT_SHOPS } from '../../services/shopService';
+import { shopService, ShopListItem, DEFAULT_SHOPS, isApprovedShop } from '../../services/shopService';
 import LocationAccuracyModal from '../../components/LocationAccuracyModal';
 
 import { useSelector, useDispatch } from 'react-redux';
@@ -192,7 +192,7 @@ export const NearByScreen = ({ navigation }: any) => {
     // Always fetch nearby registered shops using customer lat, lng
     try {
       const data = await shopService.getNearbyShops(lat, lng);
-      const rawShops = data && data.length > 0 ? data : DEFAULT_SHOPS;
+      const rawShops = (data && data.length > 0 ? data : DEFAULT_SHOPS).filter(isApprovedShop);
       const processed = rawShops.map((shop) => {
         if (shop.latitude && shop.longitude) {
           return {

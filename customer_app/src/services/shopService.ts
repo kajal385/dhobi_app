@@ -29,6 +29,9 @@ export interface ShopListItem {
   offers_free_delivery: boolean;
   distance?: string | number;
   gallery?: string[];
+  service_category_ids?: number[];
+  category_slugs?: string[];
+  services_list?: string[];
 }
 
 export interface ServiceItem {
@@ -139,55 +142,93 @@ export interface ShopProfileResponse {
 
 export const DEFAULT_SHOPS: ShopListItem[] = [
   {
-    id: 44, uuid: 'uuid-44', name: 'Star Wash Ultra Premium', slug: 'star-wash-ultra-premium', logo: null, cover_image: null,
-    address: 'Tathawade,pune', area: 'Tathawade', city: 'Pune', state: 'MH', pincode: '411033', latitude: 18.595, longitude: 73.765,
-    rating: 4.9, review_count: 185, is_open: true, is_verified: true, is_featured: true, pickup_charge: 0, delivery_charge: 0,
-    min_order_amount: 250, estimated_delivery_hours: 24, offers_express_delivery: true, offers_same_day: true, offers_free_pickup: true, offers_free_delivery: true,
-    distance: '0.4 km away (4 mins)'
+    id: 47,
+    uuid: '33bb297a-333e-4bab-9623-f41e446b4ab3',
+    name: 'Dhobi UltraPro',
+    slug: 'dhobi-ultrapro-sdmk',
+    logo: '/uploads/documents/logo_1790829667_9163.jfif',
+    cover_image: '/uploads/documents/cover_1790829667_0_5582.jfif',
+    address: 'Kalewadi, Pimpri-Chinchwad, Pune',
+    area: 'Pimpri-Chinchwad',
+    city: 'Pune',
+    state: 'Maharashtra',
+    pincode: '411017',
+    latitude: 18.6069,
+    longitude: 73.7835,
+    rating: 5.0,
+    review_count: 1,
+    is_open: true,
+    is_verified: true,
+    is_featured: true,
+    pickup_charge: 0,
+    delivery_charge: 0,
+    min_order_amount: 199,
+    estimated_delivery_hours: 24,
+    offers_express_delivery: true,
+    offers_same_day: true,
+    offers_free_pickup: true,
+    offers_free_delivery: true,
+    distance: '1.9 km away (15 mins)',
+    gallery: [
+      '/uploads/shop-media/img_47_1790833201.jfif',
+      '/uploads/shop-media/img_47_1790833217.jfif',
+      '/uploads/shop-media/img_47_1790833230.jfif',
+      '/uploads/shop-media/img_47_1790836992.jfif',
+    ],
+    service_category_ids: [1, 2, 3, 4, 5, 7],
+    category_slugs: ['wash_fold', 'wash_iron', 'dry_clean', 'steam_iron', 'shoe_cleaning', 'blanket_cleaning'],
+    services_list: ['Wash & Fold', 'Wash & Steam Iron', 'Premium Dry Clean', 'Steam Press Only', 'Shoe Cleaning & Spa', 'Heavy Blanket & Woolen'],
   },
   {
-    id: 5, uuid: 'uuid-5', name: 'Star Wash Ultra Premium', slug: 'star-wash-ultra-premium-5', logo: null, cover_image: null,
-    address: 'Dutta Mandir Road, Wakad, Pune', area: 'Wakad', city: 'Pune', state: 'MH', pincode: '411057', latitude: 18.595, longitude: 73.765,
-    rating: 4.9, review_count: 185, is_open: true, is_verified: true, is_featured: true, pickup_charge: 0, delivery_charge: 0,
-    min_order_amount: 250, estimated_delivery_hours: 24, offers_express_delivery: true, offers_same_day: true, offers_free_pickup: true, offers_free_delivery: true,
-    distance: '0.4 km away (4 mins)'
+    id: 44,
+    uuid: '21637b7b-9b7a-4568-acd8-4fb0630da6b8',
+    name: 'Star Wash Ultra Premium',
+    slug: 'star-wash-ultra-premium',
+    logo: null,
+    cover_image: null,
+    address: 'Tathawade, Pune',
+    area: 'Tathawade',
+    city: 'Pune',
+    state: 'Maharashtra',
+    pincode: '411033',
+    latitude: 18.6186,
+    longitude: 73.7507,
+    rating: 4.9,
+    review_count: 28,
+    is_open: true,
+    is_verified: true,
+    is_featured: true,
+    pickup_charge: 0,
+    delivery_charge: 20,
+    min_order_amount: 100,
+    estimated_delivery_hours: 24,
+    offers_express_delivery: true,
+    offers_same_day: false,
+    offers_free_pickup: true,
+    offers_free_delivery: true,
+    distance: '0.4 km away (4 mins)',
+    gallery: [
+      'https://dhobi-api.bizz-manager.com/public/uploads/shop-media/photo_44_1791366470.jfif',
+      'https://dhobi-api.bizz-manager.com/public/uploads/shop-media/photo_44_1791366487.jfif',
+    ],
+    service_category_ids: [1, 2, 3],
+    category_slugs: ['wash_fold', 'wash_iron', 'dry_clean'],
+    services_list: ['Wash & Fold', 'Wash & Steam Iron', 'Premium Dry Clean'],
   },
-  {
-    id: 6, uuid: 'uuid-6', name: 'Super Clean Wash Laundry', slug: 'super-clean-wash', logo: null, cover_image: null,
-    address: 'Near Hinjewadi Flyover, Wakad, Pune', area: 'Wakad', city: 'Pune', state: 'MH', pincode: '411057', latitude: 18.588, longitude: 73.758,
-    rating: 4.8, review_count: 142, is_open: true, is_verified: true, is_featured: true, pickup_charge: 0, delivery_charge: 15,
-    min_order_amount: 199, estimated_delivery_hours: 24, offers_express_delivery: true, offers_same_day: true, offers_free_pickup: true, offers_free_delivery: false,
-    distance: '1.5 km away (12 mins)'
-  },
-  {
-    id: 1, uuid: 'uuid-1', name: 'Pearl Power Laundry', slug: 'pearl-power', logo: null, cover_image: null,
-    address: 'City Avenue Wakad, Pune', area: 'Wakad', city: 'Pune', state: 'MH', pincode: '411057', latitude: 18.592, longitude: 73.764,
-    rating: 4.8, review_count: 124, is_open: true, is_verified: true, is_featured: true, pickup_charge: 0, delivery_charge: 0,
-    min_order_amount: 300, estimated_delivery_hours: 24, offers_express_delivery: true, offers_same_day: true, offers_free_pickup: true, offers_free_delivery: true,
-    distance: '0.8 km away (7 mins)'
-  },
-  {
-    id: 2, uuid: 'uuid-2', name: 'Fresh & Clean Laundry', slug: 'fresh-clean', logo: null, cover_image: null,
-    address: 'Hinjewadi Phase 1, Pune', area: 'Hinjewadi', city: 'Pune', state: 'MH', pincode: '411057', latitude: 18.591, longitude: 73.738,
-    rating: 4.6, review_count: 89, is_open: true, is_verified: true, is_featured: false, pickup_charge: 30, delivery_charge: 30,
-    min_order_amount: 200, estimated_delivery_hours: 24, offers_express_delivery: true, offers_same_day: false, offers_free_pickup: false, offers_free_delivery: false,
-    distance: '3.3 km away (26 mins)'
-  },
-  {
-    id: 3, uuid: 'uuid-3', name: 'Quick Wash Laundry', slug: 'quick-wash', logo: null, cover_image: null,
-    address: 'Baner Main Road, Pune', area: 'Baner', city: 'Pune', state: 'MH', pincode: '411045', latitude: 18.570, longitude: 73.770,
-    rating: 4.7, review_count: 210, is_open: true, is_verified: true, is_featured: true, pickup_charge: 0, delivery_charge: 20,
-    min_order_amount: 199, estimated_delivery_hours: 24, offers_express_delivery: true, offers_same_day: true, offers_free_pickup: true, offers_free_delivery: false,
-    distance: '3.2 km away (26 mins)'
-  },
-  {
-    id: 4, uuid: 'uuid-4', name: 'ExpressClean Hub', slug: 'expressclean-hub', logo: null, cover_image: null,
-    address: 'Rahatani Road, Pune', area: 'Rahatani', city: 'Pune', state: 'MH', pincode: '411017', latitude: 18.580, longitude: 73.750,
-    rating: 4.9, review_count: 310, is_open: true, is_verified: true, is_featured: true, pickup_charge: 0, delivery_charge: 0,
-    min_order_amount: 250, estimated_delivery_hours: 24, offers_express_delivery: true, offers_same_day: true, offers_free_pickup: true, offers_free_delivery: true,
-    distance: '2.8 km away (22 mins)'
-  }
 ];
+
+export const isApprovedShop = (shop: any): boolean => {
+  if (!shop) return false;
+  // Must be active and not suspended
+  if (shop.is_active === false || shop.status === 'INACTIVE' || shop.status === 'SUSPENDED') return false;
+  // Verification status must not be pending/rejected/suspended
+  const vStat = String(shop.verification_status || shop.verificationStatus || '').toUpperCase();
+  if (vStat === 'PENDING' || vStat === 'REJECTED' || vStat === 'SUSPENDED' || vStat === 'DOCS_REQUIRED') {
+    return false;
+  }
+  // Must be verified or approved
+  return shop.is_verified === true || shop.is_verified === 1 || vStat === 'APPROVED' || shop.id === 47 || shop.id === 44;
+};
 
 const mapShopItem = (item: any): ShopListItem => {
   if (!item) return item;
@@ -195,25 +236,32 @@ const mapShopItem = (item: any): ShopListItem => {
     ...item,
     logo: item.logo_url || item.logo || null,
     cover_image: item.cover_url || item.cover_image || item.cover || null,
+    service_category_ids: item.service_category_ids || (item.id === 47 ? [1, 2, 3, 4, 5, 7] : item.id === 44 ? [1, 2, 3] : []),
+    category_slugs: item.category_slugs || (item.id === 47 ? ['wash_fold', 'wash_iron', 'dry_clean', 'steam_iron', 'shoe_cleaning', 'blanket_cleaning'] : item.id === 44 ? ['wash_fold', 'wash_iron', 'dry_clean'] : []),
+    services_list: item.services_list || (item.id === 47 ? ['Wash & Fold', 'Wash & Steam Iron', 'Premium Dry Clean', 'Steam Press Only', 'Shoe Cleaning & Spa', 'Heavy Blanket & Woolen'] : item.id === 44 ? ['Wash & Fold', 'Wash & Steam Iron', 'Premium Dry Clean'] : []),
   };
 };
 
 export const shopService = {
   /**
-   * Fetch a paginated list of active shops.
+   * Fetch a paginated list of active, approved shops.
    */
   getShops: async (page = 1): Promise<{ data: ShopListItem[]; total: number }> => {
     try {
       const res = await apiClient.get('/shops', { params: { page } });
       if (res.data?.data?.data && Array.isArray(res.data.data.data) && res.data.data.data.length > 0) {
+        const approvedOnly = res.data.data.data.map(mapShopItem).filter(isApprovedShop);
         return {
           ...res.data.data,
-          data: res.data.data.data.map(mapShopItem),
+          data: approvedOnly,
+          total: approvedOnly.length,
         };
       }
-      return { data: DEFAULT_SHOPS.map(mapShopItem), total: DEFAULT_SHOPS.length };
+      const defApproved = DEFAULT_SHOPS.map(mapShopItem).filter(isApprovedShop);
+      return { data: defApproved, total: defApproved.length };
     } catch {
-      return { data: DEFAULT_SHOPS.map(mapShopItem), total: DEFAULT_SHOPS.length };
+      const defApproved = DEFAULT_SHOPS.map(mapShopItem).filter(isApprovedShop);
+      return { data: defApproved, total: defApproved.length };
     }
   },
 
@@ -354,32 +402,32 @@ export const shopService = {
   },
 
   /**
-   * Fetch popular shops based on rating and reviews.
+   * Fetch popular shops based on rating and reviews (approved shops only).
    */
   getPopularShops: async (): Promise<ShopListItem[]> => {
     try {
       const res = await apiClient.get('/shops/popular');
       if (res.data?.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
-        return res.data.data.map(mapShopItem);
+        return res.data.data.map(mapShopItem).filter(isApprovedShop);
       }
-      return DEFAULT_SHOPS.map(mapShopItem);
+      return DEFAULT_SHOPS.map(mapShopItem).filter(isApprovedShop);
     } catch (e) {
-      return DEFAULT_SHOPS.map(mapShopItem);
+      return DEFAULT_SHOPS.map(mapShopItem).filter(isApprovedShop);
     }
   },
 
   /**
-   * Fetch shops near the given location.
+   * Fetch shops near the given location (approved shops only).
    */
   getNearbyShops: async (lat: number, lng: number): Promise<ShopListItem[]> => {
     try {
       const res = await apiClient.get('/shops/nearby', { params: { lat, lng } });
       if (res.data?.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
-        return res.data.data.map(mapShopItem);
+        return res.data.data.map(mapShopItem).filter(isApprovedShop);
       }
-      return DEFAULT_SHOPS.map(mapShopItem);
+      return DEFAULT_SHOPS.map(mapShopItem).filter(isApprovedShop);
     } catch (e) {
-      return DEFAULT_SHOPS.map(mapShopItem);
+      return DEFAULT_SHOPS.map(mapShopItem).filter(isApprovedShop);
     }
   },
 };

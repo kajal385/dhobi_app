@@ -90,9 +90,15 @@ $actionType = 'success';
 
 // 3. Handle Form Actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $isAjax = !empty($_POST['ajax_upload']) || (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest');
     if (empty($_POST) && empty($_FILES) && !empty($_SERVER['CONTENT_LENGTH'])) {
         $actionMsg = 'Uploaded file exceeds max limit (' . round(floatval($_SERVER['CONTENT_LENGTH']) / 1048576, 1) . 'MB). Max allowed: ' . ini_get('post_max_size') . '. Please choose a file under ' . ini_get('post_max_size') . ' or paste a video URL.';
         $actionType = 'error';
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => $actionMsg]);
+            exit;
+        }
     }
     $act = $_POST['action'] ?? '';
 
@@ -153,6 +159,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $backendBannerDir = __DIR__ . '/../../backend_laravel/public/uploads/banners/';
                 if (!is_dir($backendBannerDir)) @mkdir($backendBannerDir, 0777, true);
                 @copy($uploadDir . $fname, $backendBannerDir . $fname);
+
+                $xamppBannerDir = 'C:/xampp/htdocs/dhobi_backend/public/uploads/banners/';
+                if (!is_dir($xamppBannerDir)) @mkdir($xamppBannerDir, 0777, true);
+                @copy($uploadDir . $fname, $xamppBannerDir . $fname);
 
                 // Live API sync to remote backend
                 try {
@@ -215,6 +225,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $backendBannerDir = __DIR__ . '/../../backend_laravel/public/uploads/banners/';
                 if (!is_dir($backendBannerDir)) @mkdir($backendBannerDir, 0777, true);
                 @copy($uploadDir . $newFname, $backendBannerDir . $newFname);
+
+                $xamppBannerDir = 'C:/xampp/htdocs/dhobi_backend/public/uploads/banners/';
+                if (!is_dir($xamppBannerDir)) @mkdir($xamppBannerDir, 0777, true);
+                @copy($uploadDir . $newFname, $xamppBannerDir . $newFname);
             }
         }
 
@@ -372,6 +386,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // -- VIDEO ACTIONS --
     } elseif ($act === 'add_video') {
+        @ini_set('max_execution_time', '600');
+        @set_time_limit(600);
+        @ini_set('memory_limit', '1024M');
+
         $uploadShopName  = htmlspecialchars_decode(trim($_POST['shop_name'] ?? $targetShopName), ENT_QUOTES);
         $uploadOwnerName = htmlspecialchars_decode(trim($_POST['owner_name'] ?? $targetOwnerName), ENT_QUOTES);
         $uploadLocation  = htmlspecialchars_decode(trim($_POST['shop_location'] ?? $targetShopLoc), ENT_QUOTES);
@@ -383,6 +401,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!is_dir($uploadDir)) @mkdir($uploadDir, 0777, true);
         $appVideoDir = __DIR__ . '/../../customer_app/assets/myvideos/';
         if (!is_dir($appVideoDir)) @mkdir($appVideoDir, 0777, true);
+        $xamppMediaDir = 'C:/xampp/htdocs/dhobi_backend/public/uploads/shop-media/';
+        if (!is_dir($xamppMediaDir)) @mkdir($xamppMediaDir, 0777, true);
+        $backendMediaDir = __DIR__ . '/../../backend_laravel/public/uploads/shop-media/';
+        if (!is_dir($backendMediaDir)) @mkdir($backendMediaDir, 0777, true);
 
         $adminBase = defined('ADMIN_BASE_URL') ? ADMIN_BASE_URL : 'https://dhobi-admin.bizz-manager.com';
 
@@ -393,6 +415,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $vfname = 'vid_' . $targetShopId . '_' . time() . '.' . $ext;
             if (move_uploaded_file($_FILES['video_file']['tmp_name'], $uploadDir . $vfname)) {
                 @copy($uploadDir . $vfname, $appVideoDir . $vfname);
+                @copy($uploadDir . $vfname, $xamppMediaDir . $vfname);
+                @copy($uploadDir . $vfname, $backendMediaDir . $vfname);
                 $finalVideoUrl = rtrim($adminBase, '/') . '/uploads/shop-media/' . $vfname;
             }
         } elseif (!empty($videoUrlInput)) {
@@ -404,6 +428,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $text = strtolower(pathinfo($_FILES['thumbnail_file']['name'], PATHINFO_EXTENSION));
             $tfname = 'thumb_' . $targetShopId . '_' . time() . '.' . $text;
             if (move_uploaded_file($_FILES['thumbnail_file']['tmp_name'], $uploadDir . $tfname)) {
+                @copy($uploadDir . $tfname, $xamppMediaDir . $tfname);
+                @copy($uploadDir . $tfname, $backendMediaDir . $tfname);
                 $finalThumbUrl = rtrim($adminBase, '/') . '/uploads/shop-media/' . $tfname;
             }
         }
@@ -411,7 +437,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $finalThumbUrl = 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800&auto=format&fit=crop&q=80';
         }
 
-        // Live API sync
+        // Live API sync (safe call)
         try {
             apiPost('/reels', [
                 'shop_id'       => $targetShopId,
@@ -452,16 +478,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             array_unshift($currentReels, $newReel);
             @file_put_contents($reelsJsonPath, json_encode(array_values($currentReels), JSON_PRETTY_PRINT));
-
-            // Sync to backend_laravel public directory
-            $backendMediaDir = __DIR__ . '/../../backend_laravel/public/uploads/shop-media/';
-            if (!is_dir($backendMediaDir)) @mkdir($backendMediaDir, 0777, true);
-            if (!empty($vfname) && file_exists($uploadDir . $vfname)) {
-                @copy($uploadDir . $vfname, $backendMediaDir . $vfname);
-            }
-            if (!empty($tfname) && file_exists($uploadDir . $tfname)) {
-                @copy($uploadDir . $tfname, $backendMediaDir . $tfname);
-            }
 
             // Sync to MySQL laundry_shops.shop_photos
             $db = getDb();
@@ -505,6 +521,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $actionMsg = 'Please select an MP4 video file or provide a video URL.';
             $actionType = 'error';
+        }
+
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            if ($actionType === 'error') {
+                echo json_encode(['success' => false, 'message' => $actionMsg]);
+            } else {
+                echo json_encode([
+                    'success' => true,
+                    'message' => $actionMsg ?: 'Video published successfully!',
+                    'reel'    => $newReel ?? null
+                ]);
+            }
+            exit;
         }
     } elseif ($act === 'edit_video') {
         $vid = strval($_POST['video_id'] ?? '');
@@ -1444,8 +1474,9 @@ $activeTab = $_GET['tab'] ?? 'banners';
         </div>
       </div>
 
-      <form method="POST" action="" enctype="multipart/form-data">
+      <form method="POST" action="" enctype="multipart/form-data" id="customerAppVideoForm" onsubmit="handleVideoUploadSubmit(event)">
         <input type="hidden" name="action" value="add_video">
+        <input type="hidden" name="ajax_upload" value="1">
 
         <!-- SUPER ADMIN TARGET SHOP SELECTOR -->
         <?php if (!$isOwner): ?>
@@ -1489,32 +1520,67 @@ $activeTab = $_GET['tab'] ?? 'banners';
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:1rem;align-items:end;margin-bottom:0.5rem;flex-wrap:wrap;">
+        <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr auto;gap:1rem;align-items:end;margin-bottom:0.5rem;flex-wrap:wrap;">
           <div>
             <label style="display:flex;justify-content:space-between;align-items:center;font-size:0.75rem;font-weight:800;text-transform:uppercase;color:var(--text-secondary);margin-bottom:0.35rem;">
               <span>MP4 Video File</span>
               <span style="color:#EC4899;font-size:0.7rem;text-transform:none;font-weight:700;">Max <?= ini_get('upload_max_filesize') ?></span>
             </label>
-            <input type="file" name="video_file" accept="video/mp4,video/quicktime,video/webm" class="form-control" style="width:100%;">
+            <input type="file" name="video_file" id="video_file_input" accept="video/mp4,video/quicktime,video/webm" onchange="handleVideoFileSelect(this)" class="form-control" style="width:100%;">
+            <div id="video_file_badge" style="display:none;margin-top:0.4rem;padding:0.35rem 0.65rem;border-radius:6px;font-size:0.75rem;font-weight:700;"></div>
           </div>
           <div>
             <label style="display:block;font-size:0.75rem;font-weight:800;text-transform:uppercase;color:var(--text-secondary);margin-bottom:0.35rem;">
               OR Video Link / URL
             </label>
-            <input type="url" name="video_url" placeholder="https://..." class="form-control" style="width:100%;">
+            <input type="url" name="video_url" id="video_url_input" placeholder="https://..." class="form-control" style="width:100%;">
           </div>
           <div>
             <label style="display:block;font-size:0.75rem;font-weight:800;text-transform:uppercase;color:var(--text-secondary);margin-bottom:0.35rem;">
               Thumbnail / Poster (Optional)
             </label>
-            <input type="file" name="thumbnail_file" accept="image/*" class="form-control" style="width:100%;">
+            <input type="file" name="thumbnail_file" id="thumbnail_file_input" accept="image/*" class="form-control" style="width:100%;">
           </div>
           <div>
-            <button type="submit" class="btn btn-primary" style="background:linear-gradient(135deg,#EC4899 0%,#8B5CF6 100%);border:none;color:#FFF;font-weight:800;padding:0.65rem 1.4rem;white-space:nowrap;display:inline-flex;align-items:center;gap:0.4rem;box-shadow:0 4px 14px rgba(236,72,153,0.35);border-radius:10px;">
+            <button type="submit" id="video_submit_btn" class="btn btn-primary" style="background:linear-gradient(135deg,#EC4899 0%,#8B5CF6 100%);border:none;color:#FFF;font-weight:800;padding:0.65rem 1.4rem;white-space:nowrap;display:inline-flex;align-items:center;gap:0.4rem;box-shadow:0 4px 14px rgba(236,72,153,0.35);border-radius:10px;cursor:pointer;">
               <i data-lucide="play-circle" style="width:17px;height:17px;"></i>Upload Video
             </button>
           </div>
         </div>
+
+        <!-- REAL-TIME LIVE UPLOAD PROGRESS BAR CONTAINER -->
+        <div id="video_upload_progress_container" style="display:none;margin-top:1.25rem;padding:1.2rem 1.4rem;border-radius:14px;background:radial-gradient(ellipse at top left, rgba(236,72,153,0.06) 0%, rgba(139,92,246,0.04) 100%);border:1.5px solid rgba(236,72,153,0.35);box-shadow:0 6px 20px rgba(0,0,0,0.04);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.65rem;flex-wrap:wrap;gap:0.5rem;">
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+              <span style="width:9px;height:9px;border-radius:50%;background:#EC4899;display:inline-block;box-shadow:0 0 8px #EC4899;"></span>
+              <strong id="video_progress_title" style="font-size:0.88rem;color:var(--text-primary);font-weight:800;">
+                Uploading Video to Customer App...
+              </strong>
+            </div>
+            <div id="video_progress_percent_badge" style="background:#EC4899;color:#FFF;font-weight:900;font-size:0.75rem;padding:0.22rem 0.65rem;border-radius:20px;box-shadow:0 2px 6px rgba(236,72,153,0.35);">
+              0%
+            </div>
+          </div>
+
+          <!-- Progress Track -->
+          <div style="height:12px;background:rgba(0,0,0,0.07);border-radius:999px;overflow:hidden;margin-bottom:0.65rem;border:1px solid rgba(0,0,0,0.05);position:relative;">
+            <div id="video_progress_bar_fill" style="width:0%;height:100%;background:linear-gradient(90deg,#EC4899 0%,#8B5CF6 100%);transition:width 0.15s ease-out;border-radius:999px;box-shadow:0 0 10px rgba(236,72,153,0.5);"></div>
+          </div>
+
+          <!-- Status Details -->
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;color:var(--text-secondary);flex-wrap:wrap;gap:0.5rem;">
+            <span id="video_progress_bytes" style="font-weight:700;">0.0 MB / 0.0 MB</span>
+            <span id="video_progress_speed_eta" style="font-weight:800;color:#6366F1;">Starting transfer...</span>
+          </div>
+
+          <!-- Stage Info -->
+          <div id="video_progress_stage" style="margin-top:0.65rem;padding-top:0.6rem;border-top:1px dashed rgba(236,72,153,0.25);font-size:0.76rem;color:var(--text-muted);display:flex;align-items:center;gap:0.4rem;">
+            <span>⚡ <strong>Live Async Stream:</strong> The video is uploading in the background. Page remains responsive with no whiteout or buffering freeze.</span>
+          </div>
+        </div>
+
+        <!-- ALERT STATUS BOX -->
+        <div id="video_upload_alert_box" style="display:none;margin-top:1rem;padding:0.85rem 1.1rem;border-radius:10px;font-size:0.84rem;font-weight:700;"></div>
       </form>
     </div>
 
@@ -1784,6 +1850,159 @@ $activeTab = $_GET['tab'] ?? 'banners';
     </div>
 
     <script>
+    function handleVideoFileSelect(input) {
+      const badge = document.getElementById('video_file_badge');
+      if (!badge) return;
+      if (!input.files || !input.files[0]) {
+        badge.style.display = 'none';
+        return;
+      }
+      const file = input.files[0];
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      badge.style.display = 'flex';
+      badge.style.alignItems = 'center';
+      badge.style.gap = '0.4rem';
+      
+      if (file.size > 25 * 1024 * 1024) {
+        // High quality / 4K / UHD video file
+        badge.style.background = 'rgba(236,72,153,0.12)';
+        badge.style.color = '#BE185D';
+        badge.style.border = '1px solid rgba(236,72,153,0.3)';
+        badge.innerHTML = '🎬 <strong>' + file.name + '</strong> (' + sizeMB + ' MB) • <em>High-Definition 4K/HD Video. Live upload stream active.</em>';
+      } else {
+        badge.style.background = 'rgba(16,185,129,0.1)';
+        badge.style.color = '#047857';
+        badge.style.border = '1px solid rgba(16,185,129,0.25)';
+        badge.innerHTML = '✅ <strong>' + file.name + '</strong> (' + sizeMB + ' MB) • <em>Ready to upload</em>';
+      }
+    }
+
+    function handleVideoUploadSubmit(e) {
+      e.preventDefault();
+      const form = document.getElementById('customerAppVideoForm');
+      const fileInput = document.getElementById('video_file_input');
+      const urlInput = document.getElementById('video_url_input');
+      const btn = document.getElementById('video_submit_btn');
+      const progressBox = document.getElementById('video_upload_progress_container');
+      const barFill = document.getElementById('video_progress_bar_fill');
+      const percentBadge = document.getElementById('video_progress_percent_badge');
+      const bytesText = document.getElementById('video_progress_bytes');
+      const speedEtaText = document.getElementById('video_progress_speed_eta');
+      const titleText = document.getElementById('video_progress_title');
+      const stageText = document.getElementById('video_progress_stage');
+      const alertBox = document.getElementById('video_upload_alert_box');
+
+      const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+      const hasUrl = urlInput && urlInput.value.trim().length > 0;
+
+      if (!hasFile && !hasUrl) {
+        alert('Please select an MP4 video file or enter a video URL.');
+        return;
+      }
+
+      alertBox.style.display = 'none';
+      progressBox.style.display = 'block';
+      barFill.style.width = '0%';
+      percentBadge.innerText = '0%';
+      const totalBytes = hasFile ? fileInput.files[0].size : 0;
+      const totalMB = (totalBytes / 1048576).toFixed(1);
+      bytesText.innerText = '0.0 MB of ' + totalMB + ' MB';
+      speedEtaText.innerText = 'Initializing stream...';
+      titleText.innerText = 'Uploading Video to Customer App...';
+
+      btn.disabled = true;
+      btn.style.opacity = '0.75';
+      btn.innerHTML = '<span style="display:inline-block;animation:spin 1s linear infinite;margin-right:6px;">⏳</span> Uploading...';
+
+      const formData = new FormData(form);
+      formData.set('ajax_upload', '1');
+
+      const xhr = new XMLHttpRequest();
+      const startTime = Date.now();
+
+      xhr.upload.addEventListener('progress', function(event) {
+        if (event.lengthComputable && event.total > 0) {
+          const percent = Math.min(99, Math.round((event.loaded / event.total) * 100));
+          barFill.style.width = percent + '%';
+          percentBadge.innerText = percent + '%';
+          
+          const loadedMB = (event.loaded / 1048576).toFixed(1);
+          const tMB = (event.total / 1048576).toFixed(1);
+          bytesText.innerText = loadedMB + ' MB of ' + tMB + ' MB';
+
+          // Calculate upload speed and remaining time
+          const now = Date.now();
+          const elapsedSec = (now - startTime) / 1000;
+          if (elapsedSec > 0.4) {
+            const bytesPerSec = event.loaded / elapsedSec;
+            const speedMBs = (bytesPerSec / 1048576).toFixed(1);
+            const remainingBytes = event.total - event.loaded;
+            const etaSec = bytesPerSec > 0 ? Math.ceil(remainingBytes / bytesPerSec) : 0;
+            speedEtaText.innerHTML = '⚡ ' + speedMBs + ' MB/s • ~' + etaSec + 's remaining';
+          }
+
+          if (percent >= 99) {
+            titleText.innerText = '⚙️ Finalizing video & syncing with Customer App...';
+            stageText.innerHTML = '<span>🔄 <strong>Processing:</strong> Syncing to Reels and database. Almost finished...</span>';
+            btn.innerHTML = '<span style="display:inline-block;animation:spin 1s linear infinite;margin-right:6px;">⚙️</span> Processing...';
+          }
+        }
+      });
+
+      xhr.addEventListener('load', function() {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.innerHTML = '<i data-lucide="play-circle" style="width:17px;height:17px;"></i>Upload Video';
+        if (window.lucide) lucide.createIcons();
+
+        let response = {};
+        try {
+          response = JSON.parse(xhr.responseText);
+        } catch(e) {
+          response = { success: xhr.status === 200, message: 'Upload completed.' };
+        }
+
+        if (response.success) {
+          barFill.style.width = '100%';
+          percentBadge.innerText = '100%';
+          titleText.innerText = '✓ Video Published Successfully!';
+          alertBox.style.display = 'block';
+          alertBox.style.background = 'rgba(16,185,129,0.12)';
+          alertBox.style.color = '#047857';
+          alertBox.style.border = '1.5px solid #10B981';
+          alertBox.innerHTML = '🎉 <strong>Success!</strong> ' + (response.message || 'Video published live to Customer App reels.') + ' Updating display...';
+          
+          setTimeout(function() {
+            window.location.href = window.location.pathname + '?tab=media';
+          }, 800);
+        } else {
+          progressBox.style.display = 'none';
+          alertBox.style.display = 'block';
+          alertBox.style.background = 'rgba(239,68,68,0.12)';
+          alertBox.style.color = '#B91C1C';
+          alertBox.style.border = '1.5px solid #EF4444';
+          alertBox.innerHTML = '❌ <strong>Upload Failed:</strong> ' + (response.message || 'Server error occurred during upload.');
+        }
+      });
+
+      xhr.addEventListener('error', function() {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.innerHTML = '<i data-lucide="play-circle" style="width:17px;height:17px;"></i>Upload Video';
+        if (window.lucide) lucide.createIcons();
+        progressBox.style.display = 'none';
+        alertBox.style.display = 'block';
+        alertBox.style.background = 'rgba(239,68,68,0.12)';
+        alertBox.style.color = '#B91C1C';
+        alertBox.style.border = '1.5px solid #EF4444';
+        alertBox.innerHTML = '❌ <strong>Connection Error:</strong> Network connection interrupted while uploading.';
+      });
+
+      xhr.open('POST', window.location.href, true);
+      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+      xhr.send(formData);
+    }
+
     function onVideoTargetShopChange(val) {
       const sel = document.getElementById('video_target_shop_id');
       if (!sel) return;

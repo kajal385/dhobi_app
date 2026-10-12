@@ -40,6 +40,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/shops', [ShopController::class, 'index']);
     Route::get('/shops/popular', [ShopController::class, 'popular']);
     Route::get('/shops/nearby', [ShopController::class, 'nearby']);
+    Route::get('/shops/{id}', [ShopController::class, 'show']);
     Route::get('/reels', [ShopController::class, 'getReels']);
     Route::post('/reels', [ShopController::class, 'storeReel']);
     Route::delete('/reels/{id}', [ShopController::class, 'deleteReel']);

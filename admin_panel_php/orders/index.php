@@ -7,6 +7,35 @@ require_once __DIR__ . '/../includes/db.php';
 $isOwner = isLaundryOwner();
 $shopId = currentShopId();
 
+if (!function_exists('getOrderStatusDisplayMeta')) {
+    function getOrderStatusDisplayMeta($status) {
+        $raw = (string)($status ?? '');
+        $norm = strtoupper(trim(str_replace(['-', ' '], '_', $raw)));
+        $map = [
+            'PLACED'             => ['label' => 'Placed', 'key' => 'PLACED', 'icon' => '📦', 'desc' => 'Order booked by customer', 'color' => '#4338CA', 'bg' => '#EEF2FF', 'border' => '#C7D2FE', 'idx' => 0],
+            'PENDING'            => ['label' => 'Placed', 'key' => 'PLACED', 'icon' => '📦', 'desc' => 'Order booked by customer', 'color' => '#4338CA', 'bg' => '#EEF2FF', 'border' => '#C7D2FE', 'idx' => 0],
+            'RECEIVED'           => ['label' => 'Received', 'key' => 'RECEIVED', 'icon' => '📥', 'desc' => 'Order accepted by laundry', 'color' => '#6D28D9', 'bg' => '#F5F3FF', 'border' => '#DDD6FE', 'idx' => 1],
+            'CONFIRMED'          => ['label' => 'Received', 'key' => 'RECEIVED', 'icon' => '📥', 'desc' => 'Order accepted by laundry', 'color' => '#6D28D9', 'bg' => '#F5F3FF', 'border' => '#DDD6FE', 'idx' => 1],
+            'ACCEPTED'           => ['label' => 'Received', 'key' => 'RECEIVED', 'icon' => '📥', 'desc' => 'Order accepted by laundry', 'color' => '#6D28D9', 'bg' => '#F5F3FF', 'border' => '#DDD6FE', 'idx' => 1],
+            'IN_PROCESS'         => ['label' => 'In-Process', 'key' => 'IN_PROCESS', 'icon' => '🔄', 'desc' => 'Washing, drying & pressing', 'color' => '#1D4ED8', 'bg' => '#EFF6FF', 'border' => '#BFDBFE', 'idx' => 2],
+            'INPROCESS'          => ['label' => 'In-Process', 'key' => 'IN_PROCESS', 'icon' => '🔄', 'desc' => 'Washing, drying & pressing', 'color' => '#1D4ED8', 'bg' => '#EFF6FF', 'border' => '#BFDBFE', 'idx' => 2],
+            'WASHING'            => ['label' => 'In-Process', 'key' => 'IN_PROCESS', 'icon' => '🔄', 'desc' => 'Washing, drying & pressing', 'color' => '#1D4ED8', 'bg' => '#EFF6FF', 'border' => '#BFDBFE', 'idx' => 2],
+            'PROCESSING'         => ['label' => 'In-Process', 'key' => 'IN_PROCESS', 'icon' => '🔄', 'desc' => 'Washing, drying & pressing', 'color' => '#1D4ED8', 'bg' => '#EFF6FF', 'border' => '#BFDBFE', 'idx' => 2],
+            'READY'              => ['label' => 'Ready', 'key' => 'READY', 'icon' => '✨', 'desc' => 'Ready for delivery pickup', 'color' => '#B45309', 'bg' => '#FEF3C7', 'border' => '#FDE68A', 'idx' => 3],
+            'READY_FOR_DELIVERY' => ['label' => 'Ready', 'key' => 'READY', 'icon' => '✨', 'desc' => 'Ready for delivery pickup', 'color' => '#B45309', 'bg' => '#FEF3C7', 'border' => '#FDE68A', 'idx' => 3],
+            'CUSTOMER_CONFIRMED' => ['label' => 'Ready', 'key' => 'READY', 'icon' => '✨', 'desc' => 'Ready for delivery pickup', 'color' => '#B45309', 'bg' => '#FEF3C7', 'border' => '#FDE68A', 'idx' => 3],
+            'OUT_FOR_DELIVERY'   => ['label' => 'Out for Delivery', 'key' => 'OUT_FOR_DELIVERY', 'icon' => '🛵', 'desc' => 'Dispatched with delivery rider', 'color' => '#0369A1', 'bg' => '#E0F2FE', 'border' => '#BAE6FD', 'idx' => 4],
+            'DISPATCHED'         => ['label' => 'Out for Delivery', 'key' => 'OUT_FOR_DELIVERY', 'icon' => '🛵', 'desc' => 'Dispatched with delivery rider', 'color' => '#0369A1', 'bg' => '#E0F2FE', 'border' => '#BAE6FD', 'idx' => 4],
+            'DELIVERY_ASSIGNED'  => ['label' => 'Out for Delivery', 'key' => 'OUT_FOR_DELIVERY', 'icon' => '🛵', 'desc' => 'Dispatched with delivery rider', 'color' => '#0369A1', 'bg' => '#E0F2FE', 'border' => '#BAE6FD', 'idx' => 4],
+            'DELIVERED'          => ['label' => 'Delivered', 'key' => 'DELIVERED', 'icon' => '🎉', 'desc' => 'Order completed & delivered', 'color' => '#15803D', 'bg' => '#ECFDF5', 'border' => '#A7F3D0', 'idx' => 5],
+            'COMPLETED'          => ['label' => 'Delivered', 'key' => 'DELIVERED', 'icon' => '🎉', 'desc' => 'Order completed & delivered', 'color' => '#15803D', 'bg' => '#ECFDF5', 'border' => '#A7F3D0', 'idx' => 5],
+            'CANCELLED'          => ['label' => 'Cancelled', 'key' => 'CANCELLED', 'icon' => '❌', 'desc' => 'Order cancelled', 'color' => '#B91C1C', 'bg' => '#FEF2F2', 'border' => '#FECACA', 'idx' => 6],
+            'REJECTED'           => ['label' => 'Cancelled', 'key' => 'CANCELLED', 'icon' => '❌', 'desc' => 'Order cancelled', 'color' => '#B91C1C', 'bg' => '#FEF2F2', 'border' => '#FECACA', 'idx' => 6],
+        ];
+        return $map[$norm] ?? ['label' => ucwords(strtolower(str_replace('_', ' ', $norm ?: 'Placed'))), 'key' => $norm ?: 'PLACED', 'icon' => '📦', 'desc' => 'Order status', 'color' => '#4338CA', 'bg' => '#EEF2FF', 'border' => '#C7D2FE', 'idx' => 0];
+    }
+}
+
 $msg = null;
 
 // Handle status updates and driver assignments
@@ -18,21 +47,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $driverName = $_POST['driver_name'] ?? '';
 
     if ($action === 'status' && $orderId && $newStatus) {
-        $endpoint = $isOwner ? "/owner/orders/{$orderId}/status" : "/admin/orders/{$orderId}/status";
-        $apiRes = apiPost($endpoint, ['status' => $newStatus]);
-        if (empty($apiRes['success']) && ($apiRes['status'] ?? 0) === 404) {
-            apiPost("/owner/orders/{$orderId}/status", ['status' => $newStatus]);
-        }
-        updateOrderStatusInDb($orderId, $newStatus);
+        $cancellationReason = trim($_POST['cancellation_reason'] ?? '');
+        $notes = trim($_POST['notes'] ?? '');
 
+        $payload = ['status' => $newStatus];
+        if ($cancellationReason !== '') {
+            $payload['cancellation_reason'] = $cancellationReason;
+            $payload['reason'] = $cancellationReason;
+        }
+        if ($notes !== '') {
+            $payload['notes'] = $notes;
+        }
+
+        $endpoint = $isOwner ? "/owner/orders/{$orderId}/status" : "/admin/orders/{$orderId}/status";
+        $apiRes = apiPost($endpoint, $payload);
+        if (empty($apiRes['success']) && ($apiRes['status'] ?? 0) === 404) {
+            apiPost("/owner/orders/{$orderId}/status", $payload);
+        }
+        updateOrderStatusInDb($orderId, $newStatus, $notes, $cancellationReason);
+
+        $stMeta = getOrderStatusDisplayMeta($newStatus);
         if (!isset($_SESSION['order_status_overrides'])) {
             $_SESSION['order_status_overrides'] = [];
         }
-        $_SESSION['order_status_overrides'][$orderId] = $newStatus;
+        $_SESSION['order_status_overrides'][$orderId] = $stMeta['key'];
         if ($orderNumber) {
-            $_SESSION['order_status_overrides'][$orderNumber] = $newStatus;
+            $_SESSION['order_status_overrides'][$orderNumber] = $stMeta['key'];
         }
-        $msg = "Order #" . ($orderNumber ?: $orderId) . " status changed to {$newStatus}.";
+        $msg = "Order #" . ($orderNumber ?: $orderId) . " status updated to " . $stMeta['label'] . " (" . $stMeta['icon'] . ").";
     } elseif ($action === 'assign_driver' && $orderId && !empty($_POST['delivery_boy_id'])) {
         $driverId = $_POST['delivery_boy_id'];
         $driverName = trim($_POST['driver_name'] ?? '');
@@ -201,10 +243,11 @@ if ($searchQuery !== '') {
 }
 
 if ($filterStatus !== 'ALL' && $filterStatus !== '') {
-    $statusArray = array_map('trim', explode(',', strtoupper($filterStatus)));
-    $orders = array_values(array_filter($orders, function($o) use ($statusArray) {
-        $st = strtoupper($o['status'] ?? 'PENDING');
-        return in_array($st, $statusArray);
+    $targetNorm = strtoupper(trim(str_replace(['-', ' '], '_', $filterStatus)));
+    $targetMeta = getOrderStatusDisplayMeta($targetNorm);
+    $orders = array_values(array_filter($orders, function($o) use ($targetMeta) {
+        $itemMeta = getOrderStatusDisplayMeta($o['status'] ?? 'PLACED');
+        return $itemMeta['key'] === $targetMeta['key'];
     }));
 }
 
@@ -255,21 +298,22 @@ $viewMode = $_GET['view'] ?? 'table';
     </div>
   <?php endif; ?>
 
-  <!-- Status Tabs Bar -->
+  <!-- Status Tabs Bar (Synced with Laundry Panel & Customer App) -->
   <?php
   $statusTabs = [
-      'ALL' => '📦 All Orders',
-      'PENDING' => '⏳ Pending',
-      'CONFIRMED' => '✓ Confirmed',
-      'WASHING' => '🔄 Washing',
-      'READY' => '✨ Ready',
-      'OUT_FOR_DELIVERY' => '🛵 Dispatched',
-      'DELIVERED' => '🎉 Delivered',
+      'ALL'              => '📦 All Orders',
+      'PLACED'           => '📦 Placed',
+      'RECEIVED'         => '📥 Received',
+      'IN_PROCESS'       => '🔄 In-Process',
+      'READY'            => '✨ Ready',
+      'OUT_FOR_DELIVERY' => '🛵 Out for Delivery',
+      'DELIVERED'        => '🎉 Delivered',
+      'CANCELLED'        => '❌ Cancelled',
   ];
   ?>
   <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; flex-wrap: wrap;">
     <?php foreach ($statusTabs as $tabKey => $tabLabel): 
-        $isActive = ($filterStatus === $tabKey);
+        $isActive = ($filterStatus === $tabKey) || ($filterStatus === 'ALL' && $tabKey === 'ALL');
     ?>
       <a 
         href="?status=<?= urlencode($tabKey) ?>&shop_id=<?= urlencode($filterShop) ?>&view=<?= urlencode($viewMode) ?>&search=<?= urlencode($searchQuery) ?>" 
@@ -409,28 +453,17 @@ $viewMode = $_GET['view'] ?? 'table';
                 </td>
                 <td>
                   <?php
-                    $badgeBg = '#FEF3C7';
-                    $badgeColor = '#D97706';
-                    $statusLabel = $status;
-                    if ($status === 'DELIVERED') {
-                        $badgeBg = '#D1FAE5'; $badgeColor = '#059669'; $statusLabel = 'Delivered';
-                    } elseif ($status === 'OUT_FOR_DELIVERY') {
-                        $badgeBg = '#E0F2FE'; $badgeColor = '#0284C7'; $statusLabel = 'Out For Delivery';
-                    } elseif ($status === 'READY') {
-                        $badgeBg = '#FEF3C7'; $badgeColor = '#D97706'; $statusLabel = 'Ready';
-                    } elseif ($status === 'WASHING' || $status === 'PROCESSING') {
-                        $badgeBg = 'rgba(37, 99, 235, 0.12)'; $badgeColor = '#2563EB'; $statusLabel = 'Washing';
-                    } elseif ($status === 'CONFIRMED') {
-                        $badgeBg = 'rgba(129, 98, 238, 0.12)'; $badgeColor = '#8162EE'; $statusLabel = 'Confirmed';
-                    } elseif ($status === 'CANCELLED') {
-                        $badgeBg = '#FEE2E2'; $badgeColor = '#DC2626'; $statusLabel = 'Cancelled';
-                    } elseif ($status === 'PENDING') {
-                        $badgeBg = 'rgba(245, 158, 11, 0.12)'; $badgeColor = '#D97706'; $statusLabel = 'Pending';
-                    }
+                    $stMeta = getOrderStatusDisplayMeta($status);
                   ?>
-                  <span class="badge" style="background: <?= $badgeBg ?>; color: <?= $badgeColor ?>; font-weight: 800; font-size: 0.78rem; padding: 0.35rem 0.75rem; border-radius: 20px; display: inline-flex; align-items: center; letter-spacing: 0.3px;">
-                    <?= htmlspecialchars($statusLabel) ?>
-                  </span>
+                  <button type="button" 
+                          onclick="openChangeStatusModal('<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>', '<?= htmlspecialchars($stMeta['key']) ?>', '<?= htmlspecialchars($driver) ?>')" 
+                          class="status-pill-trigger" 
+                          title="Click to Change Status (<?= htmlspecialchars($stMeta['label']) ?>)"
+                          style="background: <?= $stMeta['bg'] ?>; color: <?= $stMeta['color'] ?>; border: 1.5px solid <?= $stMeta['border'] ?>; font-weight: 800; font-size: 0.78rem; padding: 0.35rem 0.75rem; border-radius: 20px; display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                    <span style="font-size: 0.9rem;"><?= $stMeta['icon'] ?></span>
+                    <span><?= htmlspecialchars($stMeta['label']) ?></span>
+                    <i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 2px; opacity: 0.75;"></i>
+                  </button>
                 </td>
                 <td>
                   <button type="button" onclick="viewOrderDetails(<?= htmlspecialchars(json_encode($o)) ?>)" class="btn btn-secondary btn-sm" title="View Overall Order Details" style="padding: 0.4rem 0.75rem; border-radius: 8px; display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; font-size: 0.8rem; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--brand-purple); cursor: pointer; transition: all 0.2s;">
@@ -499,23 +532,18 @@ $viewMode = $_GET['view'] ?? 'table';
                 </div>
                 <strong style="color: var(--brand-purple); font-size: 1rem; letter-spacing: -0.3px;"><?= htmlspecialchars($num) ?></strong>
               </div>
-              <form method="POST" action="" style="display: inline-block; margin: 0; position: relative;">
-                <input type="hidden" name="action" value="status">
-                <input type="hidden" name="order_id" value="<?= htmlspecialchars($ordId) ?>">
-                <input type="hidden" name="order_number" value="<?= htmlspecialchars($num) ?>">
-                <select name="status" data-original="<?= $status ?>" onchange="handleStatusChange(this, '<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>', '<?= htmlspecialchars($driver) ?>')" style="background: <?= $statusBg ?>; color: <?= $statusColor ?>; padding: 0.25rem 1.4rem 0.25rem 0.65rem; border-radius: 20px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; border: none; appearance: none; -webkit-appearance: none; cursor: pointer; outline: none; position: relative; z-index: 2;" title="Change Order Status">
-                  <option value="PENDING" <?= $status === 'PENDING' ? 'selected' : '' ?>>Pending</option>
-                  <option value="CONFIRMED" <?= $status === 'CONFIRMED' ? 'selected' : '' ?>>Confirmed</option>
-                  <option value="WASHING" <?= $status === 'WASHING' || $status === 'PROCESSING' ? 'selected' : '' ?>>Washing</option>
-                  <option value="READY" <?= $status === 'READY' ? 'selected' : '' ?>>Ready</option>
-                  <option value="OUT_FOR_DELIVERY" <?= $status === 'OUT_FOR_DELIVERY' ? 'selected' : '' ?>>Dispatched</option>
-                  <option value="DELIVERED" <?= $status === 'DELIVERED' ? 'selected' : '' ?>>Delivered</option>
-                  <option value="CANCELLED" <?= $status === 'CANCELLED' ? 'selected' : '' ?>>Cancelled</option>
-                </select>
-                <div style="position: absolute; right: 6px; top: 50%; transform: translateY(-50%); pointer-events: none; z-index: 3;">
-                  <i data-lucide="chevron-down" style="width: 12px; height: 12px; color: <?= $statusColor ?>;"></i>
-                </div>
-              </form>
+              <?php
+                $cardStMeta = getOrderStatusDisplayMeta($status);
+              ?>
+              <button type="button" 
+                      onclick="openChangeStatusModal('<?= htmlspecialchars($ordId) ?>', '<?= htmlspecialchars($num) ?>', '<?= htmlspecialchars($cardStMeta['key']) ?>', '<?= htmlspecialchars($driver) ?>')" 
+                      class="status-pill-trigger" 
+                      title="Click to Change Status (<?= htmlspecialchars($cardStMeta['label']) ?>)"
+                      style="background: <?= $cardStMeta['bg'] ?>; color: <?= $cardStMeta['color'] ?>; border: 1.5px solid <?= $cardStMeta['border'] ?>; font-weight: 800; font-size: 0.74rem; padding: 0.28rem 0.65rem; border-radius: 20px; display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <span style="font-size: 0.85rem;"><?= $cardStMeta['icon'] ?></span>
+                <span><?= htmlspecialchars($cardStMeta['label']) ?></span>
+                <i data-lucide="chevron-down" style="width: 12px; height: 12px; margin-left: 2px; opacity: 0.75;"></i>
+              </button>
             </div>
 
             <!-- Customer & Mobile Row -->
@@ -600,7 +628,7 @@ $viewMode = $_GET['view'] ?? 'table';
             <h3 id="modalOrderNumber" style="margin: 0; font-size: 1.3rem; font-weight: 900; color: var(--text-primary); letter-spacing: -0.4px;">
               Order #
             </h3>
-            <span id="modalOrderStatusBadge" class="badge"></span>
+            <span id="modalOrderStatusBadge" class="badge" onclick="triggerChangeStatusFromModal()" style="cursor: pointer; transition: all 0.2s;" title="Click to Change Status"></span>
           </div>
           <p style="margin: 0.15rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">
             Complete order breakdown, customer doorstep address, partner store & items summary
@@ -671,8 +699,295 @@ $viewMode = $_GET['view'] ?? 'table';
   </div>
 </div>
 
+<!-- Modal: Change Order Status (Pixel Match Image 2 from Mobile App) -->
+<div id="changeOrderStatusModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(8px); align-items: center; justify-content: center; z-index: 999999; padding: 1.25rem;">
+  <div class="modal-content" style="background: #FFFFFF; border-radius: 24px; border: 1px solid rgba(226, 232, 240, 0.95); width: 100%; max-width: 440px; padding: 1.5rem 1.4rem 1.35rem 1.4rem; color: #1E293B; box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.3); animation: modalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);">
+    
+    <!-- Header with Title, Order Number Pill & Close Button -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.9rem;">
+      <div style="flex: 1;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #1E1B4B; letter-spacing: -0.3px;">Change Order Status</h3>
+          <span id="statusModalOrderNumPill" style="font-size: 0.78rem; font-weight: 800; color: #7C3AED; background: #F3EFFE; border: 1px solid #DDD6FE; padding: 0.2rem 0.55rem; border-radius: 20px; letter-spacing: 0.3px;">#ORD-...</span>
+        </div>
+        <p style="margin: 0.3rem 0 0 0; font-size: 0.82rem; color: #64748B;">Select new status for this order:</p>
+      </div>
+      <button type="button" onclick="closeModal('changeOrderStatusModal')" style="background: #F1F5F9; border: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #64748B; font-size: 0.95rem; font-weight: 700; transition: all 0.15s ease;" title="Close">✕</button>
+    </div>
+
+    <!-- Status Steps List (Pixel Match with Image 2) -->
+    <div id="statusStepsContainer" style="display: flex; flex-direction: column; gap: 0.55rem; max-height: 430px; overflow-y: auto; padding-right: 2px;">
+      <!-- Dynamically filled via renderStatusStepsList() -->
+    </div>
+
+    <!-- Cancellation Reason Box (Shown when selecting Cancelled) -->
+    <div id="cancelReasonBox" style="display: none; margin-top: 0.75rem; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 14px; padding: 0.85rem;">
+      <div style="font-weight: 800; font-size: 0.82rem; color: #DC2626; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.35rem;">
+        <span>⚠️ Specify Cancellation Reason</span>
+      </div>
+      <select id="cancelReasonSelect" class="form-control" style="width: 100%; font-size: 0.82rem; margin-bottom: 0.5rem; border-radius: 8px;">
+        <option value="Customer requested cancellation">Customer requested cancellation</option>
+        <option value="Items damaged / cannot be washed">Items damaged / cannot be washed</option>
+        <option value="Store capacity full / overload">Store capacity full / overload</option>
+        <option value="Delivery address out of service area">Delivery address out of service area</option>
+        <option value="Other administrative reason">Other administrative reason</option>
+      </select>
+      <input type="text" id="cancelReasonCustom" class="form-control" placeholder="Optional extra note for customer..." style="width: 100%; font-size: 0.82rem; border-radius: 8px; margin-bottom: 0.6rem;">
+      <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+        <button type="button" onclick="document.getElementById('cancelReasonBox').style.display='none'" class="btn btn-secondary btn-sm" style="font-size: 0.78rem;">Back</button>
+        <button type="button" onclick="submitStatusUpdate('CANCELLED')" class="btn btn-sm" style="background: #DC2626; color: #FFF; font-weight: 800; border: none; font-size: 0.78rem; padding: 0.35rem 0.85rem; border-radius: 6px;">Confirm Cancel</button>
+      </div>
+    </div>
+
+    <!-- Bottom Cancel Dismiss Button (Matches Image 2) -->
+    <div style="margin-top: 0.85rem;">
+      <button type="button" onclick="closeModal('changeOrderStatusModal')" style="width: 100%; background: #F8FAFC; border: 1px solid #E2E8F0; color: #475569; padding: 0.65rem; border-radius: 14px; font-weight: 700; font-size: 0.88rem; cursor: pointer; transition: all 0.15s ease;">
+        Cancel
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Hidden Form for Status POST Submission -->
+<form id="globalStatusUpdateForm" method="POST" action="" style="display: none;">
+  <input type="hidden" name="action" value="status">
+  <input type="hidden" name="order_id" id="postStatusOrderId" value="">
+  <input type="hidden" name="order_number" id="postStatusOrderNum" value="">
+  <input type="hidden" name="status" id="postStatusNewStatus" value="">
+  <input type="hidden" name="cancellation_reason" id="postStatusCancelReason" value="">
+  <input type="hidden" name="notes" id="postStatusNotes" value="">
+</form>
+
+<style>
+.status-pill-trigger {
+  transition: all 0.18s ease;
+}
+.status-pill-trigger:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.96);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08) !important;
+}
+.status-row-card {
+  transition: all 0.15s ease;
+}
+.status-row-card.status-selectable:hover {
+  border-color: #8162EE !important;
+  background: #FAF8FF !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(129,98,238,0.1);
+}
+@keyframes modalPop {
+  0% { transform: scale(0.96); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+</style>
+
 <script>
+  // Global reference for active orders
+  window.currentActiveStatusOrder = null;
+  window.currentActiveOrderData = null;
+
+  const STATUS_WORKFLOW = [
+    { key: 'PLACED', label: 'Placed', icon: '📦', desc: 'Order booked by customer', idx: 0 },
+    { key: 'RECEIVED', label: 'Received', icon: '📥', desc: 'Order accepted by laundry', idx: 1 },
+    { key: 'IN_PROCESS', label: 'In-Process', icon: '🔄', desc: 'Washing, drying & pressing', idx: 2 },
+    { key: 'READY', label: 'Ready', icon: '✨', desc: 'Ready for delivery pickup', idx: 3 },
+    { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery', icon: '🛵', desc: 'Dispatched with delivery rider', idx: 4 },
+    { key: 'DELIVERED', label: 'Delivered', icon: '🎉', desc: 'Order completed & delivered', idx: 5 },
+    { key: 'CANCELLED', label: 'Cancelled', icon: '❌', desc: 'Order cancelled', idx: 6 }
+  ];
+
+  function getCanonicalStatusKey(st) {
+    if (!st) return 'PLACED';
+    const norm = String(st).toUpperCase().replace(/[- ]/g, '_');
+    const map = {
+      'PENDING': 'PLACED',
+      'RECEIVED': 'RECEIVED',
+      'CONFIRMED': 'RECEIVED',
+      'ACCEPTED': 'RECEIVED',
+      'IN_PROCESS': 'IN_PROCESS',
+      'INPROCESS': 'IN_PROCESS',
+      'WASHING': 'IN_PROCESS',
+      'PROCESSING': 'IN_PROCESS',
+      'READY': 'READY',
+      'READY_FOR_DELIVERY': 'READY',
+      'CUSTOMER_CONFIRMED': 'READY',
+      'OUT_FOR_DELIVERY': 'OUT_FOR_DELIVERY',
+      'DISPATCHED': 'OUT_FOR_DELIVERY',
+      'DELIVERY_ASSIGNED': 'OUT_FOR_DELIVERY',
+      'DELIVERED': 'DELIVERED',
+      'COMPLETED': 'DELIVERED',
+      'CANCELLED': 'CANCELLED',
+      'REJECTED': 'CANCELLED'
+    };
+    return map[norm] || norm;
+  }
+
+  function openChangeStatusModal(orderId, orderNum, currentStatus, driverName) {
+    const normKey = getCanonicalStatusKey(currentStatus);
+    window.currentActiveStatusOrder = {
+      id: orderId,
+      num: orderNum || orderId,
+      status: normKey,
+      driver: driverName || ''
+    };
+
+    const pillText = String(orderNum || orderId).startsWith('#') ? (orderNum || orderId) : '#' + (orderNum || orderId);
+    const pillEl = document.getElementById('statusModalOrderNumPill');
+    if (pillEl) pillEl.innerText = pillText;
+
+    const reasonBox = document.getElementById('cancelReasonBox');
+    if (reasonBox) reasonBox.style.display = 'none';
+
+    renderStatusStepsList();
+    openModal('changeOrderStatusModal');
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function renderStatusStepsList() {
+    const container = document.getElementById('statusStepsContainer');
+    if (!container || !window.currentActiveStatusOrder) return;
+
+    const currentKey = window.currentActiveStatusOrder.status;
+    const currentStepObj = STATUS_WORKFLOW.find(s => s.key === currentKey) || STATUS_WORKFLOW[0];
+    const currentIdx = currentStepObj.idx;
+
+    let html = '';
+    STATUS_WORKFLOW.forEach(item => {
+      const isActive = (item.key === currentKey);
+      const isPassed = (!isActive && currentKey !== 'CANCELLED' && item.key !== 'CANCELLED' && item.idx < currentIdx);
+      const isCancelled = (item.key === 'CANCELLED');
+
+      let cardBg = '#FFFFFF';
+      let cardBorder = '#E2E8F0';
+      let iconBg = '#F3EFFE';
+      let titleColor = '#1E1B4B';
+      let descColor = '#64748B';
+      let rightBadge = '';
+      let clickHandler = `onclick="handleSelectNewStatus('${item.key}')"`;
+      let cursorStyle = 'cursor: pointer;';
+      let extraClass = 'status-selectable';
+
+      if (isActive) {
+        cardBg = '#ECFDF5';
+        cardBorder = '#10B981';
+        iconBg = 'rgba(16, 185, 129, 0.15)';
+        titleColor = '#065F46';
+        cursorStyle = 'cursor: default;';
+        extraClass = '';
+        clickHandler = '';
+        rightBadge = `
+          <span style="background: #16A34A; color: #FFFFFF; font-weight: 800; font-size: 0.72rem; padding: 0.25rem 0.65rem; border-radius: 20px; display: inline-flex; align-items: center; gap: 0.25rem; box-shadow: 0 1px 3px rgba(22,163,74,0.3);">
+            ✓ Active
+          </span>
+        `;
+      } else if (isPassed) {
+        cardBg = '#F8FAFC';
+        cardBorder = '#E2E8F0';
+        iconBg = '#EDF2F7';
+        titleColor = '#64748B';
+        descColor = '#94A3B8';
+        cursorStyle = 'cursor: default; opacity: 0.75;';
+        extraClass = '';
+        clickHandler = '';
+        rightBadge = `
+          <span style="background: #E2E8F0; color: #64748B; font-weight: 700; font-size: 0.72rem; padding: 0.25rem 0.6rem; border-radius: 20px; display: inline-flex; align-items: center; gap: 0.25rem;">
+            🔒 Passed
+          </span>
+        `;
+      } else if (isCancelled) {
+        iconBg = '#FEE2E2';
+        rightBadge = `
+          <div style="width: 28px; height: 28px; border-radius: 8px; background: #FEE2E2; display: flex; align-items: center; justify-content: center; color: #DC2626; font-size: 0.85rem; font-weight: 800;">
+            ✕
+          </div>
+        `;
+      } else {
+        // Next selectable step
+        rightBadge = `
+          <div style="width: 28px; height: 28px; border-radius: 8px; background: #F3EFFE; display: flex; align-items: center; justify-content: center; color: #7C3AED; font-size: 0.85rem; font-weight: 800;">
+            ➔
+          </div>
+        `;
+      }
+
+      html += `
+        <div class="status-row-card ${extraClass}" ${clickHandler} style="${cursorStyle} display: flex; align-items: center; gap: 0.85rem; padding: 0.75rem 0.95rem; background: ${cardBg}; border: 1.5px solid ${cardBorder}; border-radius: 14px;">
+          <div style="width: 38px; height: 38px; border-radius: 10px; background: ${iconBg}; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; flex-shrink: 0;">
+            ${item.icon}
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 800; font-size: 0.92rem; color: ${titleColor}; line-height: 1.2;">${item.label}</div>
+            <div style="font-size: 0.75rem; color: ${descColor}; margin-top: 0.15rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${item.desc}</div>
+          </div>
+          <div style="flex-shrink: 0;">
+            ${rightBadge}
+          </div>
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
+  }
+
+  function handleSelectNewStatus(targetKey) {
+    if (!window.currentActiveStatusOrder) return;
+    const orderId = window.currentActiveStatusOrder.id;
+    const orderNum = window.currentActiveStatusOrder.num;
+    const driver = window.currentActiveStatusOrder.driver;
+
+    if (targetKey === 'OUT_FOR_DELIVERY' && (!driver || driver === 'Unassigned' || driver.trim() === '')) {
+      alert("⚠️ You must assign a delivery partner before dispatching this order.");
+      closeModal('changeOrderStatusModal');
+      openAssignModal(orderId, orderNum);
+      return;
+    }
+
+    if (targetKey === 'CANCELLED') {
+      const box = document.getElementById('cancelReasonBox');
+      if (box) {
+        box.style.display = 'block';
+        box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      return;
+    }
+
+    submitStatusUpdate(targetKey);
+  }
+
+  function submitStatusUpdate(targetKey) {
+    if (!window.currentActiveStatusOrder) return;
+    const orderId = window.currentActiveStatusOrder.id;
+    const orderNum = window.currentActiveStatusOrder.num;
+
+    let cancelReason = '';
+    if (targetKey === 'CANCELLED') {
+      const sel = document.getElementById('cancelReasonSelect');
+      const custom = document.getElementById('cancelReasonCustom');
+      cancelReason = (sel ? sel.value : '') + (custom && custom.value.trim() ? ' - ' + custom.value.trim() : '');
+    }
+
+    document.getElementById('postStatusOrderId').value = orderId;
+    document.getElementById('postStatusOrderNum').value = orderNum;
+    document.getElementById('postStatusNewStatus').value = targetKey;
+    document.getElementById('postStatusCancelReason').value = cancelReason;
+    document.getElementById('postStatusNotes').value = cancelReason ? ('Cancelled: ' + cancelReason) : ('Updated to ' + targetKey);
+
+    document.getElementById('globalStatusUpdateForm').submit();
+  }
+
+  function triggerChangeStatusFromModal() {
+    if (window.currentActiveOrderData) {
+      const ord = window.currentActiveOrderData;
+      const num = ord.order_number || ord.orderNumber || `Order #${ord.id || ''}`;
+      const driver = ord.delivery_boy_name || ord.deliveryBoyName || (ord.delivery_boy && ord.delivery_boy.name) || 'Unassigned';
+      openChangeStatusModal(ord.id, num, ord.status, driver);
+    }
+  }
+
   function viewOrderDetails(ord) {
+    window.currentActiveOrderData = ord;
     const num = ord.order_number || ord.orderNumber || `Order #${ord.id || ''}`;
     document.getElementById('modalOrderNumber').innerText = num;
     
@@ -684,33 +999,32 @@ $viewMode = $_GET['view'] ?? 'table';
     const payMethod = (ord.payment_method || ord.paymentMethod || 'Online UPI').toUpperCase();
     const payStatus = (ord.payment_status || ord.paymentStatus || 'PAID').toUpperCase();
     const driver = ord.delivery_boy_name || ord.deliveryBoyName || (ord.delivery_boy && ord.delivery_boy.name) || (ord.delivery_partner && ord.delivery_partner.user && ord.delivery_partner.user.name) || 'Unassigned';
-    const status = (ord.status || 'PENDING').toUpperCase();
+    const status = getCanonicalStatusKey(ord.status || 'PLACED');
 
     // Render Status Badge
-    let badgeClass = 'badge-info';
-    let statusBg = 'rgba(129,98,238,0.15)';
-    let statusColor = '#8162EE';
-    if (status === 'DELIVERED') {
-      statusBg = 'rgba(16,185,129,0.15)';
-      statusColor = '#10B981';
-    } else if (status === 'WASHING' || status === 'PROCESSING') {
-      statusBg = 'rgba(37,99,235,0.15)';
-      statusColor = '#2563EB';
-    } else if (status === 'CANCELLED') {
-      statusBg = 'rgba(239,68,68,0.15)';
-      statusColor = '#EF4444';
-    } else if (status === 'OUT_FOR_DELIVERY') {
-      statusBg = 'rgba(2,132,199,0.15)';
-      statusColor = '#0284C7';
-    }
+    const statusMetaMap = {
+      'PLACED': { bg: '#EEF2FF', color: '#4338CA', label: 'Placed', icon: '📦' },
+      'RECEIVED': { bg: '#F5F3FF', color: '#6D28D9', label: 'Received', icon: '📥' },
+      'IN_PROCESS': { bg: '#EFF6FF', color: '#1D4ED8', label: 'In-Process', icon: '🔄' },
+      'READY': { bg: '#FEF3C7', color: '#B45309', label: 'Ready', icon: '✨' },
+      'OUT_FOR_DELIVERY': { bg: '#E0F2FE', color: '#0369A1', label: 'Out for Delivery', icon: '🛵' },
+      'DELIVERED': { bg: '#ECFDF5', color: '#15803D', label: 'Delivered', icon: '🎉' },
+      'CANCELLED': { bg: '#FEF2F2', color: '#B91C1C', label: 'Cancelled', icon: '❌' },
+    };
+    const sMeta = statusMetaMap[status] || { bg: '#EEF2FF', color: '#4338CA', label: status, icon: '📦' };
+
     const badgeEl = document.getElementById('modalOrderStatusBadge');
-    badgeEl.innerText = status;
-    badgeEl.style.background = statusBg;
-    badgeEl.style.color = statusColor;
-    badgeEl.style.fontSize = '0.75rem';
+    badgeEl.innerHTML = `<span>${sMeta.icon}</span> <span>${sMeta.label}</span> <span style="font-size: 0.68rem; margin-left: 2px;">✏️</span>`;
+    badgeEl.style.background = sMeta.bg;
+    badgeEl.style.color = sMeta.color;
+    badgeEl.style.border = `1px solid ${sMeta.color}40`;
+    badgeEl.style.fontSize = '0.78rem';
     badgeEl.style.fontWeight = '800';
-    badgeEl.style.padding = '0.25rem 0.65rem';
+    badgeEl.style.padding = '0.3rem 0.75rem';
     badgeEl.style.borderRadius = '20px';
+    badgeEl.style.display = 'inline-flex';
+    badgeEl.style.alignItems = 'center';
+    badgeEl.style.gap = '0.35rem';
 
     // Garments Breakdown Table
     let itemsTable = '';
@@ -801,56 +1115,23 @@ $viewMode = $_GET['view'] ?? 'table';
           </div>
         </div>
 
-        <!-- Change Order Status Workflow (Available to Laundry Owner & Admin) -->
-        <div style="background: var(--bg-card); padding: 1.1rem; border-radius: 12px; border: 1.5px solid rgba(129,98,238,0.35); box-shadow: 0 4px 15px rgba(129,98,238,0.08);">
-          <div style="font-weight: 800; font-size: 0.9rem; color: var(--brand-purple); margin-bottom: 0.65rem; display: flex; align-items: center; gap: 0.45rem;">
-            <i data-lucide="refresh-cw" style="width: 17px; height: 17px;"></i> Change Order Workflow Status
-          </div>
-          <form method="POST" action="" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-            <input type="hidden" name="action" value="status">
-            <input type="hidden" id="modalStatusOrderId" name="order_id" value="">
-            <div style="flex: 1; min-width: 200px;">
-              <select id="modalStatusSelect" name="status" class="form-control" onchange="checkModalStatus(this, '${driver}', '${ord.id || ''}', '${num}')" style="width: 100%; font-weight: 700; font-size: 0.85rem; padding: 0.45rem 0.65rem;">
-                <option value="PENDING">⏳ Pending Confirmation</option>
-                <option value="CONFIRMED">✓ Confirmed &amp; Queued</option>
-                <option value="WASHING">🔄 Washing in Progress</option>
-                <option value="READY">✨ Ready for Dispatch</option>
-                <option value="OUT_FOR_DELIVERY">🛵 Dispatched with Driver</option>
-                <option value="DELIVERED">🎉 Successfully Delivered</option>
-                <option value="CANCELLED">❌ Cancel Order</option>
-              </select>
+        <!-- Change Order Status Workflow Trigger Card -->
+        <div style="background: var(--bg-card); padding: 1.1rem 1.25rem; border-radius: 14px; border: 1.5px solid rgba(129,98,238,0.3); display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+          <div>
+            <div style="font-weight: 800; font-size: 0.95rem; color: var(--brand-purple); display: flex; align-items: center; gap: 0.4rem;">
+              <span>⚡ Order Operational Status:</span>
+              <span style="color: ${sMeta.color}; font-weight: 800;">${sMeta.icon} ${sMeta.label}</span>
             </div>
-            <button type="submit" class="btn btn-primary" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); border: none; color: #FFF; font-weight: 800; padding: 0.55rem 1.25rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(129,98,238,0.35); cursor: pointer;">
-              Update Status
-            </button>
-          </form>
+            <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">
+              Synchronized instantly across customer app, laundry panel, and dispatch fleet.
+            </p>
+          </div>
+          <button type="button" onclick="openChangeStatusModal('${ord.id || ''}', '${num}', '${status}', '${driver}')" class="btn btn-primary" style="background: linear-gradient(64.52deg, #8162EE 1.27%, #A672D6 31.73%, #FE9A5D 98.26%); border: none; color: #FFF; font-weight: 800; padding: 0.55rem 1.35rem; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.45rem; box-shadow: 0 4px 12px rgba(129,98,238,0.35);">
+            <span>Change Status</span> ➔
+          </button>
         </div>
       </div>
     `;
-
-    // Populate the status update inputs
-    setTimeout(() => {
-      const idInput = document.getElementById('modalStatusOrderId');
-      const selInput = document.getElementById('modalStatusSelect');
-      if (idInput) idInput.value = ord.id || ord.order_number || ord.orderNumber || '';
-      if (selInput) {
-        const currentStatus = (ord.status || 'PENDING').toUpperCase();
-        selInput.value = currentStatus;
-        
-        // Disable backward status changes
-        const statusOrder = ['PENDING', 'CONFIRMED', 'WASHING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'];
-        const currentIndex = statusOrder.indexOf(currentStatus);
-        
-        Array.from(selInput.options).forEach(opt => {
-          const optIndex = statusOrder.indexOf(opt.value);
-          if (optIndex !== -1 && optIndex < currentIndex) {
-            opt.disabled = true;
-          } else {
-            opt.disabled = false;
-          }
-        });
-      }
-    }, 50);
 
     openModal('orderDetailsModal');
     if (window.lucide) lucide.createIcons();
@@ -862,51 +1143,6 @@ $viewMode = $_GET['view'] ?? 'table';
     if (numEl) numEl.value = orderNum;
     document.getElementById('assignOrderNumText').innerText = orderNum;
     openModal('assignDriverModal');
-  }
-
-  function handleStatusChange(selectEl, orderId, orderNum, driver) {
-    if (selectEl.value === 'OUT_FOR_DELIVERY' && (driver === 'Unassigned' || driver.trim() === '')) {
-      alert("⚠️ You must assign a delivery partner before dispatching this order.");
-      selectEl.value = selectEl.getAttribute('data-original') || 'READY';
-      openAssignModal(orderId, orderNum);
-      return false;
-    }
-    selectEl.form.submit();
-  }
-
-  function handleDirectStatusChange(selectEl, orderId, orderNum, driver) {
-    const val = selectEl.value;
-    const orig = selectEl.getAttribute('data-original') || 'PENDING';
-    if (val === orig) return;
-
-    if (val === 'OUT_FOR_DELIVERY' && (!driver || driver === 'Unassigned' || driver.trim() === '')) {
-      alert("⚠️ Please assign a delivery partner before marking this order as Out For Delivery.");
-      selectEl.value = orig;
-      openAssignModal(orderId, orderNum);
-      return false;
-    }
-    if (val === 'DELIVERED') {
-      if (!confirm("Are you sure you want to mark Order #" + orderNum + " as DELIVERED?")) {
-        selectEl.value = orig;
-        return false;
-      }
-    }
-    if (val === 'CANCELLED') {
-      if (!confirm("Are you sure you want to cancel Order #" + orderNum + "?")) {
-        selectEl.value = orig;
-        return false;
-      }
-    }
-    selectEl.form.submit();
-  }
-
-  function checkModalStatus(selectEl, driver, orderId, orderNum) {
-    if (selectEl.value === 'OUT_FOR_DELIVERY' && (driver === 'Unassigned' || driver.trim() === '')) {
-      alert("⚠️ You must assign a delivery partner before dispatching this order.");
-      selectEl.value = 'READY';
-      closeModal('orderDetailsModal');
-      openAssignModal(orderId, orderNum);
-    }
   }
 
   // Auto-open specific order if requested
@@ -925,3 +1161,4 @@ $viewMode = $_GET['view'] ?? 'table';
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
+
