@@ -446,13 +446,10 @@ const SafeShopLogoImage = ({ shop, index = 0, style, resizeMode = 'cover' }: any
   const getSource = () => {
     const raw = shop?.logo_url || shop?.logo || shop?.logo_image || shop?.shop_logo;
     if (raw && typeof raw === 'string' && raw.trim().length > 0) {
-      const img = raw.trim();
-      if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:image')) {
-        return { uri: img };
+      const uri = resolveImageUrl(raw);
+      if (uri) {
+        return { uri };
       }
-      const host = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
-      const cleanPath = img.startsWith('/') ? img : `/${img}`;
-      return { uri: `${host}${cleanPath}` };
     }
     return fallbackAsset;
   };
@@ -573,6 +570,11 @@ export const HomeScreen = ({ navigation }: any) => {
         // Shop 44 provides: Wash & Fold (1), Wash & Iron (2), Dry Clean (3)
         if ([1, 2, 3].includes(catId)) return true;
         if (['wash_fold', 'wash_iron', 'dry_clean'].includes(catKey)) return true;
+      }
+      if (shop.id === 48) {
+        // Shop 48 (Neha Wash Care) provides: Wash & Fold (1), Wash & Iron (2), Dry Clean (3), Steam Iron (4)
+        if ([1, 2, 3, 4].includes(catId)) return true;
+        if (['wash_fold', 'wash_iron', 'dry_clean', 'steam_iron'].includes(catKey)) return true;
       }
 
       return false;
@@ -924,10 +926,8 @@ export const HomeScreen = ({ navigation }: any) => {
               >
                 {list.map((item: any, index: number) => {
                   return (
-                    <TouchableOpacity
+                    <View
                       key={item.id ? `banner-${item.id}` : `banner-${index}`}
-                      activeOpacity={0.92}
-                      onPress={() => navigation.navigate('Booking')}
                       style={{
                         width: cardWidth,
                         height: cardHeight,
@@ -1002,11 +1002,10 @@ export const HomeScreen = ({ navigation }: any) => {
                           flexDirection: 'row',
                           alignItems: 'center',
                         }}>
-                          <Text style={{ color: '#321D8C', fontSize: 11, fontWeight: '800' }}>Book Now</Text>
-                          <Text style={{ color: '#321D8C', fontSize: 11, fontWeight: '800', marginLeft: 2 }}>→</Text>
+                          <Text style={{ color: '#321D8C', fontSize: 11, fontWeight: '800' }}>Featured</Text>
                         </View>
                       </View>
-                    </TouchableOpacity>
+                    </View>
                   );
                 })}
               </ScrollView>

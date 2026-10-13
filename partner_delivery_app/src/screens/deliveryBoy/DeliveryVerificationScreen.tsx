@@ -177,7 +177,7 @@ export const DeliveryVerificationScreen = ({ route }: any) => {
         await apiClient.put(`/delivery/orders/${numericId}/deliver`, {
           status: 'DELIVERED',
           photo_url: photoUri,
-          signature_url: signatureUri,
+          signature_url: null,
         });
       } catch (err) {
         console.log('Update delivery status error:', err);

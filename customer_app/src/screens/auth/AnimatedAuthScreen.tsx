@@ -253,34 +253,36 @@ export default function AnimatedAuthScreen() {
               resizeMode="cover"
               style={styles.container}
             >
-              <View style={styles.row}>
-                <Marquee spacing={0} speed={0.6}>
-                  <View style={styles.marqueeContent}>
-                    {row1List.map((item, index) => (
-                      <Card key={`r1-${index}`} image={item} />
-                    ))}
-                  </View>
-                </Marquee>
-              </View>
+              <View pointerEvents="none">
+                <View style={styles.row}>
+                  <Marquee spacing={0} speed={0.6}>
+                    <View style={styles.marqueeContent}>
+                      {row1List.map((item, index) => (
+                        <Card key={`r1-${index}`} image={item} />
+                      ))}
+                    </View>
+                  </Marquee>
+                </View>
 
-              <View style={styles.row}>
-                <Marquee spacing={0} speed={0.6} reverse>
-                  <View style={styles.marqueeContent}>
-                    {row2List.map((item, index) => (
-                      <Card key={`r2-${index}`} image={item} />
-                    ))}
-                  </View>
-                </Marquee>
-              </View>
+                <View style={styles.row}>
+                  <Marquee spacing={0} speed={0.6} reverse>
+                    <View style={styles.marqueeContent}>
+                      {row2List.map((item, index) => (
+                        <Card key={`r2-${index}`} image={item} />
+                      ))}
+                    </View>
+                  </Marquee>
+                </View>
 
-              <View style={styles.row}>
-                <Marquee spacing={0} speed={0.6}>
-                  <View style={styles.marqueeContent}>
-                    {row3List.map((item, index) => (
-                      <Card key={`r3-${index}`} image={item} />
-                    ))}
-                  </View>
-                </Marquee>
+                <View style={styles.row}>
+                  <Marquee spacing={0} speed={0.6}>
+                    <View style={styles.marqueeContent}>
+                      {row3List.map((item, index) => (
+                        <Card key={`r3-${index}`} image={item} />
+                      ))}
+                    </View>
+                  </Marquee>
+                </View>
               </View>
 
               <ImageBackground

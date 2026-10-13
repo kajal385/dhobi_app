@@ -1,5 +1,5 @@
 export const GOOGLE_MAPS_API_KEY = 'AIzaSyBXTHZ-XiK_QmQ6HV6hFqqetu5JR8Pwgnk';
-export const BASE_URL = 'https://dhobi-api.bizz-manager.com/public';
+export const BASE_URL = ('https://dhobi-api.bizz-manager.com/public').replace(/\/+$/, '');
 export const API_BASE_URL = `${BASE_URL}/api/v1`;
 export const ADMIN_BASE_URL = 'https://dhobi-admin.bizz-manager.com';
 

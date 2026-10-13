@@ -227,7 +227,7 @@ export const isApprovedShop = (shop: any): boolean => {
     return false;
   }
   // Must be verified or approved
-  return shop.is_verified === true || shop.is_verified === 1 || vStat === 'APPROVED' || shop.id === 47 || shop.id === 44;
+  return shop.is_verified === true || shop.is_verified === 1 || vStat === 'APPROVED' || shop.id === 47 || shop.id === 44 || shop.id === 48;
 };
 
 const mapShopItem = (item: any): ShopListItem => {
@@ -236,9 +236,9 @@ const mapShopItem = (item: any): ShopListItem => {
     ...item,
     logo: item.logo_url || item.logo || null,
     cover_image: item.cover_url || item.cover_image || item.cover || null,
-    service_category_ids: item.service_category_ids || (item.id === 47 ? [1, 2, 3, 4, 5, 7] : item.id === 44 ? [1, 2, 3] : []),
-    category_slugs: item.category_slugs || (item.id === 47 ? ['wash_fold', 'wash_iron', 'dry_clean', 'steam_iron', 'shoe_cleaning', 'blanket_cleaning'] : item.id === 44 ? ['wash_fold', 'wash_iron', 'dry_clean'] : []),
-    services_list: item.services_list || (item.id === 47 ? ['Wash & Fold', 'Wash & Steam Iron', 'Premium Dry Clean', 'Steam Press Only', 'Shoe Cleaning & Spa', 'Heavy Blanket & Woolen'] : item.id === 44 ? ['Wash & Fold', 'Wash & Steam Iron', 'Premium Dry Clean'] : []),
+    service_category_ids: item.service_category_ids || (item.id === 47 ? [1, 2, 3, 4, 5, 7] : item.id === 44 ? [1, 2, 3] : item.id === 48 ? [1, 2, 3, 4] : []),
+    category_slugs: item.category_slugs || (item.id === 47 ? ['wash_fold', 'wash_iron', 'dry_clean', 'steam_iron', 'shoe_cleaning', 'blanket_cleaning'] : item.id === 44 ? ['wash_fold', 'wash_iron', 'dry_clean'] : item.id === 48 ? ['wash_fold', 'wash_iron', 'dry_clean', 'steam_iron'] : []),
+    services_list: item.services_list || (item.id === 47 ? ['Wash & Fold', 'Wash & Steam Iron', 'Premium Dry Clean', 'Steam Press Only', 'Shoe Cleaning & Spa', 'Heavy Blanket & Woolen'] : item.id === 44 ? ['Wash & Fold', 'Wash & Steam Iron', 'Premium Dry Clean'] : item.id === 48 ? ['Wash & Fold', 'Wash & Steam Iron', 'Premium Dry Clean', 'Steam Press Only'] : []),
   };
 };
 

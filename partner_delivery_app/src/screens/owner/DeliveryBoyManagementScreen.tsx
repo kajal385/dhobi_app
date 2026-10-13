@@ -16,6 +16,7 @@ import { AppCard } from '../../components/AppCard';
 import { AppButton } from '../../components/AppButton';
 import { AppInput } from '../../components/AppInput';
 import { AppBackground } from '../../components/AppBackground';
+import { StandardModal, ModalDetailItem } from '../../components/StandardModal';
 import { COLORS, FONTS, SPACING, SIZES } from '../../theme';
 import { partnerService } from '../../services/partnerService';
 import { apiClient } from '../../services/apiClient';
@@ -38,6 +39,20 @@ export const DeliveryBoyManagementScreen = () => {
   const [unassignedOrders, setUnassignedOrders] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [assignFilterTab, setAssignFilterTab] = useState<'unassigned' | 'all'>('unassigned');
+  const [onboardedStaffModal, setOnboardedStaffModal] = useState<{ visible: boolean; staff: any }>({ visible: false, staff: null });
+  const [feedbackModal, setFeedbackModal] = useState<{
+    visible: boolean;
+    type: 'success' | 'info' | 'warning' | 'error';
+    title: string;
+    subtitle?: string;
+    icon?: string;
+    badgeLabel?: string;
+    details?: ModalDetailItem[];
+  }>({
+    visible: false,
+    type: 'success',
+    title: '',
+  });
 
   const refreshBoys = useCallback(async () => {
     try {
@@ -114,7 +129,14 @@ export const DeliveryBoyManagementScreen = () => {
 
   const handleAddBoy = async () => {
     if (!name.trim() || !phone.trim()) {
-      Alert.alert('Required', 'Please enter delivery boy name and phone number');
+      setFeedbackModal({
+        visible: true,
+        type: 'warning',
+        icon: '📝',
+        badgeLabel: 'Required',
+        title: 'Missing Required Info',
+        subtitle: 'Please enter the delivery executive’s full name and 10-digit mobile number.',
+      });
       return;
     }
 
@@ -142,12 +164,19 @@ export const DeliveryBoyManagementScreen = () => {
       setDlNumber('');
       // Reload from API
       await refreshBoys();
-      Alert.alert(
-        'Delivery Executive Onboarded! 🎉',
-        `Staff registered successfully.\n\n👤 Name: ${payload.name}\n📞 Mobile: ${payload.phone}\n🔑 Password: ${payload.password}\n🛵 Vehicle: ${payload.vehicle}\n📄 DL: ${payload.dl_number}`
-      );
+      setOnboardedStaffModal({
+        visible: true,
+        staff: payload,
+      });
     } catch (e) {
-      Alert.alert('Error', 'Could not create delivery boy. Please try again.');
+      setFeedbackModal({
+        visible: true,
+        type: 'error',
+        icon: '⚠️',
+        badgeLabel: 'Error',
+        title: 'Registration Failed',
+        subtitle: 'Could not create delivery boy. Please verify details and try again.',
+      });
     }
   };
 
@@ -169,12 +198,16 @@ export const DeliveryBoyManagementScreen = () => {
       console.log('Assign delivery error:', err);
     }
     setUnassignedOrders(prev => prev.filter(o => o.id !== ord.id));
-    Alert.alert(
-      'Order Assigned 🚚',
-      `Order ${ord.id} successfully assigned to ${assignTargetBoy?.name}!`
-    );
     setShowAssignModal(false);
     await refreshBoys();
+    setFeedbackModal({
+      visible: true,
+      type: 'success',
+      icon: '🚚',
+      badgeLabel: 'Dispatched',
+      title: 'Order Assigned!',
+      subtitle: `Order ${ord.id} successfully assigned to ${assignTargetBoy?.name}!`,
+    });
   };
 
   const onlineCount = boys.filter((b) => b.status === 'Online').length;
@@ -750,6 +783,40 @@ export const DeliveryBoyManagementScreen = () => {
             </View>
           </View>
         </Modal>
+
+        {/* Professional Standard Modal: Delivery Executive Onboarded */}
+        <StandardModal
+          visible={onboardedStaffModal.visible}
+          type="success"
+          icon="🎉"
+          badgeLabel="Rider Active"
+          title="Delivery Executive Onboarded!"
+          subtitle="Staff credentials registered successfully into your fleet."
+          details={onboardedStaffModal.staff ? [
+            { icon: '👤', label: 'Name', value: onboardedStaffModal.staff.name },
+            { icon: '📞', label: 'Mobile', value: onboardedStaffModal.staff.phone },
+            { icon: '🔑', label: 'Password', value: onboardedStaffModal.staff.password },
+            { icon: '🛵', label: 'Vehicle', value: onboardedStaffModal.staff.vehicle },
+            { icon: '📄', label: 'DL No.', value: onboardedStaffModal.staff.dl_number },
+          ] : []}
+          primaryActionText="Got It"
+          onPrimaryAction={() => setOnboardedStaffModal({ visible: false, staff: null })}
+          onClose={() => setOnboardedStaffModal({ visible: false, staff: null })}
+        />
+
+        {/* Generic Professional Feedback Modal */}
+        <StandardModal
+          visible={feedbackModal.visible}
+          type={feedbackModal.type}
+          icon={feedbackModal.icon}
+          badgeLabel={feedbackModal.badgeLabel}
+          title={feedbackModal.title}
+          subtitle={feedbackModal.subtitle}
+          details={feedbackModal.details}
+          primaryActionText="OK"
+          onPrimaryAction={() => setFeedbackModal(prev => ({ ...prev, visible: false }))}
+          onClose={() => setFeedbackModal(prev => ({ ...prev, visible: false }))}
+        />
       </View>
     </AppBackground>
   );

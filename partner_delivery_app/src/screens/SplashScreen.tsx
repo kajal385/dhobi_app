@@ -62,8 +62,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
     <Animated.View style={[styles.container, { opacity: screenOpacity }]}>
       <StatusBar
         barStyle="dark-content"
-        backgroundColor="transparent"
-        translucent
+        {...({ backgroundColor: 'transparent', translucent: true } as any)}
       />
       <Animated.View
         style={[

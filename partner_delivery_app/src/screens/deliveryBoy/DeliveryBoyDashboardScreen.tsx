@@ -119,12 +119,13 @@ export const DeliveryBoyDashboardScreen = () => {
         ? order.items.map((i: any) => `${i.serviceName || i.service_name || i.name || i.item_name || 'Service'} x${i.qty || i.quantity || 1}`).join(', ')
         : 'Laundry Service';
 
+      const oAny = order as any;
       const task: DeliveryTaskItem = {
         id: order.id,
         type: ['RECEIVED', 'CONFIRMED', 'PROCESSING'].includes(statusUpper) ? 'Pickup' : 'Delivery',
-        customer: (typeof order.customerName === 'object' ? order.customerName?.name : order.customerName) || (typeof order.customer === 'object' ? order.customer?.name : order.customer) || 'Customer',
-        phone: (typeof order.mobile === 'object' ? order.mobile?.phone : order.mobile) || 'N/A',
-        address: (typeof order.address === 'object' ? order.address?.address : order.address) || 'Pune',
+        customer: (typeof oAny.customerName === 'object' ? oAny.customerName?.name : oAny.customerName) || (typeof oAny.customer === 'object' ? oAny.customer?.name : oAny.customer) || 'Customer',
+        phone: (typeof oAny.mobile === 'object' ? oAny.mobile?.phone : oAny.mobile) || 'N/A',
+        address: (typeof oAny.address === 'object' ? oAny.address?.address : oAny.address) || 'Pune',
         shopName: 'DhobiPro Laundry',
         time: typeof order.dueDate === 'string' ? order.dueDate : 'Today',
         items: itemsStr,

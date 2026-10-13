@@ -11,6 +11,7 @@ import { mockDataStore } from '../../services/mockDataStore';
 import { getOrderStatusMeta } from './OrderManagementScreen';
 import { useAuth } from '../../context/AuthContext';
 import { partnerService } from '../../services/partnerService';
+import { StandardModal, ModalDetailItem } from '../../components/StandardModal';
 
 
 export const OwnerDashboardScreen = () => {
@@ -35,6 +36,31 @@ export const OwnerDashboardScreen = () => {
   const [customersCount, setCustomersCount] = React.useState(0);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [feedbackModal, setFeedbackModal] = React.useState<{
+    visible: boolean;
+    type?: 'success' | 'info' | 'warning' | 'error';
+    icon?: string;
+    badgeLabel?: string;
+    title: string;
+    subtitle?: string;
+    primaryActionText?: string;
+    details?: ModalDetailItem[];
+  }>({ visible: false, title: '' });
+
+  const handleCallCustomer = (mobile: string, name?: string) => {
+    if (!mobile) return;
+    Linking.openURL(`tel:${mobile}`).catch(() => {
+      setFeedbackModal({
+        visible: true,
+        type: 'info',
+        icon: '📞',
+        badgeLabel: 'Customer Contact',
+        title: name ? `Contact ${name}` : 'Call Customer',
+        subtitle: `Direct Phone: ${mobile}`,
+        primaryActionText: 'Got It',
+      });
+    });
+  };
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -192,7 +218,18 @@ export const OwnerDashboardScreen = () => {
 
   const handleUpdateStatus = (orderId: string, newStatus: any) => {
     setOrders(prev => prev.map(o => (o.id === orderId ? { ...o, status: newStatus } : o)));
-    Alert.alert('Status Updated 📈', `Order ${orderId} status changed to ${newStatus}`);
+    setFeedbackModal({
+      visible: true,
+      type: 'success',
+      icon: '📈',
+      badgeLabel: 'Status Updated',
+      title: 'Order Status Changed',
+      subtitle: `Order ${orderId} has transitioned to "${newStatus}".`,
+      details: [
+        { icon: '📦', label: 'Order ID', value: orderId },
+        { icon: '🔄', label: 'New Status', value: newStatus },
+      ],
+    });
   };
 
   const handleAssignDeliveryBoy = (boyName: string) => {
@@ -202,7 +239,19 @@ export const OwnerDashboardScreen = () => {
       o.id === selectedOrder.id ? { ...o, deliveryBoy: boyName, status: 'Ready' } : o
     ));
     setShowAssignModal(false);
-    Alert.alert('Assigned 🛵', `${boyName} assigned to Order ${selectedOrder.id}.\nTask sent to delivery boy dashboard!`);
+    setFeedbackModal({
+      visible: true,
+      type: 'success',
+      icon: '🛵',
+      badgeLabel: 'Assigned',
+      title: 'Delivery Executive Assigned!',
+      subtitle: `${boyName} has been assigned to Order ${selectedOrder.id}.`,
+      details: [
+        { icon: '📦', label: 'Order ID', value: selectedOrder.id },
+        { icon: '🛵', label: 'Rider Name', value: boyName },
+        { icon: '👤', label: 'Customer', value: selectedOrder.customerName || 'Customer' },
+      ],
+    });
   };
 
   const renderModalContent = () => {
@@ -361,7 +410,7 @@ export const OwnerDashboardScreen = () => {
                     <View style={styles.cardBtnRow}>
                       <TouchableOpacity
                         style={styles.smallOutlineBtn}
-                        onPress={() => Alert.alert('Calling Customer 📞', `Dialing ${ord.mobile}...`)}
+                        onPress={() => handleCallCustomer(ord.mobile, ord.customerName)}
                       >
                         <Text style={styles.smallOutlineTxt}>📞 Call</Text>
                       </TouchableOpacity>
@@ -424,7 +473,7 @@ export const OwnerDashboardScreen = () => {
                     <View style={styles.cardBtnRow}>
                       <TouchableOpacity
                         style={styles.smallOutlineBtn}
-                        onPress={() => Alert.alert('Calling Customer 📞', `Dialing ${ord.mobile}...`)}
+                        onPress={() => handleCallCustomer(ord.mobile, ord.customerName)}
                       >
                         <Text style={styles.smallOutlineTxt}>📞 Call Customer</Text>
                       </TouchableOpacity>
@@ -1167,7 +1216,18 @@ export const OwnerDashboardScreen = () => {
                     if (selectedOrder) {
                       mockDataStore.updateOrderStatus(selectedOrder.id, 'Cancelled', finalReason, finalReason);
                       setOrders(prev => prev.map(o => (o.id === selectedOrder.id ? { ...o, status: 'Cancelled', cancellation_reason: finalReason } : o)));
-                      Alert.alert('Order Cancelled ❌', `Order ${selectedOrder.id} cancelled.\nReason sent to customer: "${finalReason}"`);
+                      setFeedbackModal({
+                        visible: true,
+                        type: 'warning',
+                        icon: '🚫',
+                        badgeLabel: 'Cancelled',
+                        title: 'Order Cancelled',
+                        subtitle: `Order ${selectedOrder.id} has been cancelled.`,
+                        details: [
+                          { icon: '📝', label: 'Reason', value: finalReason },
+                          { icon: '👤', label: 'Customer', value: selectedOrder.customerName || 'Customer' },
+                        ],
+                      });
                     }
                     setShowCancelReasonModal(false);
                   }}
@@ -1179,6 +1239,20 @@ export const OwnerDashboardScreen = () => {
             </View>
           </View>
         </Modal>
+
+        {/* Professional Standard Feedback Modal */}
+        <StandardModal
+          visible={feedbackModal.visible}
+          type={feedbackModal.type || 'success'}
+          icon={feedbackModal.icon}
+          badgeLabel={feedbackModal.badgeLabel}
+          title={feedbackModal.title}
+          subtitle={feedbackModal.subtitle}
+          details={feedbackModal.details}
+          primaryActionText={feedbackModal.primaryActionText || 'Got It'}
+          onPrimaryAction={() => setFeedbackModal(prev => ({ ...prev, visible: false }))}
+          onClose={() => setFeedbackModal(prev => ({ ...prev, visible: false }))}
+        />
       </View>
     </AppBackground>
   );

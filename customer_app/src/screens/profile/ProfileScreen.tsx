@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -24,6 +24,7 @@ import { orderService } from '../../services/orderService';
 import { walletService } from '../../services/walletService';
 import Toast from 'react-native-toast-message';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { StandardModal, ModalDetailItem } from '../../components/StandardModal';
 
 export const ProfileScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
@@ -32,6 +33,17 @@ export const ProfileScreen = ({ navigation }: any) => {
   const dispatch = useDispatch();
   const { user } = useSelector((s: RootState) => s.auth);
   const { orders } = useSelector((s: RootState) => s.orders);
+
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [infoModal, setInfoModal] = useState<{
+    visible: boolean;
+    type?: 'info' | 'success';
+    icon?: string;
+    badgeLabel?: string;
+    title: string;
+    subtitle?: string;
+    details?: ModalDetailItem[];
+  }>({ visible: false, title: '' });
 
   const customerName = user?.name || 'Kajal Gajare';
   const customerPhone = user?.phone ? `+91 ${user.phone}` : '+91 9309386003';
@@ -50,21 +62,17 @@ export const ProfileScreen = ({ navigation }: any) => {
   const totalOrdersCount = Array.isArray(orders) ? orders.length : 0;
 
   const handleLogout = () => {
-    Alert.alert('Log Out', 'Are you sure you want to log out of your account?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log Out',
-        style: 'destructive',
-        onPress: () => {
-          dispatch(logoutUser());
-          dispatch(clearOrders());
-          dispatch(clearWallet());
-          orderService.clearLocalOrders();
-          walletService.clearWalletData();
-          Toast.show({ type: 'success', text1: 'Logged out successfully' });
-        },
-      },
-    ]);
+    setLogoutModalVisible(true);
+  };
+
+  const confirmLogout = () => {
+    setLogoutModalVisible(false);
+    dispatch(logoutUser());
+    dispatch(clearOrders());
+    dispatch(clearWallet());
+    orderService.clearLocalOrders();
+    walletService.clearWalletData();
+    Toast.show({ type: 'success', text1: 'Logged out successfully' });
   };
 
   const accountMenu = [
@@ -137,7 +145,19 @@ export const ProfileScreen = ({ navigation }: any) => {
       iconName: 'headset',
       iconBg: '#F3E8FF',
       iconColor: '#7E22CE',
-      onPress: () => Alert.alert('Support Helpline 🎧', 'Email: support@dhobipro.com\nPhone: +91 98234 56789\nWorking hours: 8:00 AM - 9:00 PM'),
+      onPress: () => setInfoModal({
+        visible: true,
+        type: 'info',
+        icon: '🎧',
+        badgeLabel: 'Customer Care',
+        title: 'Customer Helpline',
+        subtitle: 'Our dedicated support team is available 7 days a week to help with your orders.',
+        details: [
+          { icon: '📧', label: 'Email Support', value: 'support@dhobipro.com' },
+          { icon: '📞', label: 'Toll-Free Phone', value: '+91 98234 56789' },
+          { icon: '⏰', label: 'Working Hours', value: '8:00 AM – 9:00 PM IST' },
+        ],
+      }),
     },
     {
       id: 'privacy',
@@ -146,7 +166,19 @@ export const ProfileScreen = ({ navigation }: any) => {
       iconName: 'file-document-outline',
       iconBg: '#F1F5F9',
       iconColor: '#475569',
-      onPress: () => Alert.alert('Terms & Privacy', 'Dhobi App v2.4.0\nAll customer data encrypted with TLS 1.3.'),
+      onPress: () => setInfoModal({
+        visible: true,
+        type: 'info',
+        icon: '🛡️',
+        badgeLabel: 'Security',
+        title: 'Terms & Privacy Policy',
+        subtitle: 'Your personal data, payment info and laundry records are secured.',
+        details: [
+          { icon: '🔒', label: 'Encryption', value: 'TLS 1.3 End-to-End' },
+          { icon: '📱', label: 'App Version', value: 'Dhobi App v2.4.0' },
+          { icon: '🏛️', label: 'Compliance', value: 'ISO 27001 Certified' },
+        ],
+      }),
     },
   ];
 
@@ -380,6 +412,35 @@ export const ProfileScreen = ({ navigation }: any) => {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Logout Confirmation Modal */}
+      <StandardModal
+        visible={logoutModalVisible}
+        type="warning"
+        icon="🚪"
+        badgeLabel="Account"
+        title="Log Out of Dhobi?"
+        subtitle="You will need to sign in again to place orders and track laundry."
+        primaryActionText="Log Out"
+        onPrimaryAction={confirmLogout}
+        secondaryButtonText="Cancel"
+        onSecondaryPress={() => setLogoutModalVisible(false)}
+        onClose={() => setLogoutModalVisible(false)}
+      />
+
+      {/* Information / Helpline Modal */}
+      <StandardModal
+        visible={infoModal.visible}
+        type={infoModal.type || 'info'}
+        icon={infoModal.icon}
+        badgeLabel={infoModal.badgeLabel}
+        title={infoModal.title}
+        subtitle={infoModal.subtitle}
+        details={infoModal.details}
+        primaryActionText="Got It"
+        onPrimaryAction={() => setInfoModal(prev => ({ ...prev, visible: false }))}
+        onClose={() => setInfoModal(prev => ({ ...prev, visible: false }))}
+      />
     </ImageBackground>
   );
 };

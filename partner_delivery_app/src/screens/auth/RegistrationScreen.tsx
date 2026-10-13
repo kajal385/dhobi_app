@@ -1132,6 +1132,7 @@ export const RegistrationScreen = () => {
                   label=""
                   placeholder="Min 6 characters — used for login"
                   secureTextEntry={!showPassword}
+                  hidePasswordToggle
                   value={password}
                   onChangeText={setPassword}
                 />
@@ -1153,6 +1154,7 @@ export const RegistrationScreen = () => {
                   label=""
                   placeholder="Re-enter your password"
                   secureTextEntry={!showConfirmPassword}
+                  hidePasswordToggle
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                 />
