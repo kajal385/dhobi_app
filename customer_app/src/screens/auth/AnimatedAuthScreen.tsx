@@ -255,7 +255,7 @@ export default function AnimatedAuthScreen() {
             >
               <View pointerEvents="none">
                 <View style={styles.row}>
-                  <Marquee spacing={0} speed={0.6}>
+                  <Marquee spacing={0} speed={0.6} withGesture={false}>
                     <View style={styles.marqueeContent}>
                       {row1List.map((item, index) => (
                         <Card key={`r1-${index}`} image={item} />
@@ -265,7 +265,7 @@ export default function AnimatedAuthScreen() {
                 </View>
 
                 <View style={styles.row}>
-                  <Marquee spacing={0} speed={0.6} reverse>
+                  <Marquee spacing={0} speed={0.6} reverse withGesture={false}>
                     <View style={styles.marqueeContent}>
                       {row2List.map((item, index) => (
                         <Card key={`r2-${index}`} image={item} />
@@ -275,7 +275,7 @@ export default function AnimatedAuthScreen() {
                 </View>
 
                 <View style={styles.row}>
-                  <Marquee spacing={0} speed={0.6}>
+                  <Marquee spacing={0} speed={0.6} withGesture={false}>
                     <View style={styles.marqueeContent}>
                       {row3List.map((item, index) => (
                         <Card key={`r3-${index}`} image={item} />
