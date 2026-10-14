@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
+import { COLORS } from '../constants/theme';
 
 const { width: W } = Dimensions.get('window');
 const TAB_W = W / 5;

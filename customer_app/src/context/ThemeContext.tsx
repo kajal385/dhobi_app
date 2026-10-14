@@ -27,7 +27,7 @@ const ThemeContext = createContext<ThemeContextType>({
 });
 
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {
-  const [systemScheme, setSystemScheme] = useState<ColorSchemeName>(Appearance.getColorScheme());
+  const [systemScheme, setSystemScheme] = useState<ColorSchemeName>(Appearance.getColorScheme() ?? 'light');
 
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
     try {
