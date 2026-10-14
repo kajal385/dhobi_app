@@ -10,6 +10,7 @@ import {
   TextInputProps as RNTextInputProps,
 } from 'react-native';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 
 interface InputProps extends RNTextInputProps {
   label?: string;
@@ -29,8 +30,7 @@ export const Input: React.FC<InputProps> = ({
   iconRight,
   ...props
 }) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -39,7 +39,7 @@ export const Input: React.FC<InputProps> = ({
         style={[
           styles.inputContainer,
           {
-            backgroundColor: isDark ? colors.card : colors.white,
+            backgroundColor: (colors as any).inputBg || (isDark ? colors.card : colors.white),
             borderColor: error ? colors.error : colors.border,
           },
         ]}

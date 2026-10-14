@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { COLORS, DARK_COLORS, SPACING } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { updateProfile } from '../../store/authSlice';
 import apiClient from '../../api/client';
 import Toast from 'react-native-toast-message';
@@ -15,8 +16,7 @@ export const ProfileSetupScreen = ({ navigation }: any) => {
   const [referral, setReferral] = useState('');
   const [loading, setLoading] = useState(false);
   const dispatch = useDispatch();
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
 
   const handleCompleteSetup = async () => {
     if (!name || !email) {

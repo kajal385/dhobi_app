@@ -7,6 +7,7 @@ import {
   useColorScheme,
 } from 'react-native';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 import { Order } from '../types';
 import { StatusBadge } from './StatusBadge';
 
@@ -25,8 +26,7 @@ const getServiceInfo = (type?: string) => {
 };
 
 export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress, onTrack }) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
 
   const serviceInfo = getServiceInfo(order?.service_type);
   const statusLower = (order?.status || '').toLowerCase();

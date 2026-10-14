@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import AppScreen from '../../components/AppScreen';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { Address } from '../../types';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../store';
@@ -25,8 +26,7 @@ import Toast from 'react-native-toast-message';
 import { SkeletonLoader } from '../../components/SkeletonLoader';
 
 export const SavedAddressesScreen = ({ navigation }: any) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const dispatch = useDispatch();
   const { user } = useSelector((s: RootState) => s.auth);
 

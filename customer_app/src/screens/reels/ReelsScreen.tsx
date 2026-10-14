@@ -15,6 +15,7 @@ import Video from 'react-native-video';
 import { useIsFocused } from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import Toast from 'react-native-toast-message';
 import { reelService, Reel } from '../../services/reelService';
 import { BASE_URL, resolveImageUrl } from '../../constants/config';
@@ -83,8 +84,7 @@ const ReelVideoPlayer = ({
 
 export const ReelsScreen = ({ navigation }: any) => {
   const isFocused = useIsFocused();
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

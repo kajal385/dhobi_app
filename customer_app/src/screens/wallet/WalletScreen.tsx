@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import AppScreen from '../../components/AppScreen';
 import { RootState } from '../../store';
 import { setWallet, setTransactions, addTransaction, walletLoading } from '../../store/walletSlice';
@@ -23,8 +24,7 @@ import Toast from 'react-native-toast-message';
 const ADD_AMOUNTS = [100, 250, 500, 1000];
 
 export const WalletScreen = ({ navigation }: any) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const dispatch = useDispatch();
   const { balance, transactions, loading } = useSelector((s: RootState) => s.wallet);
   const [refreshing, setRefreshing] = React.useState(false);

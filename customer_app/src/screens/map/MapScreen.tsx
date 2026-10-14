@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, useColorScheme, TextInput, ScrollView, Platform, FlatList } from 'react-native';
 import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { requestLocationPermission, getCurrentLocation, reverseGeocode, GeocodedAddress } from '../../utils/locationUtils';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,8 +19,7 @@ interface PlacePrediction {
 }
 
 export const MapScreen = ({ navigation, route }: any) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const dispatch = useDispatch();
   const insets = useSafeAreaInsets();
   const isMounted = useRef(true);

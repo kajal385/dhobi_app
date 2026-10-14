@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import AppScreen from '../../components/AppScreen';
 import { RootState } from '../../store';
 import { setNotifications, markAllRead, markRead, notificationsLoading } from '../../store/notificationSlice';
@@ -20,8 +21,7 @@ import { Notification } from '../../types';
 import Toast from 'react-native-toast-message';
 
 export const NotificationsScreen = ({ navigation }: any) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const dispatch = useDispatch();
   const { notifications, loading } = useSelector((s: RootState) => s.notifications);
   const [refreshing, setRefreshing] = useState(false);

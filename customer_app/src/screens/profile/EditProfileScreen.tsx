@@ -15,6 +15,7 @@ import {
 import AppScreen from '../../components/AppScreen';
 import { useDispatch, useSelector } from 'react-redux';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { RootState } from '../../store';
 import { updateProfile } from '../../store/authSlice';
 import { authService } from '../../services/authService';
@@ -23,8 +24,7 @@ import Toast from 'react-native-toast-message';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 export const EditProfileScreen = ({ navigation, route }: any) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const dispatch = useDispatch();
   const { user } = useSelector((s: RootState) => s.auth);
 

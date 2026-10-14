@@ -16,6 +16,7 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import AppScreen from '../../components/AppScreen';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { resolveImageUrl } from '../../constants/config';
 import { requestLocationPermission, getCurrentLocation, reverseGeocode, GeocodedAddress, calculateDistance } from '../../utils/locationUtils';
 import Toast from 'react-native-toast-message';
@@ -83,8 +84,7 @@ const SafeShopCoverImage = ({ shop, index = 0, style, resizeMode = 'cover' }: an
 };
 
 export const NearByScreen = ({ navigation }: any) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const dispatch = useDispatch();
   const { user } = useSelector((s: RootState) => s.auth);
   const [loading, setLoading] = useState(true);

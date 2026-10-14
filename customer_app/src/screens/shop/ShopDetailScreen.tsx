@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, DARK_COLORS, SPACING, SIZES, FONTS } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { resolveImageUrl } from '../../constants/config';
 import LinearGradient from 'react-native-linear-gradient';
 import { useSelector } from 'react-redux';
@@ -250,8 +251,7 @@ const ReviewCard = ({ review, colors }: { review: ShopReview; colors: typeof COL
 
 // ─── Main Screen ───────────────────────────────────────────────────────────────
 export const ShopDetailScreen = ({ navigation, route }: any) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { shopId = 1, shopName, initialTab, selectedCategory, categoryKey } = route.params || {};
 

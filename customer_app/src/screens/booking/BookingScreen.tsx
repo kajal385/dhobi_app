@@ -20,6 +20,7 @@ import {
 import AppScreen from '../../components/AppScreen';
 import { useDispatch, useSelector } from 'react-redux';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { addOrder } from '../../store/orderSlice';
 import { orderService } from '../../services/orderService';
 import { addressService } from '../../services/addressService';
@@ -221,8 +222,7 @@ const PAYMENT_METHODS = [
 ];
 
 const BookingScreenInner = ({ navigation, route }: any) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const dispatch = useDispatch();
   const { user } = useSelector((s: RootState) => s.auth);
 

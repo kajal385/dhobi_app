@@ -6,9 +6,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  useColorScheme,
   Dimensions,
 } from 'react-native';
+import { useTheme } from '../hooks/useTheme';
 
 interface LocationAccuracyModalProps {
   visible: boolean;
@@ -21,7 +21,7 @@ export const LocationAccuracyModal: React.FC<LocationAccuracyModalProps> = ({
   onTurnOn,
   onNoThanks,
 }) => {
-  const isDark = useColorScheme() === 'dark';
+  const { isDark, colors } = useTheme();
 
   if (!visible) return null;
 
@@ -36,7 +36,7 @@ export const LocationAccuracyModal: React.FC<LocationAccuracyModalProps> = ({
         <View
           style={[
             styles.modalContainer,
-            { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
+            { backgroundColor: isDark ? colors.card : '#F1F5F9' },
           ]}
         >
           <ScrollView
@@ -47,7 +47,7 @@ export const LocationAccuracyModal: React.FC<LocationAccuracyModalProps> = ({
             <Text
               style={[
                 styles.title,
-                { color: isDark ? '#F8FAFC' : '#1E293B' },
+                { color: isDark ? colors.text : '#1E293B' },
               ]}
             >
               For a better experience, your device will need to use Location Accuracy
@@ -57,7 +57,7 @@ export const LocationAccuracyModal: React.FC<LocationAccuracyModalProps> = ({
             <Text
               style={[
                 styles.subtitle,
-                { color: isDark ? '#CBD5E1' : '#475569' },
+                { color: isDark ? colors.textSecondary : '#475569' },
               ]}
             >
               The following settings should be on:
@@ -72,7 +72,7 @@ export const LocationAccuracyModal: React.FC<LocationAccuracyModalProps> = ({
                 <Text
                   style={[
                     styles.itemTitle,
-                    { color: isDark ? '#F1F5F9' : '#1E293B' },
+                    { color: isDark ? colors.text : '#1E293B' },
                   ]}
                 >
                   Device location
@@ -89,13 +89,13 @@ export const LocationAccuracyModal: React.FC<LocationAccuracyModalProps> = ({
                 <Text
                   style={[
                     styles.itemBodyText,
-                    { color: isDark ? '#94A3B8' : '#475569' },
+                    { color: isDark ? colors.textSecondary : '#475569' },
                   ]}
                 >
                   <Text
                     style={[
                       styles.itemTitle,
-                      { color: isDark ? '#F1F5F9' : '#1E293B' },
+                      { color: isDark ? colors.text : '#1E293B' },
                     ]}
                   >
                     Location Accuracy
@@ -115,7 +115,7 @@ export const LocationAccuracyModal: React.FC<LocationAccuracyModalProps> = ({
             <Text
               style={[
                 styles.footerNote,
-                { color: isDark ? '#94A3B8' : '#64748B' },
+                { color: isDark ? colors.textSecondary : '#64748B' },
               ]}
             >
               You can change this at any time in location settings.
@@ -130,7 +130,7 @@ export const LocationAccuracyModal: React.FC<LocationAccuracyModalProps> = ({
               style={[
                 styles.btnNoThanks,
                 {
-                  borderColor: isDark ? '#475569' : '#64748B',
+                  borderColor: isDark ? colors.border : '#64748B',
                   backgroundColor: isDark ? 'transparent' : '#E2E8F0',
                 },
               ]}
@@ -138,7 +138,7 @@ export const LocationAccuracyModal: React.FC<LocationAccuracyModalProps> = ({
               <Text
                 style={[
                   styles.btnNoThanksText,
-                  { color: isDark ? '#E2E8F0' : '#0F766E' },
+                  { color: isDark ? colors.textSecondary : '#0F766E' },
                 ]}
               >
                 No, thanks

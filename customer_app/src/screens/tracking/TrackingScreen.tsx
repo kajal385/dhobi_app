@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { COLORS, DARK_COLORS, SPACING } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import AppScreen from '../../components/AppScreen';
 import { orderService, defaultOrderBYLGX5 } from '../../services/orderService';
 import { API_BASE_URL } from '../../constants/config';
@@ -79,8 +80,7 @@ export const TrackingScreen = ({ navigation, route }: any) => {
   const insets = useSafeAreaInsets();
   const passedOrder = route?.params?.order;
   const orderId = route?.params?.orderId || route?.params?.id || passedOrder?.id || 9999;
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const { user } = useSelector((s: RootState) => s.auth);
 
   const [order, setOrder] = useState<Order>(passedOrder || defaultOrderBYLGX5);

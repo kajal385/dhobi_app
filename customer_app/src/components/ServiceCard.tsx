@@ -7,6 +7,7 @@ import {
   useColorScheme,
 } from 'react-native';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 
 interface ServiceCardProps {
   icon: string;
@@ -23,8 +24,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
   bgColor,
   onPress,
 }) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
 
   return (
     <TouchableOpacity

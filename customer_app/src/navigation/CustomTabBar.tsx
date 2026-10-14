@@ -10,7 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, DARK_COLORS } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 
 const { width: W } = Dimensions.get('window');
 const TAB_W = W / 5;
@@ -131,8 +131,7 @@ const Pill = ({ activeIndex, colors }: { activeIndex: number; colors: typeof COL
 
 /* ─── Main Tab Bar ────────────────────────────────────────────── */
 export const CustomTabBar = ({ state, navigation }: any) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const insets = useSafeAreaInsets();
   const active = state.index;
 

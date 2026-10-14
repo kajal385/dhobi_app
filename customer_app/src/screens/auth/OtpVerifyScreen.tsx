@@ -4,6 +4,7 @@ import { useDispatch } from 'react-redux';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { COLORS, DARK_COLORS, SPACING } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { authSuccess } from '../../store/authSlice';
 import apiClient from '../../api/client';
 import Toast from 'react-native-toast-message';
@@ -16,8 +17,7 @@ export const OtpVerifyScreen = ({ route, navigation }: any) => {
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
   const dispatch = useDispatch();
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
 
   useEffect(() => {
     setTimer(30);

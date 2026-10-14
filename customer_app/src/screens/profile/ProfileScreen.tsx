@@ -10,11 +10,13 @@ import {
   Alert,
   Image,
   ImageBackground,
+  Switch,
+  Modal,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
-import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
+import { SPACING, SIZES } from '../../constants/theme';
 import AppScreen from '../../components/AppScreen';
 import { RootState } from '../../store';
 import { logoutUser } from '../../store/authSlice';
@@ -22,19 +24,20 @@ import { clearOrders } from '../../store/orderSlice';
 import { clearWallet } from '../../store/walletSlice';
 import { orderService } from '../../services/orderService';
 import { walletService } from '../../services/walletService';
+import { useTheme } from '../../hooks/useTheme';
 import Toast from 'react-native-toast-message';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { StandardModal, ModalDetailItem } from '../../components/StandardModal';
 
 export const ProfileScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors, themeMode, setThemeMode, toggleTheme } = useTheme();
   const dispatch = useDispatch();
   const { user } = useSelector((s: RootState) => s.auth);
   const { orders } = useSelector((s: RootState) => s.orders);
 
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [themeModalVisible, setThemeModalVisible] = useState(false);
   const [infoModal, setInfoModal] = useState<{
     visible: boolean;
     type?: 'info' | 'success';
@@ -130,11 +133,23 @@ export const ProfileScreen = ({ navigation }: any) => {
 
   const appMenu = [
     {
+      id: 'theme',
+      title: 'Appearance / Theme',
+      subtitle: themeMode === 'dark' ? 'Dark Mode (Active 🌙)' : themeMode === 'light' ? 'Light Mode (Active ☀️)' : 'System Default (Auto ⚙️)',
+      iconName: isDark ? 'weather-night' : 'white-balance-sunny',
+      iconBg: isDark ? '#26234D' : '#FEF3C7',
+      iconColor: isDark ? '#7B74FF' : '#D97706',
+      onPress: () => setThemeModalVisible(true),
+      isToggle: true,
+      toggleValue: isDark,
+      onToggle: toggleTheme,
+    },
+    {
       id: 'notifications',
       title: 'Notifications Settings',
       subtitle: 'Pickup, washing & delivery alerts',
       iconName: 'bell-outline',
-      iconBg: '#EDE8FF',
+      iconBg: isDark ? '#202024' : '#EDE8FF',
       iconColor: '#5B52E8',
       onPress: () => navigation.navigate('Notifications'),
     },
@@ -369,12 +384,12 @@ export const ProfileScreen = ({ navigation }: any) => {
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionHeading}>Preferences & Support</Text>
           <View style={[styles.menuCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            {appMenu.map((item, idx) => (
+            {appMenu.map((item: any, idx: number) => (
               <TouchableOpacity
                 key={item.id}
                 style={[
                   styles.menuItemRow,
-                  idx < appMenu.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#F4F3FA' },
+                  idx < appMenu.length - 1 && { borderBottomWidth: 1, borderBottomColor: isDark ? '#222033' : '#F4F3FA' },
                 ]}
                 onPress={item.onPress}
                 activeOpacity={0.7}
@@ -383,10 +398,24 @@ export const ProfileScreen = ({ navigation }: any) => {
                   <MaterialCommunityIcons name={item.iconName} size={20} color={item.iconColor} />
                 </View>
                 <View style={styles.menuTextCol}>
-                  <Text style={[styles.menuTitle, { color: '#321D8C' }]}>{item.title}</Text>
+                  <Text style={[styles.menuTitle, { color: isDark ? colors.text : '#321D8C' }]}>{item.title}</Text>
                   <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>{item.subtitle}</Text>
                 </View>
-                <Text style={styles.chevronArrow}>❯</Text>
+                {item.isToggle ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#7B74FF' : '#D97706' }}>
+                      {isDark ? '🌙 DARK' : '☀️ LIGHT'}
+                    </Text>
+                    <Switch
+                      value={item.toggleValue}
+                      onValueChange={item.onToggle}
+                      trackColor={{ false: '#CBD5E1', true: '#5B52E8' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                ) : (
+                  <Text style={[styles.chevronArrow, { color: isDark ? colors.textLight : '#A09EBF' }]}>❯</Text>
+                )}
               </TouchableOpacity>
             ))}
           </View>
@@ -441,6 +470,137 @@ export const ProfileScreen = ({ navigation }: any) => {
         onPrimaryAction={() => setInfoModal(prev => ({ ...prev, visible: false }))}
         onClose={() => setInfoModal(prev => ({ ...prev, visible: false }))}
       />
+
+      {/* Theme Selection Modal */}
+      <Modal
+        visible={themeModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setThemeModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)', justifyContent: 'flex-end' }}>
+          <View style={{
+            backgroundColor: colors.card,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            padding: 24,
+            borderWidth: 1,
+            borderColor: colors.border,
+          }}>
+            {/* Grab Bar */}
+            <View style={{ width: 40, height: 4, backgroundColor: isDark ? '#303036' : '#CBD5E1', borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <MaterialCommunityIcons name="theme-light-dark" size={24} color="#5B52E8" />
+                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>Appearance & Theme</Text>
+              </View>
+              <TouchableOpacity onPress={() => setThemeModalVisible(false)} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: colors.textSecondary }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 20 }}>
+              Customize your viewing experience with Light Mode, Dark Mode, or match your System settings.
+            </Text>
+
+            {/* Theme Options */}
+            {[
+              {
+                mode: 'light' as const,
+                title: 'Light Mode',
+                subtitle: 'Crisp, bright interface with warm pastel accents',
+                icon: 'white-balance-sunny',
+                iconColor: '#D97706',
+                iconBg: '#FEF3C7',
+              },
+              {
+                mode: 'dark' as const,
+                title: 'Dark Mode',
+                subtitle: 'Sleek #0B0B0D dark surfaces, comfortable in low light',
+                icon: 'weather-night',
+                iconColor: '#7B74FF',
+                iconBg: '#26234D',
+              },
+              {
+                mode: 'system' as const,
+                title: 'System Default',
+                subtitle: 'Automatically match your device appearance settings',
+                icon: 'cellphone-cog',
+                iconColor: '#10B981',
+                iconBg: '#D1FAE5',
+              },
+            ].map((opt) => {
+              const isSelected = themeMode === opt.mode;
+              return (
+                <TouchableOpacity
+                  key={opt.mode}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setThemeMode(opt.mode);
+                    Toast.show({
+                      type: 'success',
+                      text1: `${opt.title} Activated`,
+                      text2: opt.subtitle,
+                    });
+                    setTimeout(() => setThemeModalVisible(false), 200);
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: 14,
+                    borderRadius: 14,
+                    borderWidth: isSelected ? 2 : 1,
+                    borderColor: isSelected ? '#5B52E8' : colors.border,
+                    backgroundColor: isSelected ? (isDark ? '#202024' : '#F8F7FF') : colors.card,
+                    marginBottom: 10,
+                  }}
+                >
+                  <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: opt.iconBg, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <MaterialCommunityIcons name={opt.icon} size={22} color={opt.iconColor} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>{opt.title}</Text>
+                      {isSelected && (
+                        <View style={{ backgroundColor: '#5B52E8', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                          <Text style={{ fontSize: 10, fontWeight: '800', color: '#FFF' }}>ACTIVE</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{opt.subtitle}</Text>
+                  </View>
+                  <View style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    borderWidth: 2,
+                    borderColor: isSelected ? '#5B52E8' : colors.border,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    {isSelected && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#5B52E8' }} />}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setThemeModalVisible(false)}
+              style={{
+                marginTop: 10,
+                height: 48,
+                borderRadius: 14,
+                backgroundColor: isDark ? '#202024' : '#F1F5F9',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ImageBackground>
   );
 };

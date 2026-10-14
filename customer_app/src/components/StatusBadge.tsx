@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, useColorScheme } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { COLORS, DARK_COLORS, SIZES } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 import { OrderStatus } from '../types';
 
 interface StatusBadgeProps {
@@ -41,7 +42,7 @@ const DEFAULT_CONFIG = {
 };
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'md' }) => {
-  const isDark = useColorScheme() === 'dark';
+  const { isDark } = useTheme();
   const key = String(status || '').toLowerCase().trim();
   const config = STATUS_CONFIG[key] || {
     ...DEFAULT_CONFIG,

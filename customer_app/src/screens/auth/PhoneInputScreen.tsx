@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { COLORS, DARK_COLORS, SPACING } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { RootState } from '../../store';
 import { authStart, authSuccess, authFailure } from '../../store/authSlice';
 import apiClient from '../../api/client';
@@ -12,8 +13,7 @@ import Toast from 'react-native-toast-message';
 export const PhoneInputScreen = ({ navigation }: any) => {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
 
   const handleSendOtp = async () => {
     if (!phone || phone.length !== 10) {

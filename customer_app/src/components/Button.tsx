@@ -9,6 +9,7 @@ import {
   useColorScheme,
 } from 'react-native';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 
 interface ButtonProps {
   title: string;
@@ -33,8 +34,7 @@ export const Button: React.FC<ButtonProps> = ({
   textStyle,
   icon,
 }) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
 
   const getButtonStyles = (): (ViewStyle | undefined)[] => {
     const baseStyle: ViewStyle = {

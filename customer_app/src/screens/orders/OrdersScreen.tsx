@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { RootState } from '../../store';
 import { setOrders, ordersLoading, ordersError } from '../../store/orderSlice';
 import { orderService } from '../../services/orderService';
@@ -25,8 +26,7 @@ type Tab = 'active' | 'history';
 
 export const OrdersScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const dispatch = useDispatch();
   const { orders, loading } = useSelector((s: RootState) => s.orders);
   const [tab, setTab] = useState<Tab>('active');

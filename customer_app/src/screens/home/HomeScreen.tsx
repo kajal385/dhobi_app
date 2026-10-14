@@ -18,6 +18,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { API_BASE_URL, resolveImageUrl } from '../../constants/config';
 import { RootState } from '../../store';
 import { updateProfile } from '../../store/authSlice';
@@ -503,8 +504,7 @@ const formatShopLocation = (shop: ShopListItem) => {
 export const HomeScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const promoScrollViewRef = useRef<ScrollView>(null);
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const dispatch = useDispatch();
   const { user } = useSelector((s: RootState) => s.auth);
   const { orders, loading } = useSelector((s: RootState) => s.orders);

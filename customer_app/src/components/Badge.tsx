@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, useColorScheme, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 
 interface BadgeProps {
   label: string;
@@ -9,8 +10,7 @@ interface BadgeProps {
 }
 
 export const Badge: React.FC<BadgeProps> = ({ label, variant = 'info', style }) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
 
   const getThemeStyles = () => {
     switch (variant) {

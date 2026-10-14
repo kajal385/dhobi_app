@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, useColorScheme, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { Button } from './Button';
 import { COLORS, DARK_COLORS, SPACING } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 
 interface ErrorProps {
   message?: string;
@@ -14,8 +15,7 @@ export const ErrorState: React.FC<ErrorProps> = ({
   onRetry,
   style,
 }) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
 
   return (
     <View style={[styles.container, style]}>

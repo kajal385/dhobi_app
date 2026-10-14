@@ -12,6 +12,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -28,8 +29,7 @@ export interface BottomSheetRef {
 
 export const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
   ({ title, children, height = SCREEN_HEIGHT * 0.5 }, ref) => {
-    const isDark = useColorScheme() === 'dark';
-    const colors = isDark ? DARK_COLORS : COLORS;
+    const { isDark, colors } = useTheme();
 
     const [visible, setVisible] = React.useState(false);
     const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import AppScreen from '../../components/AppScreen';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { Shop } from '../../types';
 
 // Mock Search Results for shops with filter metadata
@@ -62,8 +63,7 @@ const MOCK_SHOPS: FilterableShop[] = [
 ];
 
 export const SearchScreen = ({ navigation }: any) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const [query, setQuery] = useState('');
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
 

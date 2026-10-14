@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, useColorScheme, ViewStyle } from 'react-native';
+import { View, StyleSheet, Animated, ViewStyle } from 'react-native';
 import { COLORS, DARK_COLORS, SIZES } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 
 interface SkeletonProps {
   width: number | string;
@@ -15,8 +16,7 @@ export const SkeletonLoader: React.FC<SkeletonProps> = ({
   borderRadius = SIZES.radius_sm,
   style,
 }) => {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark ? DARK_COLORS : COLORS;
+  const { isDark, colors } = useTheme();
   const shimmerAnimatedValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
