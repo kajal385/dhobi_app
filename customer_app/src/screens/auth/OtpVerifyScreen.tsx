@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, useColorScheme } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, useColorScheme, TouchableOpacity } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
@@ -12,9 +12,61 @@ export const OtpVerifyScreen = ({ route, navigation }: any) => {
   const { phone } = route.params;
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [timer, setTimer] = useState(30);
+  const [canResend, setCanResend] = useState(false);
   const dispatch = useDispatch();
   const isDark = useColorScheme() === 'dark';
   const colors = isDark ? DARK_COLORS : COLORS;
+
+  useEffect(() => {
+    setTimer(30);
+    setCanResend(false);
+    const interval = setInterval(() => {
+      setTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setCanResend(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleResend = async () => {
+    if (!canResend || resending) return;
+    setResending(true);
+    try {
+      await apiClient.post('/auth/send-otp', { mobile: phone });
+      Toast.show({
+        type: 'success',
+        text1: 'OTP Resent Successfully! 📩',
+        text2: 'A new 6-digit verification code has been sent.',
+      });
+      setTimer(30);
+      setCanResend(false);
+      const interval = setInterval(() => {
+        setTimer((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setCanResend(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch (e: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'Resend Failed',
+        text2: e.response?.data?.message || 'Could not resend OTP. Please try again.',
+      });
+    } finally {
+      setResending(false);
+    }
+  };
 
   const handleVerify = async () => {
     if (!otp || otp.length !== 6) {
@@ -89,6 +141,20 @@ export const OtpVerifyScreen = ({ route, navigation }: any) => {
           onChangeText={setOtp}
           style={{ letterSpacing: 8, textAlign: 'center' }}
         />
+
+        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginVertical: SPACING.md }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Didn't receive code? </Text>
+          <TouchableOpacity onPress={handleResend} disabled={!canResend || resending}>
+            <Text style={{
+              color: canResend ? colors.primary : colors.textLight,
+              fontSize: 14,
+              fontWeight: '700',
+              textDecorationLine: canResend ? 'underline' : 'none',
+            }}>
+              {canResend ? 'Resend OTP' : `Resend in ${timer}s`}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <Button
           title="Verify OTP"

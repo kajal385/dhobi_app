@@ -199,11 +199,19 @@ export const PickupVerificationScreen = ({ route }: any) => {
     Alert.alert('Item Added 👕', `Added ${newItemName} (₹${priceNum}) to order.`);
   };
 
-  const handleVerifyOtp = () => {
+  const handleVerifyOtp = async () => {
     if (otp === '1234' || otp.length === 4) {
       setPickupStatus('Reached');
       setStep(2);
-      Alert.alert('OTP Verified! ✅', 'Customer identity confirmed. Status updated to Reached.');
+      const numericId = task.rawOrder?.id || (task.id ? task.id.replace(/\D/g, '') : null);
+      if (numericId) {
+        try {
+          await apiClient.post(`/delivery/orders/${numericId}/arrive`);
+        } catch (e) {
+          console.log('Instant arrival notification error:', e);
+        }
+      }
+      Alert.alert('OTP Verified! ✅', 'Customer identity confirmed. Status updated to Reached and instant arrival notification sent.');
     } else {
       Alert.alert('Invalid OTP', 'Please enter 4-digit OTP provided by customer (Hint: 1234)');
     }
@@ -233,6 +241,13 @@ export const PickupVerificationScreen = ({ route }: any) => {
     setShowStatusModal(false);
     const numericId = task.rawOrder?.id || (task.id ? task.id.replace(/\D/g, '') : null);
     if (numericId) {
+      if (selectedStatus === 'Reached') {
+        try {
+          await apiClient.post(`/delivery/orders/${numericId}/arrive`);
+        } catch (e) {
+          console.log('Instant arrival notification error:', e);
+        }
+      }
       const apiStatus = selectedStatus === 'Picked Up' ? 'PICKED_UP' : (selectedStatus === 'Cancelled' ? 'CANCELLED' : selectedStatus);
       try {
         await apiClient.put(`/delivery/orders/${numericId}/pickup`, {

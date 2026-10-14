@@ -162,11 +162,54 @@ class DeliveryBoyController extends Controller
     }
 
     /**
+     * Rider arrived at customer pickup/delivery location (Instant Notification - DC-BUG-009)
+     */
+    public function markArrived(Request $request, $id)
+    {
+        $order = Order::findOrFail($id);
+        
+        DB::table('order_status_history')->insert([
+            'order_id'   => $order->id,
+            'status'     => 'REACHED',
+            'updated_by' => auth()->id() ?? 1,
+            'user_role'  => 'delivery_boy',
+            'notes'      => 'Delivery partner has arrived at your doorstep',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('notifications')->insert([
+            'user_id'    => $order->user_id,
+            'title'      => 'Rider Arrived at Your Location 🛵',
+            'message'    => 'Your delivery partner has reached your address for order #' . ($order->order_number ?? $order->id) . '. Please hand over clothes.',
+            'type'       => 'RIDER_ARRIVED',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Arrival notification sent instantly to customer',
+            'data'    => $order,
+        ]);
+    }
+
+    /**
      * Verify delivery with digital signature.
      */
     public function verifyDelivery(Request $request, $id)
     {
         $order = Order::findOrFail($id);
+
+        // Business Rule: Delivery status can only be DELIVERED when paid or COD collected
+        $reqPaymentStatus = strtoupper($request->input('payment_status', 'PAID'));
+        if (in_array($reqPaymentStatus, ['UNPAID', 'PENDING', 'FAILED', 'REJECTED'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order cannot be marked as DELIVERED without confirming payment or collecting COD.',
+            ], 422);
+        }
+
         $order->status = 'DELIVERED';
         $order->payment_status = 'PAID';
         $order->delivery_photo_url = $request->input('photo_url', 'https://via.placeholder.com/300');

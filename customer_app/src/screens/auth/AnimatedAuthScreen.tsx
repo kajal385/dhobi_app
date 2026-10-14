@@ -104,6 +104,29 @@ export default function AnimatedAuthScreen() {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [tempAuthData, setTempAuthData] = useState<any>(null);
+  const [timer, setTimer] = useState(30);
+  const [canResend, setCanResend] = useState(false);
+
+  useEffect(() => {
+    let interval: any = null;
+    if (page === 1) {
+      setTimer(30);
+      setCanResend(false);
+      interval = setInterval(() => {
+        setTimer((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setCanResend(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [page]);
 
   const translateX = useSharedValue(0);
   const animatedStyle = useAnimatedStyle(() => ({
@@ -168,6 +191,36 @@ export default function AnimatedAuthScreen() {
       if (result?.data?.dev_otp) setOtpError(`Dev OTP: ${result.data.dev_otp}`);
     } catch (e: any) {
       setError(e.message || "Could not send OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!canResend || loading) return;
+    setLoading(true);
+    setOtpError("");
+    try {
+      const result = await authService.sendOtp(normalizePhone(mobile), callingCode);
+      setTimer(30);
+      setCanResend(false);
+      const interval = setInterval(() => {
+        setTimer((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setCanResend(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      if (result?.data?.dev_otp) {
+        setOtpError(`Dev OTP: ${result.data.dev_otp}`);
+      } else {
+        setOtpError("OTP resent successfully! Check your phone.");
+      }
+    } catch (e: any) {
+      setOtpError(e.message || "Failed to resend OTP");
     } finally {
       setLoading(false);
     }
@@ -392,6 +445,22 @@ export default function AnimatedAuthScreen() {
                           {otpError}
                         </Text>
                       ) : null}
+
+                      <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 14, marginBottom: 14 }}>
+                        <Text style={{ color: 'rgba(0,0,0,0.6)', fontSize: 13, fontWeight: '500' }}>
+                          Didn't receive code?{' '}
+                        </Text>
+                        <Pressable onPress={handleResendOtp} disabled={!canResend || loading}>
+                          <Text style={{
+                            color: canResend ? '#6C4EF5' : 'rgba(0,0,0,0.4)',
+                            fontSize: 13,
+                            fontWeight: '700',
+                            textDecorationLine: canResend ? 'underline' : 'none',
+                          }}>
+                            {canResend ? 'Resend OTP' : `Resend in ${timer}s`}
+                          </Text>
+                        </Pressable>
+                      </View>
 
                       <GradientButton label="Verify" onPress={verifyCode} loading={loading} />
                     </KeyboardAwareScrollView>

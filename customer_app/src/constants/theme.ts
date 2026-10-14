@@ -24,10 +24,12 @@ export const COLORS = {
   gradientStart: '#FDE0D3',  // Figma: peach
   gradientEnd: '#FDDFC2',    // Figma: cream
 
-  // Surfaces
+  // Surface & Inputs
   background: '#FFFAF8',     // Warm white
   card: '#FFFFFF',
   cardAlt: '#F9F7FF',        // Faint lavender card
+  surface: '#FFFFFF',
+  inputBg: '#F8FAFC',
 
   // Text
   text: '#1A1830',
@@ -50,30 +52,37 @@ export const COLORS = {
 };
 
 export const DARK_COLORS = {
+  // Brand purple preserved
   primary: '#7B74FF',
-  primaryLight: '#2D2A5E',
+  primaryLight: '#26234D',
   primaryDark: '#5B52E8',
 
+  // Accent preserved
   accent: '#F97342',
-  accentLight: '#4A2A1F',
+  accentLight: '#3A231C',
 
-  lavender: '#2D2A5E',
-  pink: '#3A2040',
-  peach: '#4A2A1F',
-  cream: '#3D3020',
+  lavender: '#202024',
+  pink: '#2B202F',
+  peach: '#30231D',
+  cream: '#29241B',
 
-  gradientStart: '#4A2A1F',
-  gradientEnd: '#3D3020',
+  gradientStart: '#161619',
+  gradientEnd: '#202024',
 
-  background: '#0F0E1A',
-  card: '#1C1B2E',
-  cardAlt: '#252440',
+  // Professional Dark Theme Surfaces (exact prompt specs)
+  background: '#0B0B0D',     // Main background
+  card: '#161619',           // Card background
+  cardAlt: '#202024',        // Secondary background
+  surface: '#161619',
+  inputBg: '#19191D',        // Input background
 
-  text: '#F0EEFF',
-  textSecondary: '#9A98BC',
-  textLight: '#6B6889',
+  // High contrast text
+  text: '#FFFFFF',           // Primary text
+  textSecondary: '#B8B8C2',  // Secondary text
+  textLight: '#8A8A99',
 
-  border: '#2D2A5E',
+  // Border
+  border: '#303036',         // Border
 
   success: '#34D399',
   error: '#F87171',
@@ -82,7 +91,7 @@ export const DARK_COLORS = {
   white: '#FFFFFF',
   black: '#000000',
   transparent: 'transparent',
-  overlay: 'rgba(0, 0, 0, 0.6)',
+  overlay: 'rgba(0, 0, 0, 0.75)',
 };
 
 export const SPACING = {

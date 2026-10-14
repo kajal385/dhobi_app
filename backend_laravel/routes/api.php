@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\AdminDashboardController;
 use App\Http\Controllers\Api\V1\ShopController;
 use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\WalletController;
+use App\Http\Controllers\Api\V1\ShopServiceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -31,6 +32,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/auth/register', [AuthController::class, 'login']);
     Route::post('/auth/send-otp', [AuthController::class, 'sendOtp']);
+    Route::post('/auth/resend-otp', [AuthController::class, 'sendOtp']);
     Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp']);
     Route::get('/profile', [AuthController::class, 'profile']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
@@ -61,6 +63,8 @@ Route::prefix('v1')->group(function () {
     Route::get('/orders', [OrderController::class, 'index']);
     Route::post('/orders', [OrderController::class, 'store']);
     Route::get('/orders/{id}', [OrderController::class, 'show']);
+    Route::get('/orders/{id}/invoice', [OrderController::class, 'invoice']); // DC-BUG-008
+    Route::get('/orders/{id}/tracking', [OrderController::class, 'trackOrder']); // DC-BUG-007
     Route::post('/orders/{id}/cancel', [OrderController::class, 'cancel']);
     Route::post('/orders/{id}/confirm-availability', [OrderController::class, 'confirmAvailability']);
     Route::post('/orders/{id}/rate', [OrderController::class, 'rate']);
@@ -133,6 +137,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/location', [DeliveryBoyController::class, 'updateLocation']);
         Route::post('/orders/{id}/pickup-verify', [DeliveryBoyController::class, 'verifyPickup']);
         Route::put('/orders/{id}/pickup', [DeliveryBoyController::class, 'verifyPickup']);
+        Route::post('/orders/{id}/arrive', [DeliveryBoyController::class, 'markArrived']); // DC-BUG-009
+        Route::put('/orders/{id}/arrive', [DeliveryBoyController::class, 'markArrived']); // DC-BUG-009
         Route::post('/orders/{id}/delivery-verify', [DeliveryBoyController::class, 'verifyDelivery']);
         Route::put('/orders/{id}/deliver', [DeliveryBoyController::class, 'verifyDelivery']);
         Route::put('/assignments/{id}/status', [DeliveryBoyController::class, 'verifyPickup']);

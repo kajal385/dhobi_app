@@ -8,6 +8,7 @@ use App\Models\LaundryShop;
 use App\Models\DeliveryBoy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class AuthController extends Controller
@@ -240,7 +241,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Customer Send OTP
+     * Customer Send OTP with Resend Cooldown Timer
      */
     public function sendOtp(Request $request)
     {
@@ -249,11 +250,31 @@ class AuthController extends Controller
             return response()->json(['success' => false, 'message' => 'Mobile number is required'], 422);
         }
 
+        $cleanPhone = preg_replace('/\D/', '', (string) $phone);
+        $last10     = substr($cleanPhone, -10);
+        $cacheKey   = 'otp_retry_' . ($last10 ?: $cleanPhone);
+
+        // Check if retry is attempted before the 30s cooldown expired
+        if (Cache::has($cacheKey)) {
+            $remaining = (int) (Cache::get($cacheKey) - time());
+            if ($remaining > 0) {
+                return response()->json([
+                    'success'     => false,
+                    'message'     => "Please wait {$remaining} seconds before requesting a new OTP.",
+                    'retry_after' => $remaining,
+                ], 429);
+            }
+        }
+
+        // Set 30-second cooldown timer
+        Cache::put($cacheKey, time() + 30, 30);
+
         return response()->json([
-            'success' => true,
-            'message' => 'OTP sent successfully',
-            'data'    => [
-                'dev_otp' => '123456',
+            'success'     => true,
+            'message'     => 'OTP sent successfully',
+            'data'        => [
+                'dev_otp'     => '123456',
+                'retry_after' => 30,
             ],
         ]);
     }
@@ -347,7 +368,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Customer Update Profile
+     * Customer Update Profile (DC-BUG-010: special_instructions up to 250 characters)
      */
     public function updateProfile(Request $request)
     {
@@ -355,16 +376,36 @@ class AuthController extends Controller
         $user = $userId ? User::find($userId) : (auth()->user() ?? User::where('role', 'customer')->latest()->first());
 
         if ($user) {
-            if ($request->filled('name'))  $user->name  = $request->input('name');
-            if ($request->filled('email')) $user->email = $request->input('email');
-            if ($request->filled('city'))  $user->city  = $request->input('city');
+            if ($request->filled('name'))            $user->name            = $request->input('name');
+            if ($request->filled('email'))           $user->email           = $request->input('email');
+            if ($request->filled('city'))            $user->city            = $request->input('city');
+            if ($request->filled('gender'))          $user->gender          = strtolower($request->input('gender'));
+            if ($request->filled('dob'))             $user->dob             = $request->input('dob');
+            if ($request->filled('date_of_birth'))   $user->dob             = $request->input('date_of_birth');
+            
+            // Support special laundry instructions up to 250 characters (DC-BUG-010)
+            if ($request->has('special_instructions') || $request->has('instructions')) {
+                $instructions = $request->input('special_instructions') ?? $request->input('instructions');
+                $truncated = mb_substr((string)$instructions, 0, 250);
+                
+                // Save to user model if attribute/column exists or save to user meta
+                if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'special_instructions')) {
+                    $user->special_instructions = $truncated;
+                }
+                // Also store in address or user profile preferences
+                $user->instructions = $truncated;
+            }
+
             $user->save();
         }
 
         return response()->json([
             'success' => true,
             'message' => 'Profile updated successfully',
-            'data'    => $user,
+            'data'    => array_merge($user ? $user->toArray() : [], [
+                'special_instructions' => $user->special_instructions ?? $request->input('special_instructions') ?? '',
+                'instructions'         => $user->instructions ?? $request->input('special_instructions') ?? '',
+            ]),
         ]);
     }
 }

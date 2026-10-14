@@ -297,8 +297,13 @@ export const MapScreen = ({ navigation, route }: any) => {
             style={styles.myLocationBtn}
             onPress={handleMyGpsClick}
             activeOpacity={0.8}
+            accessibilityLabel="Locate Me"
+            testID="locate_me_btn"
           >
-            <Text style={{ fontSize: 20 }}>🎯</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, gap: 6 }}>
+              <Text style={{ fontSize: 18 }}>🎯</Text>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#321D8C' }}>Locate Me</Text>
+            </View>
           </TouchableOpacity>
         )}
       </View>
@@ -737,9 +742,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     bottom: 220,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -749,6 +753,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 5,
     zIndex: 10,
+    paddingHorizontal: 8,
   },
 });
 

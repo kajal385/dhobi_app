@@ -42,6 +42,7 @@ export const EditProfileScreen = ({ navigation, route }: any) => {
   const [area, setArea] = useState(user?.area || 'Wakad');
   const [city, setCity] = useState(user?.city || 'Pune');
   const [pincode, setPincode] = useState(user?.pincode || '411057');
+  const [specialInstructions, setSpecialInstructions] = useState((user as any)?.special_instructions || (user as any)?.instructions || 'Please use gentle detergent for formal shirts and steam press carefully.');
   const [latitude, setLatitude] = useState<number | undefined>(user?.latitude || undefined);
   const [longitude, setLongitude] = useState<number | undefined>(user?.longitude || undefined);
 
@@ -100,6 +101,8 @@ export const EditProfileScreen = ({ navigation, route }: any) => {
         area: area.trim(),
         city: city.trim(),
         pincode: pincode.trim(),
+        special_instructions: specialInstructions.trim().slice(0, 250),
+        instructions: specialInstructions.trim().slice(0, 250),
         latitude,
         longitude,
       };
@@ -373,6 +376,41 @@ export const EditProfileScreen = ({ navigation, route }: any) => {
               value={pincode}
               onChangeText={setPincode}
             />
+          </View>
+
+          {/* Section 3: Special Laundry Instructions (DC-BUG-010) */}
+          <View style={styles.fieldContainer}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={[styles.label, { color: colors.text, marginBottom: 0 }]}>
+                🧺 Special Laundry Instructions (Saved for All Orders)
+              </Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: specialInstructions.length > 230 ? '#EF4444' : '#64748B' }}>
+                {specialInstructions.length}/250 chars
+              </Text>
+            </View>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  color: colors.text,
+                  minHeight: 80,
+                  textAlignVertical: 'top',
+                  paddingTop: 10,
+                },
+              ]}
+              placeholder="e.g. Separate dark colors, use gentle fabric conditioner, do not starch formal shirts..."
+              placeholderTextColor={colors.textLight}
+              multiline
+              numberOfLines={3}
+              maxLength={250}
+              value={specialInstructions}
+              onChangeText={(txt) => setSpecialInstructions(txt.slice(0, 250))}
+            />
+            <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4 }}>
+              These instructions will be automatically provided to laundry stores and delivery partners for your orders (up to 250 characters).
+            </Text>
           </View>
 
           {/* Save Button */}

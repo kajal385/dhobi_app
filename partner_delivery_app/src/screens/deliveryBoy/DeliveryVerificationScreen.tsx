@@ -170,12 +170,22 @@ export const DeliveryVerificationScreen = ({ route }: any) => {
   };
 
   const handleCompleteDelivery = async () => {
+    // Business Rule: Without paid or COD done, do NOT allow delivered done status
+    if (codAmount > 0 && !paymentCollected) {
+      Alert.alert(
+        'Payment Required 💳',
+        `Cash/Payment of ₹${codAmount} is pending.\n\nPlease collect payment from the customer and tap "Mark Payment Received" before marking the order as Delivered.`
+      );
+      return;
+    }
+
     setDeliveryStatus('Delivered');
     const numericId = task.rawOrder?.id || (task.id ? task.id.replace(/\D/g, '') : null);
     if (numericId) {
       try {
         await apiClient.put(`/delivery/orders/${numericId}/deliver`, {
           status: 'DELIVERED',
+          payment_status: 'PAID',
           photo_url: photoUri,
           signature_url: null,
         });
@@ -184,7 +194,7 @@ export const DeliveryVerificationScreen = ({ route }: any) => {
       }
     }
     mockDataStore.updateOrderStatus(task.id, 'Delivered', 'Order delivered & payment collected by executive');
-    Alert.alert('Delivery Completed! 🎉', `Order ${task.id} successfully delivered! Status updated to Delivered.`);
+    Alert.alert('Delivery Completed! 🎉', `Order ${task.id} successfully delivered! Payment collected & status updated to Delivered.`);
     navigation.goBack();
   };
 

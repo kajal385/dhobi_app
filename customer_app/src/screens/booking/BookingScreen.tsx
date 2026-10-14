@@ -15,6 +15,7 @@ import {
   Dimensions,
   Image,
   Modal,
+  Linking,
 } from 'react-native';
 import AppScreen from '../../components/AppScreen';
 import { useDispatch, useSelector } from 'react-redux';
@@ -53,6 +54,7 @@ const CLOTHES_ITEMS = [
   { key: 'saree', label: 'Saree', price: 150, icon: '🥻' },
   { key: 'towel', label: 'Towel', price: 40, icon: '🧼' },
   { key: 'shirt', label: 'Shirt', price: 40, icon: '👔' },
+  { key: 'suit', label: 'Suit (2 Piece)', price: 250, icon: '👔' },
 ];
 
 const ITEM_IMAGES: Record<string, any> = {
@@ -63,6 +65,7 @@ const ITEM_IMAGES: Record<string, any> = {
   saree: require('../../../assets/myimages/row2_2.png'),
   towel: require('../../../assets/myimages/row2_3.png'),
   shirt: require('../../../assets/myimages/row3_1.png'),
+  suit: require('../../../assets/myimages/row3_1.png'),
 };
 
 const ADDONS_LIST = [
@@ -122,26 +125,78 @@ const isSlotPast = (slot: string, selectedDate: Date): boolean => {
 };
 
 // Helper: Parse shop's closed days from working_hours (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
-const getClosedDaysFromShop = (shopObj: any): number[] => {
+// Express delivery operates 7 days a week, enabling Sunday morning slots (DC-BUG-004)
+const getClosedDaysFromShop = (shopObj: any, isExpress: boolean = false): number[] => {
+  if (isExpress) return []; // Sunday morning express delivery enabled
   if (!shopObj) return [];
-  if (Array.isArray(shopObj.closed_days)) {
-    const dayMap: Record<string, number> = {
-      sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2,
-      wednesday: 3, wed: 3, thursday: 4, thu: 4, friday: 5, fri: 5,
-      saturday: 6, sat: 6
-    };
-    return shopObj.closed_days
-      .map((d: any) => typeof d === 'number' ? d : dayMap[String(d).toLowerCase()])
-      .filter((n: any) => typeof n === 'number' && !isNaN(n));
-  }
-  const wh = (shopObj.working_hours || shopObj.workingHours || '').toLowerCase();
+
+  const dayMap: Record<string, number> = {
+    sunday: 0, sun: 0, 
+    monday: 1, mon: 1, 
+    tuesday: 2, tue: 2,
+    wednesday: 3, wed: 3, 
+    thursday: 4, thu: 4, 
+    friday: 5, fri: 5,
+    saturday: 6, sat: 6
+  };
+
   const closed = new Set<number>();
-  if ((wh.includes('sun') && (wh.includes('off') || wh.includes('close'))) || wh.includes('mon-sat') || wh.includes('mon - sat')) {
-    closed.add(0); // Sunday
+
+  // 1. Array of closed days: e.g. ['Sunday'] or [0, 6]
+  if (Array.isArray(shopObj.closed_days)) {
+    shopObj.closed_days.forEach((d: any) => {
+      if (typeof d === 'number' && !isNaN(d)) {
+        closed.add(d);
+      } else if (typeof d === 'string') {
+        const val = dayMap[d.toLowerCase().trim()];
+        if (typeof val === 'number') closed.add(val);
+      }
+    });
+    return Array.from(closed);
   }
-  if (wh.includes('sat') && (wh.includes('off') || wh.includes('close')) && !wh.includes('mon-sat') && !wh.includes('mon - sat')) {
-    closed.add(6); // Saturday
+
+  const rawHours = shopObj.working_hours ?? shopObj.workingHours;
+
+  // 2. Array of daily schedule objects: e.g. [{ day: 'Sunday', is_closed: true }]
+  if (Array.isArray(rawHours)) {
+    rawHours.forEach((item: any) => {
+      if (!item) return;
+      const dayStr = String(item.day || '').toLowerCase().trim();
+      const dayNum = dayMap[dayStr];
+      if (typeof dayNum === 'number') {
+        if (item.is_closed || item.closed || item.status === 'closed' || item.open === false) {
+          closed.add(dayNum);
+        }
+      }
+    });
+    return Array.from(closed);
   }
+
+  // 3. Object with day keys: e.g. { sunday: { is_closed: true } }
+  if (rawHours && typeof rawHours === 'object') {
+    Object.keys(rawHours).forEach((key) => {
+      const dayNum = dayMap[key.toLowerCase().trim()];
+      const val = rawHours[key];
+      if (typeof dayNum === 'number' && val) {
+        if (val.is_closed || val.closed || val.status === 'closed' || val.open === false) {
+          closed.add(dayNum);
+        }
+      }
+    });
+    return Array.from(closed);
+  }
+
+  // 4. String format: e.g. "Mon-Sat: 9am-9pm, Sunday Closed"
+  if (typeof rawHours === 'string') {
+    const wh = rawHours.toLowerCase();
+    if (wh.includes('sun') && (wh.includes('off') || wh.includes('close'))) {
+      closed.add(0); // Sunday
+    }
+    if (wh.includes('sat') && (wh.includes('off') || wh.includes('close'))) {
+      closed.add(6); // Saturday
+    }
+  }
+
   return Array.from(closed);
 };
 
@@ -233,7 +288,7 @@ const BookingScreenInner = ({ navigation, route }: any) => {
     if (s.includes('dry') || s.includes('clean')) return 'dry_clean';
     if (s.includes('shoe')) return 'shoe_laundry';
     if (s.includes('only') && s.includes('wash')) return 'only_wash';
-    return rawKey;
+    return s.replace(/[^a-z0-9]/g, '_');
   };
 
   const [activeService, setActiveService] = useState<string | null>(
@@ -241,6 +296,13 @@ const BookingScreenInner = ({ navigation, route }: any) => {
       ? (initialCombinations[0]?.serviceKey || 'wash_fold')
       : resolveServiceKey(route.params?.serviceType || route.params?.selectedCategory)
   );
+
+  // Delivery Speed (Standard 48h vs Express 24h) - DC-BUG-004
+  const [deliverySpeed, setDeliverySpeed] = useState<'standard' | 'express'>('standard');
+
+  // Coupon Code & Applied Coupon (DC-BUG-005)
+  const [couponCode, setCouponCode] = useState<string>('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountPercent?: number; discountAmount?: number } | null>(null);
 
   // Step 3: Add-ons
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
@@ -439,10 +501,22 @@ const BookingScreenInner = ({ navigation, route }: any) => {
     return sum + (addon ? addon.price : 0);
   }, 0);
   const pickupDeliveryFee = itemsSubtotal > 199 ? 0 : 30; // Free above 199
-  const totalAmount = itemsSubtotal + addonsSubtotal + pickupDeliveryFee;
 
-  // Closed Days parsing (e.g. [0] for Sunday Off)
-  const closedDays = React.useMemo(() => getClosedDaysFromShop(shopDetails), [shopDetails]);
+  // Express delivery speed fee (+₹50 for 24h turnaround) - DC-BUG-004
+  const isExpress = deliverySpeed === 'express';
+  const expressCharge = isExpress ? 50 : 0;
+
+  // Coupon discount calculation (DC-BUG-005):
+  // FIRST50 applies 50% discount to itemsSubtotal (NOT to delivery fee!)
+  const discountAmount = appliedCoupon?.code === 'FIRST50'
+    ? Math.min(Math.round(itemsSubtotal * 0.50), itemsSubtotal)
+    : (appliedCoupon?.discountAmount || 0);
+
+  const discountedItemsSubtotal = Math.max(0, itemsSubtotal - discountAmount);
+  const totalAmount = discountedItemsSubtotal + addonsSubtotal + pickupDeliveryFee + expressCharge;
+
+  // Closed Days parsing: when Express delivery is active, Sunday morning slots are enabled (DC-BUG-004)
+  const closedDays = React.useMemo(() => getClosedDaysFromShop(shopDetails, isExpress), [shopDetails, isExpress]);
 
   // Generate upcoming next 10 days for horizontal strip
   const upcomingDays = React.useMemo(() => {
@@ -558,22 +632,34 @@ const BookingScreenInner = ({ navigation, route }: any) => {
 
   const handleAddItem = (itemKey: string, delta: number) => {
     if (!activeService) return;
+    const targetNormService = resolveServiceKey(activeService);
     setAddedCombinations(prev => {
-      const existing = prev.find(c => c.serviceKey === activeService && c.itemKey === itemKey);
-      if (existing) {
+      const idx = prev.findIndex(c => 
+        (resolveServiceKey(c.serviceKey) === targetNormService || c.serviceKey === activeService) && 
+        (c.itemKey === itemKey || c.itemKey.toLowerCase() === itemKey.toLowerCase())
+      );
+      if (idx >= 0) {
+        const existing = prev[idx];
         const newQty = Math.max(0, existing.quantity + delta);
-        if (newQty === 0) return prev.filter(c => c.id !== existing.id);
-        return prev.map(c => c.id === existing.id ? { ...c, quantity: newQty } : c);
+        if (newQty === 0) return prev.filter((_, i) => i !== idx);
+        const updated = [...prev];
+        updated[idx] = { ...existing, quantity: newQty };
+        return updated;
       } else if (delta > 0) {
-        return [...prev, { id: Date.now().toString() + Math.random(), serviceKey: activeService, itemKey, quantity: delta }];
+        return [...prev, { id: `${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, serviceKey: activeService, itemKey, quantity: delta }];
       }
       return prev;
     });
   };
 
-  const getQtyForActiveService = (itemKey: string) => {
-    if (!activeService) return 0;
-    const existing = addedCombinations.find(c => c.serviceKey === activeService && c.itemKey === itemKey);
+  const getQtyForActiveService = (itemKey: string, serviceKey?: string) => {
+    const sKey = serviceKey || activeService;
+    if (!sKey) return 0;
+    const targetNormService = resolveServiceKey(sKey);
+    const existing = addedCombinations.find(c => 
+      (resolveServiceKey(c.serviceKey) === targetNormService || c.serviceKey === sKey) && 
+      (c.itemKey === itemKey || c.itemKey.toLowerCase() === itemKey.toLowerCase())
+    );
     return existing ? existing.quantity : 0;
   };
 
@@ -616,9 +702,9 @@ const BookingScreenInner = ({ navigation, route }: any) => {
       };
     });
 
-    // Calculate delivery date (2 days after pickup by default)
+    // Calculate delivery date (1 day for express, 2 days for standard) - DC-BUG-004
     const delDate = new Date(pickupDate);
-    delDate.setDate(delDate.getDate() + 2);
+    delDate.setDate(delDate.getDate() + (isExpress ? 1 : 2));
 
     // Determine primary service type
     const determinedService = activeService || (addedCombinations.length > 0 ? addedCombinations[0].serviceKey : 'wash_fold');
@@ -627,6 +713,20 @@ const BookingScreenInner = ({ navigation, route }: any) => {
     const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
     const localPickupDateStr = `${pickupDate.getFullYear()}-${pad(pickupDate.getMonth() + 1)}-${pad(pickupDate.getDate())}`;
     const localDeliveryDateStr = `${delDate.getFullYear()}-${pad(delDate.getMonth() + 1)}-${pad(delDate.getDate())}`;
+
+    // UPI Payment Intent Launch on Android 14 (DC-BUG-006)
+    if (['google_pay', 'phonepe', 'paytm', 'upi'].includes(paymentMethod)) {
+      try {
+        const upiUrl = `upi://pay?pa=dhobipro@upi&pn=DhobiPro&am=${totalAmount}&cu=INR&tn=Order_Payment`;
+        Linking.canOpenURL(upiUrl).then(supported => {
+          if (supported) {
+            Linking.openURL(upiUrl).catch(() => {});
+          }
+        }).catch(() => {});
+      } catch (err) {
+        console.log('UPI intent launch handled:', err);
+      }
+    }
 
     setLoading(true);
     try {
@@ -654,11 +754,17 @@ const BookingScreenInner = ({ navigation, route }: any) => {
         pickup_address: (address as any).full_address || (address as any).address_line1 || `${address.label || 'Home'}, ${address.city || 'Pune'}`,
         total_amount: totalAmount,
         subtotal: itemsSubtotal,
+        is_express: isExpress,
+        express_charge: expressCharge,
+        delivery_speed: deliverySpeed,
+        coupon_code: appliedCoupon?.code,
+        discount_amount: discountAmount,
+        discount: discountAmount,
         pickup_date: localPickupDateStr,
         pickup_time: selectedSlot,
         pickup_slot: selectedSlot,
         delivery_date: localDeliveryDateStr,
-        notes: `Time Slot: ${selectedSlot}. Addons: ${selectedAddons.join(', ')}`,
+        notes: `Time Slot: ${selectedSlot}. Speed: ${deliverySpeed.toUpperCase()}. Addons: ${selectedAddons.join(', ')}`,
         use_wallet: paymentMethod === 'wallet',
         payment_method: paymentMethod,
       });
@@ -835,7 +941,13 @@ const BookingScreenInner = ({ navigation, route }: any) => {
 
           <View style={styles.servicesContainer}>
             {availableServices.map(service => {
-              const isSelected = activeService === service.key || (activeService && service.title.toLowerCase() === activeService.toLowerCase());
+              const normKey = resolveServiceKey(service.key);
+              const normActive = activeService ? resolveServiceKey(activeService) : null;
+              const isSelected = activeService === service.key || (normActive && normKey === normActive);
+              const serviceItemsCount = addedCombinations
+                .filter(c => resolveServiceKey(c.serviceKey) === normKey)
+                .reduce((acc, c) => acc + c.quantity, 0);
+
               return (
                 <View key={service.key} style={{ marginBottom: 16 }}>
                   <TouchableOpacity
@@ -866,6 +978,13 @@ const BookingScreenInner = ({ navigation, route }: any) => {
                         {service.desc}
                       </Text>
                     </View>
+                    {serviceItemsCount > 0 && (
+                      <View style={{ backgroundColor: '#EDE8FF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, marginRight: 8 }}>
+                        <Text style={{ color: '#5B52E8', fontSize: 11, fontWeight: '800' }}>
+                          {serviceItemsCount} {serviceItemsCount === 1 ? 'item' : 'items'}
+                        </Text>
+                      </View>
+                    )}
                     {isSelected && (
                       <View style={styles.checkboxContainer}>
                         <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '900', textAlign: 'center', lineHeight: 22 }}>✓</Text>
@@ -1137,17 +1256,161 @@ const BookingScreenInner = ({ navigation, route }: any) => {
             })}
           </View>
 
+          {/* Delivery Speed Selection (DC-BUG-004) */}
+          <Text style={[styles.sectionHeading, { color: colors.text }]}>Delivery Speed</Text>
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setDeliverySpeed('standard')}
+              style={{
+                flex: 1,
+                backgroundColor: colors.card,
+                borderRadius: 14,
+                padding: 14,
+                borderWidth: deliverySpeed === 'standard' ? 2 : 1,
+                borderColor: deliverySpeed === 'standard' ? '#5B52E8' : colors.border,
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>Standard</Text>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#16A34A' }}>FREE</Text>
+              </View>
+              <Text style={{ fontSize: 12, color: colors.textSecondary }}>Delivered in 48 hours</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setDeliverySpeed('express')}
+              style={{
+                flex: 1,
+                backgroundColor: deliverySpeed === 'express' ? (isDark ? '#2D2A5E' : '#EDE8FF') : colors.card,
+                borderRadius: 14,
+                padding: 14,
+                borderWidth: deliverySpeed === 'express' ? 2 : 1,
+                borderColor: deliverySpeed === 'express' ? '#5B52E8' : colors.border,
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: deliverySpeed === 'express' ? '#5B52E8' : colors.text }}>⚡ Express</Text>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#5B52E8' }}>+₹50</Text>
+              </View>
+              <Text style={{ fontSize: 12, color: colors.textSecondary }}>Delivered in 24 hours (Sunday open)</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Promo Code / Coupons (DC-BUG-005) */}
+          <Text style={[styles.sectionHeading, { color: colors.text }]}>Coupons & Offers</Text>
+          <View style={{ backgroundColor: colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.border, marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+              <TextInput
+                style={{
+                  flex: 1,
+                  height: 44,
+                  backgroundColor: isDark ? '#1C1B28' : '#F8FAFC',
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  paddingHorizontal: 12,
+                  fontSize: 14,
+                  fontWeight: '700',
+                  color: colors.text,
+                  textTransform: 'uppercase',
+                }}
+                placeholder="Enter Promo Code"
+                placeholderTextColor={colors.textLight}
+                value={couponCode}
+                onChangeText={setCouponCode}
+                autoCapitalize="characters"
+              />
+              <TouchableOpacity
+                onPress={() => {
+                  const clean = couponCode.trim().toUpperCase();
+                  if (clean === 'FIRST50') {
+                    setAppliedCoupon({ code: 'FIRST50', discountPercent: 50 });
+                    Toast.show({
+                      type: 'success',
+                      text1: 'Coupon FIRST50 Applied! 🎉',
+                      text2: '50% discount applied to clothes subtotal!',
+                    });
+                  } else if (clean) {
+                    Toast.show({
+                      type: 'error',
+                      text1: 'Invalid Coupon',
+                      text2: `Code "${clean}" is not valid. Try FIRST50 for 50% off.`,
+                    });
+                  }
+                }}
+                style={{
+                  backgroundColor: '#5B52E8',
+                  paddingHorizontal: 18,
+                  height: 44,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 13 }}>Apply</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Quick Chip for FIRST50 */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => {
+                  setCouponCode('FIRST50');
+                  setAppliedCoupon({ code: 'FIRST50', discountPercent: 50 });
+                  Toast.show({
+                    type: 'success',
+                    text1: 'FIRST50 Applied! 🏷️',
+                    text2: '50% off clothes subtotal applied!',
+                  });
+                }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FEF3C7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}
+              >
+                <Text style={{ fontSize: 13 }}>🏷️</Text>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#B45309' }}>FIRST50</Text>
+                <Text style={{ fontSize: 11, color: '#92400E', fontWeight: '600' }}>(50% OFF Clothes Subtotal)</Text>
+              </TouchableOpacity>
+
+              {appliedCoupon && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setAppliedCoupon(null);
+                    setCouponCode('');
+                    Toast.show({ type: 'info', text1: 'Coupon removed' });
+                  }}
+                  style={{ padding: 4 }}
+                >
+                  <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '700' }}>Remove</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
           {/* Payment Summary */}
           <Text style={[styles.sectionHeading, { color: colors.text }]}>Payment Summary</Text>
           <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.summaryRow}>
-              <Text style={{ color: colors.textSecondary }}>Total</Text>
+              <Text style={{ color: colors.textSecondary }}>Items Subtotal</Text>
               <Text style={[{ color: colors.text }, styles.boldText]}>₹{itemsSubtotal}</Text>
             </View>
+            {discountAmount > 0 && (
+              <View style={styles.summaryRow}>
+                <Text style={{ color: '#16A34A', fontWeight: '700' }}>Coupon Discount (FIRST50)</Text>
+                <Text style={[{ color: '#16A34A' }, styles.boldText]}>-₹{discountAmount}</Text>
+              </View>
+            )}
             <View style={styles.summaryRow}>
               <Text style={{ color: colors.textSecondary }}>Add-ons</Text>
               <Text style={[{ color: colors.text }, styles.boldText]}>₹{addonsSubtotal}</Text>
             </View>
+            {isExpress && (
+              <View style={styles.summaryRow}>
+                <Text style={{ color: '#5B52E8', fontWeight: '700' }}>⚡ Express Turnaround (24 hrs)</Text>
+                <Text style={[{ color: '#5B52E8' }, styles.boldText]}>+₹{expressCharge}</Text>
+              </View>
+            )}
             <View style={styles.summaryRow}>
               <Text style={{ color: colors.textSecondary }}>Pickup & Delivery</Text>
               <Text style={{ color: colors.success, fontWeight: '700' }}>

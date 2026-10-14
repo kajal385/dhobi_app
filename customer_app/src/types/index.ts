@@ -88,6 +88,7 @@ export interface Order {
   total: number;
   notes?: string;
   payment_method?: string;
+  payment_status?: string;
   customer_name?: string;
   customer_mobile?: string;
   customer_phone?: string;

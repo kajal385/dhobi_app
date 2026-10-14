@@ -72,23 +72,38 @@ const errorStyles = StyleSheet.create({
   buttonText: { color: '#FFF', fontWeight: '600', fontSize: 16 },
 });
 
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+
 const queryClient = new QueryClient();
 
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+function AppContent(): React.JSX.Element {
+  const { isDark, colors } = useTheme();
 
+  return (
+    <>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={isDark ? '#0B0B0D' : '#FFFAF8'}
+      />
+      <ErrorBoundary>
+        <RootNavigator />
+      </ErrorBoundary>
+      <Toast />
+    </>
+  );
+}
+
+function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ReduxProvider store={store}>
           <QueryClientProvider client={queryClient}>
-            <PaperProvider>
-              <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-              <ErrorBoundary>
-                <RootNavigator />
-              </ErrorBoundary>
-              <Toast />
-            </PaperProvider>
+            <ThemeProvider>
+              <PaperProvider>
+                <AppContent />
+              </PaperProvider>
+            </ThemeProvider>
           </QueryClientProvider>
         </ReduxProvider>
       </SafeAreaProvider>

@@ -34,21 +34,22 @@ export async function requestLocationPermission(): Promise<boolean> {
 /** Get the device's current GPS coordinates fast and accurately */
 export function getCurrentLocation(): Promise<{ latitude: number; longitude: number }> {
   return new Promise((resolve) => {
-    // 1. Fast Network / Cell / Wi-Fi location first (instant on Android)
+    // 1. High Accuracy GPS first with zero stale cache to pinpoint exact device GPS coordinates
     Geolocation.getCurrentPosition(
       (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-      () => {
-        // 2. Fallback to High Accuracy GPS if network positioning is unavailable
+      (err) => {
+        console.warn('High accuracy GPS error, trying fallback:', err);
+        // 2. Fallback to network/cell location if high-accuracy GPS is slow/unavailable
         Geolocation.getCurrentPosition(
           (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
           () => {
-            // 3. Fallback to default Wakad, Pune coordinates if device has no location available
+            // 3. Fallback to default Wakad, Pune coordinates if device location is completely disabled
             resolve({ latitude: 18.5980, longitude: 73.7680 });
           },
-          { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 }
+          { enableHighAccuracy: false, timeout: 6000, maximumAge: 10000 }
         );
       },
-      { enableHighAccuracy: false, timeout: 4000, maximumAge: 300000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   });
 }
@@ -71,21 +72,26 @@ export async function reverseGeocode(
 
     if (json.status === 'OK' && json.results && json.results.length > 0) {
       clearTimeout(timeoutId);
-      const result = json.results[0];
       let city = '';
       let pincode = '';
-      for (const component of result.address_components) {
-        if (component.types.includes('locality')) {
-          city = component.long_name;
-        }
-        if (component.types.includes('postal_code')) {
-          pincode = component.long_name;
+      
+      // Comprehensive check across all returned results for postal_code and city
+      for (const res of json.results) {
+        for (const component of res.address_components || []) {
+          if (!city && (component.types.includes('locality') || component.types.includes('sublocality_level_1') || component.types.includes('administrative_area_level_2'))) {
+            city = component.long_name;
+          }
+          if (!pincode && component.types.includes('postal_code')) {
+            pincode = component.long_name;
+          }
         }
       }
+
+      const primaryResult = json.results[0];
       return {
-        address_line1: result.formatted_address,
-        city,
-        pincode,
+        address_line1: primaryResult.formatted_address,
+        city: city || 'Pune',
+        pincode: pincode || '411057',
         label: 'Selected Location',
         latitude,
         longitude,
@@ -109,8 +115,8 @@ export async function reverseGeocode(
       }
 
       const { address } = json;
-      const city = address.city || address.town || address.village || address.county || address.state_district || '';
-      const pincode = address.postcode || '';
+      const city = address.city || address.town || address.village || address.suburb || address.county || address.state_district || 'Pune';
+      const pincode = address.postcode || address.postal_code || '411057';
 
       return {
         address_line1: json.display_name,

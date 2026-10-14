@@ -482,6 +482,14 @@ export const orderService = {
     notes?: string;
     use_wallet?: boolean;
     payment_method?: string;
+    is_express?: boolean;
+    express_charge?: number;
+    delivery_speed?: string;
+    coupon_code?: string;
+    discount_amount?: number;
+    discount?: number;
+    delivery_fee?: number;
+    [key: string]: any;
   }): Promise<Order> => {
     try {
       const res = await apiClient.post('/orders', data);

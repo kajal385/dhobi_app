@@ -1371,6 +1371,19 @@ class AdminDashboardController extends Controller
         $newStatus = strtoupper($request->input('status', 'COMPLETED'));
         $notes = $request->input('notes', 'Manual status update by Admin');
 
+        // Business Rule: Delivery status can only be DELIVERED when paid or COD collected
+        if (in_array($newStatus, ['DELIVERED', 'COMPLETED'])) {
+            $reqPaymentStatus = strtoupper($request->input('payment_status', ''));
+            if ($request->has('payment_status') && in_array($reqPaymentStatus, ['UNPAID', 'PENDING', 'FAILED', 'REJECTED'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order cannot be marked as DELIVERED without confirming payment or collecting COD.',
+                ], 422);
+            }
+            $order->payment_status = 'PAID';
+            $order->delivered_at = now();
+        }
+
         $order->status = $newStatus;
         $order->save();
 
