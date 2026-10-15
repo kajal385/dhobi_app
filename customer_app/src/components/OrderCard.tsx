@@ -117,7 +117,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress, onTrack })
               #{orderNum}
             </Text>
             {orderShopName ? (
-              <Text style={{ fontSize: 11.5, fontWeight: '700', color: '#5B52E8', marginTop: 2 }} numberOfLines={1}>
+              <Text style={{ fontSize: 11.5, fontWeight: '700', color: isDark ? '#A5B4FC' : '#5B52E8', marginTop: 2 }} numberOfLines={1}>
                 🏪 {orderShopName}
               </Text>
             ) : null}
@@ -141,7 +141,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress, onTrack })
         </View>
         <View style={styles.detailItem}>
           <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Total</Text>
-          <Text style={[styles.detailValue, styles.totalText, { color: colors.primary }]}>
+          <Text style={[styles.detailValue, styles.totalText, { color: isDark ? '#A5B4FC' : colors.primary }]}>
             ₹{formattedTotal}
           </Text>
         </View>
@@ -149,11 +149,11 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress, onTrack })
 
       {/* Cancellation Reason Box if Cancelled */}
       {statusLower === 'cancelled' && Boolean(order?.cancellation_reason || (order as any)?.cancel_reason || (order as any)?.notes) && (
-        <View style={{ marginTop: 10, padding: 10, backgroundColor: '#FEE2E2', borderRadius: 10, borderWidth: 1, borderColor: '#FECACA' }}>
-          <Text style={{ fontSize: 11, color: '#991B1B', fontWeight: '800', textTransform: 'uppercase' }}>
+        <View style={{ marginTop: 10, padding: 10, backgroundColor: isDark ? '#381616' : '#FEE2E2', borderRadius: 10, borderWidth: 1, borderColor: isDark ? '#5C2222' : '#FECACA' }}>
+          <Text style={{ fontSize: 11, color: isDark ? '#FCA5A5' : '#991B1B', fontWeight: '800', textTransform: 'uppercase' }}>
             Cancellation Reason from Store:
           </Text>
-          <Text style={{ fontSize: 12.5, color: '#7F1D1D', marginTop: 3, fontWeight: '600' }}>
+          <Text style={{ fontSize: 12.5, color: isDark ? '#FEE2E2' : '#7F1D1D', marginTop: 3, fontWeight: '600' }}>
             "{order?.cancellation_reason || (order as any)?.cancel_reason || (order as any)?.notes}"
           </Text>
         </View>
@@ -163,9 +163,10 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress, onTrack })
       {isActive && onTrack && (
         <TouchableOpacity
           onPress={() => onTrack(order)}
-          style={[styles.trackBtn, { backgroundColor: colors.primaryLight }]}
+          style={[styles.trackBtn, { backgroundColor: isDark ? '#5B52E8' : colors.primaryLight }]}
+          activeOpacity={0.85}
         >
-          <Text style={[styles.trackBtnText, { color: colors.primary }]}>Track Order →</Text>
+          <Text style={[styles.trackBtnText, { color: isDark ? '#FFFFFF' : colors.primary, fontWeight: '800' }]}>Track Order →</Text>
         </TouchableOpacity>
       )}
     </TouchableOpacity>

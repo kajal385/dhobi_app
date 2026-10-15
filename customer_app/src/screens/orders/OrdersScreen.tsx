@@ -74,40 +74,40 @@ export const OrdersScreen = ({ navigation }: any) => {
     </View>
   );
 
-  return (
-    <ImageBackground
-      source={require('../../../assets/myimages/login_bg.png')}
-      style={styles.root}
-      resizeMode="cover"
-    >
+  const renderOrdersContent = () => (
+    <>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
 
       {/* Decorative Sparkles & Bubbles */}
-      <View pointerEvents="none" style={{ position: 'absolute', top: 140, right: 15, zIndex: 99 }}>
-        <Image
-          source={require('../../../assets/myimages/sparkles.png')}
-          style={{ width: 28, height: 28, opacity: 0.18 }}
-          resizeMode="contain"
-        />
-      </View>
-      <View pointerEvents="none" style={{ position: 'absolute', bottom: 120, left: 15, zIndex: 99 }}>
-        <Image
-          source={require('../../../assets/myimages/bubbles.png')}
-          style={{ width: 50, height: 50, opacity: 0.12 }}
-          resizeMode="contain"
-        />
-      </View>
+      {!isDark && (
+        <>
+          <View pointerEvents="none" style={{ position: 'absolute', top: 140, right: 15, zIndex: 99 }}>
+            <Image
+              source={require('../../../assets/myimages/sparkles.png')}
+              style={{ width: 28, height: 28, opacity: 0.18 }}
+              resizeMode="contain"
+            />
+          </View>
+          <View pointerEvents="none" style={{ position: 'absolute', bottom: 120, left: 15, zIndex: 99 }}>
+            <Image
+              source={require('../../../assets/myimages/bubbles.png')}
+              style={{ width: 50, height: 50, opacity: 0.12 }}
+              resizeMode="contain"
+            />
+          </View>
+        </>
+      )}
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: Math.max(insets.top, SPACING.lg) }]}>
-        <Text style={[styles.headerTitle, { color: '#321D8C' }]}>My Orders</Text>
+        <Text style={[styles.headerTitle, { color: isDark ? colors.text : '#321D8C' }]}>My Orders</Text>
         <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
           Track & manage your laundry pickups
         </Text>
       </View>
 
       {/* Tabs */}
-      <View style={[styles.tabBar, { backgroundColor: '#EDE8FF' }]}>
+      <View style={[styles.tabBar, { backgroundColor: isDark ? colors.card : '#EDE8FF' }]}>
         {(['active', 'history'] as Tab[]).map((t) => (
           <TouchableOpacity
             key={t}
@@ -121,7 +121,7 @@ export const OrdersScreen = ({ navigation }: any) => {
             <Text
               style={[
                 styles.tabText,
-                { color: tab === t ? '#FFFFFF' : '#321D8C', fontWeight: tab === t ? '800' : '600' },
+                { color: tab === t ? '#FFFFFF' : (isDark ? colors.textSecondary : '#321D8C'), fontWeight: tab === t ? '800' : '600' },
               ]}
             >
               {t === 'active' ? `Active (${activeOrders.length})` : `History (${historyOrders.length})`}
@@ -173,12 +173,26 @@ export const OrdersScreen = ({ navigation }: any) => {
           )}
         />
       )}
+    </>
+  );
+
+  return isDark ? (
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      {renderOrdersContent()}
+    </View>
+  ) : (
+    <ImageBackground
+      source={require('../../../assets/myimages/login_bg.png')}
+      style={styles.root}
+      resizeMode="cover"
+    >
+      {renderOrdersContent()}
     </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+  root: { flex: 1, backgroundColor: 'transparent' },
   header: {
     paddingHorizontal: SPACING.xl,
     paddingBottom: SPACING.sm,

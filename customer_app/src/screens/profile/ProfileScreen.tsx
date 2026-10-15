@@ -197,39 +197,39 @@ export const ProfileScreen = ({ navigation }: any) => {
     },
   ];
 
-  return (
-    <ImageBackground
-      source={require('../../../assets/myimages/login_bg.png')}
-      style={styles.root}
-      resizeMode="cover"
-    >
+  const renderProfileContent = () => (
+    <>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
 
       {/* Decorative Sparkles */}
-      <View pointerEvents="none" style={{ position: 'absolute', top: 120, right: 15, zIndex: 99 }}>
-        <Image
-          source={require('../../../assets/myimages/sparkles.png')}
-          style={{ width: 28, height: 28, opacity: 0.18 }}
-          resizeMode="contain"
-        />
-      </View>
-      <View pointerEvents="none" style={{ position: 'absolute', bottom: 100, left: 15, zIndex: 99 }}>
-        <Image
-          source={require('../../../assets/myimages/bubbles.png')}
-          style={{ width: 50, height: 50, opacity: 0.12 }}
-          resizeMode="contain"
-        />
-      </View>
+      {!isDark && (
+        <>
+          <View pointerEvents="none" style={{ position: 'absolute', top: 120, right: 15, zIndex: 99 }}>
+            <Image
+              source={require('../../../assets/myimages/sparkles.png')}
+              style={{ width: 28, height: 28, opacity: 0.18 }}
+              resizeMode="contain"
+            />
+          </View>
+          <View pointerEvents="none" style={{ position: 'absolute', bottom: 100, left: 15, zIndex: 99 }}>
+            <Image
+              source={require('../../../assets/myimages/bubbles.png')}
+              style={{ width: 50, height: 50, opacity: 0.12 }}
+              resizeMode="contain"
+            />
+          </View>
+        </>
+      )}
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: Math.max(insets.top, SPACING.lg) }]}>
-        <Text style={[styles.headerTitle, { color: '#321D8C' }]}>My Profile</Text>
+        <Text style={[styles.headerTitle, { color: isDark ? colors.text : '#321D8C' }]}>My Profile</Text>
         <TouchableOpacity
-          style={[styles.editHeaderBtn, { backgroundColor: '#EDE8FF' }]}
+          style={[styles.editHeaderBtn, { backgroundColor: isDark ? colors.cardAlt : '#EDE8FF' }]}
           onPress={() => navigation.navigate('EditProfile')}
           activeOpacity={0.8}
         >
-          <MaterialCommunityIcons name="account-edit-outline" size={20} color="#321D8C" />
+          <MaterialCommunityIcons name="account-edit-outline" size={20} color={isDark ? colors.text : '#321D8C'} />
         </TouchableOpacity>
       </View>
 
@@ -240,10 +240,10 @@ export const ProfileScreen = ({ navigation }: any) => {
             styles.profileCard,
             {
               backgroundColor: colors.card,
-              borderColor: '#EDE8FF',
+              borderColor: colors.border,
               shadowColor: '#321D8C',
               shadowOffset: { width: 0, height: 6 },
-              shadowOpacity: 0.08,
+              shadowOpacity: isDark ? 0 : 0.08,
               shadowRadius: 14,
               elevation: 4,
             },
@@ -257,8 +257,8 @@ export const ProfileScreen = ({ navigation }: any) => {
               end={{ x: 1, y: 1 }}
               style={styles.avatarRing}
             >
-              <View style={[styles.avatarInner, { backgroundColor: '#FFFFFF' }]}>
-                <Text style={[styles.avatarText, { color: '#321D8C' }]}>
+              <View style={[styles.avatarInner, { backgroundColor: isDark ? colors.cardAlt : '#FFFFFF' }]}>
+                <Text style={[styles.avatarText, { color: isDark ? '#A5B4FC' : '#321D8C' }]}>
                   {customerName ? customerName.charAt(0).toUpperCase() : 'K'}
                 </Text>
               </View>
@@ -269,63 +269,63 @@ export const ProfileScreen = ({ navigation }: any) => {
           </View>
 
           {/* Customer Info */}
-          <Text style={[styles.userName, { color: '#321D8C' }]}>{customerName}</Text>
+          <Text style={[styles.userName, { color: isDark ? colors.text : '#321D8C' }]}>{customerName}</Text>
           <Text style={[styles.userPhone, { color: colors.textSecondary }]}>{customerPhone}</Text>
           <Text style={[styles.userEmail, { color: colors.textLight }]}>{customerEmail}</Text>
 
           {/* Customer Location Pill */}
           <TouchableOpacity
-            style={[styles.locationPill, { backgroundColor: '#F4F3FA', borderColor: '#E8E5F8' }]}
+            style={[styles.locationPill, { backgroundColor: isDark ? colors.cardAlt : '#F4F3FA', borderColor: colors.border }]}
             onPress={() => navigation.navigate('MapScreen', { returnScreen: 'Profile' })}
             activeOpacity={0.8}
           >
             <Text style={{ fontSize: 13, marginRight: 6 }}>📍</Text>
-            <Text style={[styles.locationPillText, { color: '#321D8C' }]} numberOfLines={1}>
+            <Text style={[styles.locationPillText, { color: isDark ? colors.text : '#321D8C' }]} numberOfLines={1}>
               {displayLocation}
             </Text>
-            <Text style={styles.locationPillEdit}>Edit ❯</Text>
+            <Text style={[styles.locationPillEdit, { color: isDark ? '#A5B4FC' : '#5B52E8' }]}>Edit ❯</Text>
           </TouchableOpacity>
         </View>
 
         {/* Quick Stats Bar */}
         <View style={styles.statsBar}>
           <TouchableOpacity
-            style={[styles.statCard, { backgroundColor: colors.card, borderColor: '#EDE8FF' }]}
+            style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => navigation.navigate('Orders')}
             activeOpacity={0.8}
           >
             <Text style={styles.statEmoji}>🧺</Text>
-            <Text style={[styles.statVal, { color: '#321D8C' }]}>{totalOrdersCount}</Text>
+            <Text style={[styles.statVal, { color: isDark ? colors.text : '#321D8C' }]}>{totalOrdersCount}</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Orders</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.statCard, { backgroundColor: colors.card, borderColor: '#EDE8FF' }]}
+            style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => navigation.navigate('Wallet')}
             activeOpacity={0.8}
           >
             <Text style={styles.statEmoji}>💰</Text>
-            <Text style={[styles.statVal, { color: '#321D8C' }]}>₹{walletBalance}</Text>
+            <Text style={[styles.statVal, { color: isDark ? colors.text : '#321D8C' }]}>₹{walletBalance}</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Wallet</Text>
           </TouchableOpacity>
 
-          <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: '#EDE8FF' }]}>
+          <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={styles.statEmoji}>⭐</Text>
-            <Text style={[styles.statVal, { color: '#321D8C' }]}>Gold</Text>
+            <Text style={[styles.statVal, { color: isDark ? colors.text : '#321D8C' }]}>Gold</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Member</Text>
           </View>
         </View>
 
         {/* Section 1: Account & Orders */}
         <View style={styles.sectionContainer}>
-          <Text style={styles.sectionHeading}>Account & Bookings</Text>
+          <Text style={[styles.sectionHeading, { color: isDark ? '#A5B4FC' : '#321D8C' }]}>Account & Bookings</Text>
           <View style={[styles.menuCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {accountMenu.map((item, idx) => (
               <TouchableOpacity
                 key={item.id}
                 style={[
                   styles.menuItemRow,
-                  idx < accountMenu.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#F4F3FA' },
+                  idx < accountMenu.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
                 ]}
                 onPress={item.onPress}
                 activeOpacity={0.7}
@@ -334,7 +334,7 @@ export const ProfileScreen = ({ navigation }: any) => {
                   <MaterialCommunityIcons name={item.iconName} size={20} color={item.iconColor} />
                 </View>
                 <View style={styles.menuTextCol}>
-                  <Text style={[styles.menuTitle, { color: '#321D8C' }]}>{item.title}</Text>
+                  <Text style={[styles.menuTitle, { color: isDark ? colors.text : '#321D8C' }]}>{item.title}</Text>
                   <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>{item.subtitle}</Text>
                 </View>
                 {item.badge ? (
@@ -342,7 +342,7 @@ export const ProfileScreen = ({ navigation }: any) => {
                     <Text style={styles.badgeChipText}>{item.badge}</Text>
                   </View>
                 ) : null}
-                <Text style={styles.chevronArrow}>❯</Text>
+                <Text style={[styles.chevronArrow, { color: isDark ? colors.textLight : '#A09EBF' }]}>❯</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -350,14 +350,14 @@ export const ProfileScreen = ({ navigation }: any) => {
 
         {/* Section 2: Payments & Offers */}
         <View style={styles.sectionContainer}>
-          <Text style={styles.sectionHeading}>Payments & Discounts</Text>
+          <Text style={[styles.sectionHeading, { color: isDark ? '#A5B4FC' : '#321D8C' }]}>Payments & Discounts</Text>
           <View style={[styles.menuCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {paymentMenu.map((item, idx) => (
               <TouchableOpacity
                 key={item.id}
                 style={[
                   styles.menuItemRow,
-                  idx < paymentMenu.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#F4F3FA' },
+                  idx < paymentMenu.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
                 ]}
                 onPress={item.onPress}
                 activeOpacity={0.7}
@@ -366,7 +366,7 @@ export const ProfileScreen = ({ navigation }: any) => {
                   <MaterialCommunityIcons name={item.iconName} size={20} color={item.iconColor} />
                 </View>
                 <View style={styles.menuTextCol}>
-                  <Text style={[styles.menuTitle, { color: '#321D8C' }]}>{item.title}</Text>
+                  <Text style={[styles.menuTitle, { color: isDark ? colors.text : '#321D8C' }]}>{item.title}</Text>
                   <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>{item.subtitle}</Text>
                 </View>
                 {item.badge ? (
@@ -374,7 +374,7 @@ export const ProfileScreen = ({ navigation }: any) => {
                     <Text style={[styles.badgeChipText, { color: '#15803D' }]}>{item.badge}</Text>
                   </View>
                 ) : null}
-                <Text style={styles.chevronArrow}>❯</Text>
+                <Text style={[styles.chevronArrow, { color: isDark ? colors.textLight : '#A09EBF' }]}>❯</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -601,6 +601,20 @@ export const ProfileScreen = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+    </>
+  );
+
+  return isDark ? (
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      {renderProfileContent()}
+    </View>
+  ) : (
+    <ImageBackground
+      source={require('../../../assets/myimages/login_bg.png')}
+      style={styles.root}
+      resizeMode="cover"
+    >
+      {renderProfileContent()}
     </ImageBackground>
   );
 };

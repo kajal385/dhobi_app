@@ -33,7 +33,7 @@ import { OrderCard } from '../../components/OrderCard';
 import { SkeletonLoader } from '../../components/SkeletonLoader';
 import LocationAccuracyModal from '../../components/LocationAccuracyModal';
 import Toast from 'react-native-toast-message';
-import { requestLocationPermission, getCurrentLocation, reverseGeocode, calculateDistance } from '../../utils/locationUtils';
+import { requestLocationPermission, getCurrentLocation, reverseGeocode, calculateDistance, getDistanceInKm } from '../../utils/locationUtils';
 import { shopService, ShopListItem, DEFAULT_SHOPS, isApprovedShop } from '../../services/shopService';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { walletService } from '../../services/walletService';
@@ -371,11 +371,22 @@ const CategoryIcon: React.FC<{
   onPress: () => void;
   colors: typeof COLORS;
 }> = ({ item, onPress, colors }) => {
+  const { isDark } = useTheme();
   const key = item.key || (item as any).slug;
   const catImage = CATEGORY_IMAGES[key];
   return (
     <TouchableOpacity style={styles.catItem} onPress={onPress} activeOpacity={0.9}>
-      <View style={[styles.catCircle, { backgroundColor: '#FFFFFF', borderColor: '#F0EEFA', borderWidth: 2.5, shadowColor: '#321D8C', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 3, overflow: 'hidden' }]}>
+      <View style={[styles.catCircle, {
+        backgroundColor: isDark ? colors.card : '#FFFFFF',
+        borderColor: isDark ? colors.border : '#F0EEFA',
+        borderWidth: 2.5,
+        shadowColor: '#321D8C',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: isDark ? 0 : 0.08,
+        shadowRadius: 10,
+        elevation: 3,
+        overflow: 'hidden',
+      }]}>
         {catImage ? (
           <Image
             source={catImage}
@@ -386,7 +397,7 @@ const CategoryIcon: React.FC<{
           <Text style={[styles.catEmoji, { fontSize: 32 }]}>{item.icon || '🧺'}</Text>
         )}
       </View>
-      <Text style={[styles.catLabel, { color: '#321D8C', fontWeight: '600' }]} numberOfLines={2}>
+      <Text style={[styles.catLabel, { color: isDark ? colors.text : '#321D8C', fontWeight: '600' }]} numberOfLines={2}>
         {item.name}
       </Text>
     </TouchableOpacity>
@@ -498,10 +509,21 @@ const formatShopLocation = (shop: ShopListItem) => {
   return 'Wakad, Pune';
 };
 
+const PUNE_HUBS = [
+  { name: 'Wakad', city: 'Pune', lat: 18.5980, lng: 73.7680, pincode: '411057', icon: '🧺' },
+  { name: 'Hinjawadi', city: 'Pune', lat: 18.5913, lng: 73.7389, pincode: '411057', icon: '💻' },
+  { name: 'Pimpri-Chinchwad', city: 'Pune', lat: 18.6298, lng: 73.7997, pincode: '411018', icon: '🏭' },
+  { name: 'Baner', city: 'Pune', lat: 18.5590, lng: 73.7868, pincode: '411045', icon: '🏢' },
+  { name: 'Aundh', city: 'Pune', lat: 18.5580, lng: 73.8075, pincode: '411007', icon: '🛍️' },
+  { name: 'Kothrud', city: 'Pune', lat: 18.5074, lng: 73.8077, pincode: '411038', icon: '🏫' },
+  { name: 'Ravet', city: 'Pune', lat: 18.6483, lng: 73.7485, pincode: '412101', icon: '🏘️' },
+  { name: 'Viman Nagar', city: 'Pune', lat: 18.5679, lng: 73.9143, pincode: '411014', icon: '✈️' },
+];
+
 // ────────────────────────────────────────────────────────────
 //  HomeScreen
 // ────────────────────────────────────────────────────────────
-export const HomeScreen = ({ navigation }: any) => {
+export const HomeScreen = ({ navigation, route }: any) => {
   const insets = useSafeAreaInsets();
   const promoScrollViewRef = useRef<ScrollView>(null);
   const { isDark, colors } = useTheme();
@@ -515,14 +537,41 @@ export const HomeScreen = ({ navigation }: any) => {
   const [promoIndex, setPromoIndex] = useState(0);
   const [categories, setCategories] = useState<Category[]>(STATIC_CATEGORIES);
   const [catsLoading, setCatsLoading] = useState(false);
-  const [currentLocationLabel, setCurrentLocationLabel] = useState('Wakad, Pune');
+  const [currentLocationLabel, setCurrentLocationLabel] = useState(user?.area ? `${user.area}, ${user.city || 'Pune'}` : 'Wakad, Pune');
   const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showLocationPickerModal, setShowLocationPickerModal] = useState(false);
 
   const [popularShops, setPopularShops] = useState<ShopListItem[]>(DEFAULT_SHOPS);
   const [nearbyShops, setNearbyShops] = useState<ShopListItem[]>(DEFAULT_SHOPS);
   const [shopsLoading, setShopsLoading] = useState(false);
   const [banners, setBanners] = useState<any[]>(DEFAULT_BANNERS);
   const [selectedCategoryForShops, setSelectedCategoryForShops] = useState<Category | null>(null);
+
+  // Recalculate distance and reload shops whenever customer location arrives from MapScreen
+  useEffect(() => {
+    if (route?.params?.selectedLocation) {
+      const loc = route.params.selectedLocation;
+      const lat = Number(loc.latitude || 18.5980);
+      const lng = Number(loc.longitude || 73.7680);
+      const parts = (loc.address_line1 || loc.address || '').split(',');
+      const shortLabel = parts.slice(0, 2).join(',').trim() || loc.label || loc.area || 'Wakad, Pune';
+      setCurrentLocationLabel(shortLabel);
+      dispatch(updateProfile({
+        latitude: lat,
+        longitude: lng,
+        address: loc.address_line1 || loc.address,
+        area: loc.area || parts[0]?.trim() || 'Wakad',
+        city: loc.city || 'Pune',
+        pincode: loc.pincode || '411057',
+      }));
+      fetchShops(lat, lng);
+      Toast.show({
+        type: 'success',
+        text1: '📍 Delivery Location Updated',
+        text2: `Distance to laundries recalculated for ${shortLabel}`,
+      });
+    }
+  }, [route?.params?.selectedLocation]);
 
   const availableShopsForCategory = React.useMemo(() => {
     if (!selectedCategoryForShops) return [];
@@ -562,17 +611,14 @@ export const HomeScreen = ({ navigation }: any) => {
       }
       // Fallback matching for the registered DB shops
       if (shop.id === 47) {
-        // Shop 47 provides: Wash & Fold (1), Wash & Iron (2), Dry Clean (3), Steam Iron (4), Shoe Cleaning (5), Blanket Cleaning (7)
         if ([1, 2, 3, 4, 5, 7].includes(catId)) return true;
         if (['wash_fold', 'wash_iron', 'dry_clean', 'steam_iron', 'shoe_cleaning', 'blanket_cleaning'].includes(catKey)) return true;
       }
       if (shop.id === 44) {
-        // Shop 44 provides: Wash & Fold (1), Wash & Iron (2), Dry Clean (3)
         if ([1, 2, 3].includes(catId)) return true;
         if (['wash_fold', 'wash_iron', 'dry_clean'].includes(catKey)) return true;
       }
       if (shop.id === 48) {
-        // Shop 48 (Neha Wash Care) provides: Wash & Fold (1), Wash & Iron (2), Dry Clean (3), Steam Iron (4)
         if ([1, 2, 3, 4].includes(catId)) return true;
         if (['wash_fold', 'wash_iron', 'dry_clean', 'steam_iron'].includes(catKey)) return true;
       }
@@ -587,10 +633,10 @@ export const HomeScreen = ({ navigation }: any) => {
     if (shop.latitude && shop.longitude) {
       return calculateDistance(userLat, userLng, Number(shop.latitude), Number(shop.longitude));
     }
-    return shop.distance || '0.4 km away (4 mins)';
+    return shop.distance || '0.8 km away (6 mins)';
   }, [user?.latitude, user?.longitude]);
 
-  // ── Fetch shops ───────────────────────────────────────────
+  // ── Fetch shops & dynamically compute distance from customer location ──
   const fetchShops = useCallback(async (lat?: number, lng?: number) => {
     setShopsLoading(true);
     const userLat = lat || Number(user?.latitude || 18.5980);
@@ -609,12 +655,18 @@ export const HomeScreen = ({ navigation }: any) => {
 
       const nearby = await shopService.getNearbyShops(userLat, userLng);
       const rawNearby = Array.isArray(nearby) && nearby.length > 0 ? nearby : DEFAULT_SHOPS;
-      const processedNearby = rawNearby.map((shop) => ({
-        ...shop,
-        distance: shop.latitude && shop.longitude
-          ? calculateDistance(userLat, userLng, Number(shop.latitude), Number(shop.longitude))
-          : shop.distance,
-      }));
+      const processedNearby = rawNearby.map((shop) => {
+        const km = shop.latitude && shop.longitude
+          ? getDistanceInKm(userLat, userLng, Number(shop.latitude), Number(shop.longitude))
+          : 999;
+        return {
+          ...shop,
+          distance: shop.latitude && shop.longitude
+            ? calculateDistance(userLat, userLng, Number(shop.latitude), Number(shop.longitude))
+            : shop.distance,
+          distanceKm: km,
+        };
+      }).sort((a, b) => (a.distanceKm || 999) - (b.distanceKm || 999));
       setNearbyShops(processedNearby);
 
       // Fetch global banners uploaded by admin / laundry owner
@@ -721,6 +773,59 @@ export const HomeScreen = ({ navigation }: any) => {
     }
   };
 
+  const handleUseCurrentGps = async () => {
+    setShowLocationPickerModal(false);
+    try {
+      const granted = await requestLocationPermission();
+      if (!granted) {
+        setShowLocationModal(true);
+        return;
+      }
+      Toast.show({ type: 'info', text1: 'Detecting GPS coordinates...' });
+      const { latitude, longitude } = await getCurrentLocation();
+      const geocoded = await reverseGeocode(latitude, longitude);
+      const parts = geocoded.address_line1.split(',');
+      const shortLabel = parts.slice(0, 2).join(',').trim();
+      setCurrentLocationLabel(shortLabel || geocoded.address_line1);
+      dispatch(updateProfile({
+        latitude,
+        longitude,
+        address: geocoded.address_line1,
+        area: geocoded.city || 'Wakad',
+        city: geocoded.city || 'Pune',
+        pincode: geocoded.pincode || '411057',
+      }));
+      fetchShops(latitude, longitude);
+      Toast.show({
+        type: 'success',
+        text1: '📍 Current Location Detected',
+        text2: `Distance recalculated from ${shortLabel || geocoded.address_line1}`,
+      });
+    } catch (e: any) {
+      setShowLocationModal(true);
+    }
+  };
+
+  const handleSelectPredefinedArea = (hub: typeof PUNE_HUBS[0]) => {
+    setShowLocationPickerModal(false);
+    const label = `${hub.name}, ${hub.city}`;
+    setCurrentLocationLabel(label);
+    dispatch(updateProfile({
+      latitude: hub.lat,
+      longitude: hub.lng,
+      area: hub.name,
+      city: hub.city,
+      address: `${hub.name}, ${hub.city} - ${hub.pincode}`,
+      pincode: hub.pincode,
+    }));
+    fetchShops(hub.lat, hub.lng);
+    Toast.show({
+      type: 'success',
+      text1: `📍 Delivery Location: ${hub.name}`,
+      text2: 'Distances to laundries recalculated!',
+    });
+  };
+
   const activeOrders = (Array.isArray(orders) ? orders : []).filter(
     (o) => o && !['delivered', 'cancelled'].includes(o.status)
   );
@@ -786,68 +891,68 @@ export const HomeScreen = ({ navigation }: any) => {
     return 'Good evening';
   };
 
-  return (
-    <ImageBackground
-      source={require('../../../assets/myimages/login_bg.png')}
-      style={[styles.root]}
-      resizeMode="cover"
-    >
+  const renderHomeContent = () => (
+    <>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
 
       {/* Decorative Sparkles & Bubbles overlays (Slider side & Footer side) */}
-      <View pointerEvents="none" style={{ position: 'absolute', top: 190, left: -15, zIndex: 99 }}>
-        <Image
-          source={require('../../../assets/myimages/bubbles.png')}
-          style={{
-            width: 55,
-            height: 55,
-            opacity: 0.12,
-            transform: [{ rotate: '45deg' }],
-          }}
-          resizeMode="contain"
-        />
-      </View>
-      <View pointerEvents="none" style={{ position: 'absolute', top: 150, right: 20, zIndex: 99 }}>
-        <Image
-          source={require('../../../assets/myimages/sparkles.png')}
-          style={{
-            width: 28,
-            height: 28,
-            opacity: 0.18,
-          }}
-          resizeMode="contain"
-        />
-      </View>
-      <View pointerEvents="none" style={{ position: 'absolute', bottom: 100, left: 20, zIndex: 99 }}>
-        <Image
-          source={require('../../../assets/myimages/sparkles.png')}
-          style={{
-            width: 26,
-            height: 26,
-            opacity: 0.18,
-          }}
-          resizeMode="contain"
-        />
-      </View>
-      <View pointerEvents="none" style={{ position: 'absolute', bottom: 120, right: -15, zIndex: 99 }}>
-        <Image
-          source={require('../../../assets/myimages/bubbles.png')}
-          style={{
-            width: 60,
-            height: 60,
-            opacity: 0.12,
-            transform: [{ rotate: '-30deg' }],
-          }}
-          resizeMode="contain"
-        />
-      </View>
+      {!isDark && (
+        <>
+          <View pointerEvents="none" style={{ position: 'absolute', top: 190, left: -15, zIndex: 99 }}>
+            <Image
+              source={require('../../../assets/myimages/bubbles.png')}
+              style={{
+                width: 55,
+                height: 55,
+                opacity: 0.12,
+                transform: [{ rotate: '45deg' }],
+              }}
+              resizeMode="contain"
+            />
+          </View>
+          <View pointerEvents="none" style={{ position: 'absolute', top: 150, right: 20, zIndex: 99 }}>
+            <Image
+              source={require('../../../assets/myimages/sparkles.png')}
+              style={{
+                width: 28,
+                height: 28,
+                opacity: 0.18,
+              }}
+              resizeMode="contain"
+            />
+          </View>
+          <View pointerEvents="none" style={{ position: 'absolute', bottom: 100, left: 20, zIndex: 99 }}>
+            <Image
+              source={require('../../../assets/myimages/sparkles.png')}
+              style={{
+                width: 26,
+                height: 26,
+                opacity: 0.18,
+              }}
+              resizeMode="contain"
+            />
+          </View>
+          <View pointerEvents="none" style={{ position: 'absolute', bottom: 120, right: -15, zIndex: 99 }}>
+            <Image
+              source={require('../../../assets/myimages/bubbles.png')}
+              style={{
+                width: 60,
+                height: 60,
+                opacity: 0.12,
+                transform: [{ rotate: '-30deg' }],
+              }}
+              resizeMode="contain"
+            />
+          </View>
+        </>
+      )}
 
       {/* ── Header ── */}
       <View style={[styles.header, { backgroundColor: 'transparent', paddingTop: Math.max(insets.top, SPACING.md) }]}>
         <View style={{ flex: 1, marginRight: SPACING.md }}>
           <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}
-            onPress={() => setShowLocationModal(true)}
+            onPress={() => setShowLocationPickerModal(true)}
           >
             <Text style={{ fontSize: 14 }}>📍</Text>
             <Text style={[styles.greeting, { color: colors.textSecondary, marginLeft: 4, fontWeight: '700', flex: 1 }]} numberOfLines={1}>
@@ -1121,14 +1226,14 @@ export const HomeScreen = ({ navigation }: any) => {
                 {/* Middle row: 2 cards */}
                 <View style={[styles.ucMiddleRow, { justifyContent: 'space-between' }]}>
                   {/* Card 1: Pickup */}
-                  <View style={{ flex: 1, backgroundColor: '#F7F7FA', borderRadius: 10, padding: 12, marginRight: 8 }}>
+                  <View style={{ flex: 1, backgroundColor: isDark ? colors.cardAlt : '#F7F7FA', borderRadius: 10, padding: 12, marginRight: 8 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                      <View style={[styles.ucColIconBg, { backgroundColor: '#EDE8FF', width: 28, height: 28, borderRadius: 14, marginRight: 0 }]}>
+                      <View style={[styles.ucColIconBg, { backgroundColor: isDark ? colors.card : '#EDE8FF', width: 28, height: 28, borderRadius: 14, marginRight: 0 }]}>
                         <MaterialCommunityIcons name="calendar-month-outline" size={16} color="#5B52E8" />
                       </View>
-                      <Text style={[styles.ucColLabel, { color: '#321D8C', fontSize: 13, fontWeight: '800', marginLeft: 8 }]}>Pickup</Text>
+                      <Text style={[styles.ucColLabel, { color: isDark ? colors.text : '#321D8C', fontSize: 13, fontWeight: '800', marginLeft: 8 }]}>Pickup</Text>
                     </View>
-                    <Text style={[styles.ucColDate, { color: '#321D8C', fontSize: 12, fontWeight: '700' }]} numberOfLines={1}>
+                    <Text style={[styles.ucColDate, { color: isDark ? colors.text : '#321D8C', fontSize: 12, fontWeight: '700' }]} numberOfLines={1}>
                       {formattedPickupDate}
                     </Text>
                     <Text style={[styles.ucColTime, { color: colors.textSecondary, marginTop: 4, fontSize: 11 }]} numberOfLines={1}>
@@ -1137,12 +1242,12 @@ export const HomeScreen = ({ navigation }: any) => {
                   </View>
 
                   {/* Card 2: Items & Categories */}
-                  <View style={{ flex: 1, backgroundColor: '#F7F7FA', borderRadius: 10, padding: 12 }}>
+                  <View style={{ flex: 1, backgroundColor: isDark ? colors.cardAlt : '#F7F7FA', borderRadius: 10, padding: 12 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                      <View style={[styles.ucColIconBg, { backgroundColor: '#EDE8FF', width: 28, height: 28, borderRadius: 14, marginRight: 0 }]}>
+                      <View style={[styles.ucColIconBg, { backgroundColor: isDark ? colors.card : '#EDE8FF', width: 28, height: 28, borderRadius: 14, marginRight: 0 }]}>
                         <MaterialCommunityIcons name="tshirt-crew-outline" size={16} color="#5B52E8" />
                       </View>
-                      <Text style={[styles.ucColLabel, { color: '#321D8C', fontSize: 13, fontWeight: '800', marginLeft: 8 }]}>
+                      <Text style={[styles.ucColLabel, { color: isDark ? colors.text : '#321D8C', fontSize: 13, fontWeight: '800', marginLeft: 8 }]}>
                         Items ({itemsSummary.totalCount})
                       </Text>
                     </View>
@@ -1157,8 +1262,8 @@ export const HomeScreen = ({ navigation }: any) => {
 
                 {/* Estimated Delivery Horizontal Text */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, paddingHorizontal: 4 }}>
-                  <MaterialCommunityIcons name="clock-outline" size={16} color="#321D8C" />
-                  <Text style={{ fontSize: 13, color: '#321D8C', marginLeft: 6, fontWeight: '700' }}>Estimated Delivery:</Text>
+                  <MaterialCommunityIcons name="clock-outline" size={16} color={isDark ? '#A5B4FC' : '#321D8C'} />
+                  <Text style={{ fontSize: 13, color: isDark ? colors.text : '#321D8C', marginLeft: 6, fontWeight: '700' }}>Estimated Delivery:</Text>
                   <Text style={{ fontSize: 11, color: colors.textSecondary, marginLeft: 4 }}>
                     {formattedDeliveryDate}, 06:00 PM
                   </Text>
@@ -1209,7 +1314,7 @@ export const HomeScreen = ({ navigation }: any) => {
         {/* ── Laundry Categories ── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: '#321D8C' }]}>Categories</Text>
+            <Text style={[styles.sectionTitle, { color: isDark ? colors.text : '#321D8C' }]}>Categories</Text>
             {catsLoading && (
               <ActivityIndicator size="small" color={colors.primary} />
             )}
@@ -1233,7 +1338,7 @@ export const HomeScreen = ({ navigation }: any) => {
         {/* ── Popular Laundry ── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionHeaderTitle, { color: '#321D8C' }]}>Popular Laundry</Text>
+            <Text style={[styles.sectionHeaderTitle, { color: isDark ? colors.text : '#321D8C' }]}>Popular Laundry</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.viewAllBtn}>
               <Text style={[styles.viewAllText, { color: colors.primary }]}>View All</Text>
               <Text style={[styles.viewAllArrow, { color: colors.primary }]}> ❯</Text>
@@ -1411,7 +1516,7 @@ export const HomeScreen = ({ navigation }: any) => {
             {/* Modal Header */}
             <View style={styles.catModalHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
-                <View style={[styles.catCircle, { width: 50, height: 50, backgroundColor: '#FFFFFF', borderColor: '#F0EEFA', borderWidth: 2, justifyContent: 'center', alignItems: 'center' }]}>
+                <View style={[styles.catCircle, { width: 50, height: 50, backgroundColor: isDark ? colors.cardAlt : '#FFFFFF', borderColor: isDark ? colors.border : '#F0EEFA', borderWidth: 2, justifyContent: 'center', alignItems: 'center' }]}>
                   {selectedCategoryForShops && CATEGORY_IMAGES[selectedCategoryForShops.key || (selectedCategoryForShops as any).slug] ? (
                     <Image
                       source={CATEGORY_IMAGES[selectedCategoryForShops.key || (selectedCategoryForShops as any).slug]}
@@ -1423,7 +1528,7 @@ export const HomeScreen = ({ navigation }: any) => {
                   )}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.catModalTitle, { color: '#321D8C' }]} numberOfLines={1}>
+                  <Text style={[styles.catModalTitle, { color: isDark ? colors.text : '#321D8C' }]} numberOfLines={1}>
                     {selectedCategoryForShops?.name}
                   </Text>
                   <Text style={[styles.catModalSubtitle, { color: colors.textSecondary }]}>
@@ -1440,8 +1545,8 @@ export const HomeScreen = ({ navigation }: any) => {
             </View>
 
             {/* Location & Count Banner */}
-            <View style={[styles.catModalBadgeBar, { backgroundColor: '#EDE8FF' }]}>
-              <Text style={styles.catModalBadgeText}>
+            <View style={[styles.catModalBadgeBar, { backgroundColor: isDark ? colors.cardAlt : '#EDE8FF' }]}>
+              <Text style={[styles.catModalBadgeText, { color: isDark ? '#A5B4FC' : '#5B52E8' }]}>
                 📍 {availableShopsForCategory.length} laundries available in {currentLocationLabel || 'Pune'}
               </Text>
             </View>
@@ -1449,10 +1554,10 @@ export const HomeScreen = ({ navigation }: any) => {
             {/* List of Laundry Shops providing this service */}
             {availableShopsForCategory.length === 0 ? (
               <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 45, paddingHorizontal: 24 }}>
-                <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#F3E8FF', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: isDark ? colors.cardAlt : '#F3E8FF', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
                   <Text style={{ fontSize: 32 }}>🧺</Text>
                 </View>
-                <Text style={{ fontSize: 16, fontWeight: '800', color: '#321D8C', textAlign: 'center', marginBottom: 6 }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: isDark ? colors.text : '#321D8C', textAlign: 'center', marginBottom: 6 }}>
                   No Approved Laundries Yet
                 </Text>
                 <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: 'center', lineHeight: 19 }}>
@@ -1468,7 +1573,7 @@ export const HomeScreen = ({ navigation }: any) => {
                 {availableShopsForCategory.map((shop, index) => (
                   <TouchableOpacity
                     key={shop.id}
-                    style={[styles.catShopCard, { backgroundColor: colors.background, borderColor: colors.border }]}
+                    style={[styles.catShopCard, { backgroundColor: isDark ? colors.card : colors.background, borderColor: colors.border }]}
                     activeOpacity={0.9}
                     onPress={() => {
                       const cat = selectedCategoryForShops;
@@ -1492,7 +1597,7 @@ export const HomeScreen = ({ navigation }: any) => {
                       />
                       <View style={styles.catShopBadgesRow}>
                         {shop.is_verified && (
-                          <View style={[styles.vtBadgeVerified, { backgroundColor: '#321D8C' }]}>
+                          <View style={[styles.vtBadgeVerified, { backgroundColor: isDark ? '#5B52E8' : '#321D8C' }]}>
                             <Text style={styles.vtBadgeText}>✓ Verified</Text>
                           </View>
                         )}
@@ -1505,7 +1610,7 @@ export const HomeScreen = ({ navigation }: any) => {
                     {/* Shop Details */}
                     <View style={styles.catShopInfo}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text style={[styles.catShopName, { color: '#321D8C' }]} numberOfLines={1}>
+                        <Text style={[styles.catShopName, { color: isDark ? colors.text : '#321D8C' }]} numberOfLines={1}>
                           {shop.name}
                         </Text>
                         <View style={styles.catRatingPill}>
@@ -1579,12 +1684,178 @@ export const HomeScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* Comprehensive Customer Location Picker Sheet */}
+      <Modal
+        visible={showLocationPickerModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowLocationPickerModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }}>
+          <View style={{
+            backgroundColor: colors.card,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            padding: 20,
+            maxHeight: '85%',
+            borderWidth: 1,
+            borderColor: colors.border,
+          }}>
+            {/* Grab Bar */}
+            <View style={{ width: 40, height: 4, backgroundColor: isDark ? colors.border : '#CBD5E1', borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <MaterialCommunityIcons name="map-marker-radius" size={24} color="#5B52E8" />
+                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>Choose Delivery Location</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowLocationPickerModal(false)} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: colors.textSecondary }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 16 }}>
+              Distances & travel time to nearby laundry stores will automatically recalculate in real-time.
+            </Text>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              {/* Option A: GPS Auto-Detect */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handleUseCurrentGps}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  padding: 14,
+                  borderRadius: 14,
+                  backgroundColor: isDark ? colors.cardAlt : '#F0EEFF',
+                  borderWidth: 1.5,
+                  borderColor: isDark ? colors.border : '#D8D4FC',
+                  marginBottom: 10,
+                }}
+              >
+                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#5B52E8', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                  <MaterialCommunityIcons name="crosshairs-gps" size={22} color="#FFFFFF" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>Use Current GPS Location</Text>
+                    <View style={{ backgroundColor: '#DCFCE7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                      <Text style={{ fontSize: 9.5, fontWeight: '800', color: '#16A34A' }}>HIGH ACCURACY</Text>
+                    </View>
+                  </View>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                    Auto-detect precise coordinates via device GPS
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Option B: Choose on Google Map */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  setShowLocationPickerModal(false);
+                  navigation.navigate('MapScreen', { returnScreen: 'Home' });
+                }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  padding: 14,
+                  borderRadius: 14,
+                  backgroundColor: isDark ? colors.cardAlt : '#F8F9FA',
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  marginBottom: 16,
+                }}
+              >
+                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#EA4335', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                  <MaterialCommunityIcons name="google-maps" size={22} color="#FFFFFF" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>Select on Google Map</Text>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                    Drag map pin to your exact building or doorstep
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              {/* Option C: Quick Select Delivery Areas */}
+              <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Popular Laundry Hubs (Pune & PCMC)
+              </Text>
+              
+              <View style={{ gap: 8 }}>
+                {PUNE_HUBS.map((hub) => {
+                  const isCurrent = (user?.area && user.area.toLowerCase() === hub.name.toLowerCase()) || currentLocationLabel.toLowerCase().includes(hub.name.toLowerCase());
+                  const distFromUser = calculateDistance(
+                    Number(user?.latitude || 18.5980),
+                    Number(user?.longitude || 73.7680),
+                    hub.lat,
+                    hub.lng
+                  );
+
+                  return (
+                    <TouchableOpacity
+                      key={hub.name}
+                      activeOpacity={0.75}
+                      onPress={() => handleSelectPredefinedArea(hub)}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        padding: 12,
+                        borderRadius: 12,
+                        backgroundColor: isCurrent ? (isDark ? '#26234D' : '#EDE8FF') : (isDark ? colors.cardAlt : '#FAFAFC'),
+                        borderWidth: 1,
+                        borderColor: isCurrent ? '#5B52E8' : colors.border,
+                      }}
+                    >
+                      <Text style={{ fontSize: 20, marginRight: 10 }}>{hub.icon}</Text>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>{hub.name}</Text>
+                          {isCurrent && (
+                            <View style={{ backgroundColor: '#5B52E8', paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 4 }}>
+                              <Text style={{ fontSize: 9, fontWeight: '800', color: '#FFFFFF' }}>ACTIVE</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 1 }}>
+                          {hub.city} • Pincode: {hub.pincode}
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 11, fontWeight: '600', color: isDark ? '#A5B4FC' : '#5B52E8' }}>
+                        {isCurrent ? 'Current' : distFromUser.split(' ')[0] + ' ' + distFromUser.split(' ')[1]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Location Accuracy Permission Dialog Modal */}
       <LocationAccuracyModal
         visible={showLocationModal}
         onTurnOn={handleTurnOnLocation}
         onNoThanks={() => setShowLocationModal(false)}
       />
+    </>
+  );
+
+  return isDark ? (
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      {renderHomeContent()}
+    </View>
+  ) : (
+    <ImageBackground
+      source={require('../../../assets/myimages/login_bg.png')}
+      style={[styles.root]}
+      resizeMode="cover"
+    >
+      {renderHomeContent()}
     </ImageBackground>
   );
 };

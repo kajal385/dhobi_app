@@ -529,12 +529,20 @@ For support: support@dhobipro.com | 1800-123-4567
   })();
 
   if (loading) {
-    return (
+    return isDark ? (
+      <View style={[styles.root, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </View>
+    ) : (
       <ImageBackground
         source={require('../../../assets/myimages/login_bg.png')}
         style={styles.root}
         resizeMode="cover"
       >
+        <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#321D8C" />
         </View>
@@ -542,47 +550,56 @@ For support: support@dhobipro.com | 1800-123-4567
     );
   }
 
-  return (
-    <ImageBackground
-      source={require('../../../assets/myimages/login_bg.png')}
-      style={styles.root}
-      resizeMode="cover"
-    >
-      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+  const MainContainer: any = isDark ? View : ImageBackground;
+  const containerProps = isDark
+    ? { style: [styles.root, { backgroundColor: colors.background }] }
+    : {
+        source: require('../../../assets/myimages/login_bg.png'),
+        style: styles.root,
+        resizeMode: 'cover' as const,
+      };
 
-      {/* Decorative Sparkles */}
-      <View pointerEvents="none" style={{ position: 'absolute', top: 90, right: 15, zIndex: 99 }}>
-        <Image
-          source={require('../../../assets/myimages/sparkles.png')}
-          style={{ width: 28, height: 28, opacity: 0.18 }}
-          resizeMode="contain"
-        />
-      </View>
-      <View pointerEvents="none" style={{ position: 'absolute', bottom: 120, left: 15, zIndex: 99 }}>
-        <Image
-          source={require('../../../assets/myimages/bubbles.png')}
-          style={{ width: 50, height: 50, opacity: 0.12 }}
-          resizeMode="contain"
-        />
-      </View>
+  return (
+    <MainContainer {...containerProps}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
+
+      {/* Decorative Sparkles - hide in dark mode */}
+      {!isDark && (
+        <>
+          <View pointerEvents="none" style={{ position: 'absolute', top: 90, right: 15, zIndex: 99 }}>
+            <Image
+              source={require('../../../assets/myimages/sparkles.png')}
+              style={{ width: 28, height: 28, opacity: 0.18 }}
+              resizeMode="contain"
+            />
+          </View>
+          <View pointerEvents="none" style={{ position: 'absolute', bottom: 120, left: 15, zIndex: 99 }}>
+            <Image
+              source={require('../../../assets/myimages/bubbles.png')}
+              style={{ width: 50, height: 50, opacity: 0.12 }}
+              resizeMode="contain"
+            />
+          </View>
+        </>
+      )}
 
       {/* Header with proper go-back arrow, title and help button */}
       <View style={[styles.header, { paddingTop: Math.max(insets.top + 8, SPACING.md) }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={styles.backBtn}
+          style={[styles.backBtn, isDark && { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           activeOpacity={0.7}
         >
-          <MaterialCommunityIcons name="arrow-left" size={24} color="#321D8C" />
+          <MaterialCommunityIcons name="arrow-left" size={24} color={isDark ? colors.text : '#321D8C'} />
         </TouchableOpacity>
 
         {/* Title + Subtitle */}
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
+          <Text style={[styles.headerTitle, { color: isDark ? colors.text : '#321D8C' }]} numberOfLines={1}>
             Order #{order?.order_number || (order as any)?.order_code || 'ORD-BYLGX5'}
           </Text>
-          <Text style={styles.headerSubtitle}>
+          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
             {isDelivered ? `Delivered on ${formattedDeliveredDate}` : formattedPlacedDate}
           </Text>
         </View>
@@ -596,11 +613,11 @@ For support: support@dhobipro.com | 1800-123-4567
             </View>
           )}
           <TouchableOpacity
-            style={styles.helpBtn}
+            style={[styles.helpBtn, isDark && { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => Linking.openURL(`tel:${shopPhone}`)}
           >
-            <MaterialCommunityIcons name="headphones" size={14} color="#321D8C" />
-            <Text style={styles.helpText}>Help</Text>
+            <MaterialCommunityIcons name="headphones" size={14} color={isDark ? colors.text : '#321D8C'} />
+            <Text style={[styles.helpText, { color: isDark ? colors.text : '#5B52E8' }]}>Help</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -612,7 +629,7 @@ For support: support@dhobipro.com | 1800-123-4567
       >
         {/* Delivered Hero Celebration Banner (Shown when delivered / completed) */}
         {isDelivered && (
-          <View style={styles.deliveredHeroBanner}>
+          <View style={[styles.deliveredHeroBanner, isDark && { backgroundColor: '#052e16', borderColor: '#166534' }]}>
             <View style={styles.deliveredHeroLeft}>
               <View style={styles.deliveredCheckCircle}>
                 <MaterialCommunityIcons name="check" size={22} color="#FFFFFF" />
@@ -621,10 +638,10 @@ For support: support@dhobipro.com | 1800-123-4567
             <View style={styles.deliveredHeroContent}>
               <View style={styles.deliveredHeroBadgeRow}>
                 <Text style={styles.deliveredHeroBadge}>DELIVERED SUCCESSFULLY</Text>
-                <Text style={styles.deliveredHeroTime}>{formattedDeliveredDate.split(',')[1]?.trim() || 'Delivered'}</Text>
+                <Text style={[styles.deliveredHeroTime, isDark && { color: '#86EFAC' }]}>{formattedDeliveredDate.split(',')[1]?.trim() || 'Delivered'}</Text>
               </View>
-              <Text style={styles.deliveredHeroTitle}>Clothes Safely Delivered!</Text>
-              <Text style={styles.deliveredHeroSub}>
+              <Text style={[styles.deliveredHeroTitle, isDark && { color: '#DCFCE7' }]}>Clothes Safely Delivered!</Text>
+              <Text style={[styles.deliveredHeroSub, isDark && { color: '#86EFAC' }]}>
                 Freshly cleaned & steam-pressed clothes handed over to {user?.name || (order as any)?.customer_name || 'Kajal Gajare'} at doorstep on {formattedDeliveredDate}.
               </Text>
             </View>
@@ -634,12 +651,12 @@ For support: support@dhobipro.com | 1800-123-4567
         {/* Cancelled Order Hero Banner with Laundry Owner's Cancellation Reason */}
         {isCancelled && (
           <View style={{
-            backgroundColor: '#FEF2F2',
+            backgroundColor: isDark ? '#2A1212' : '#FEF2F2',
             borderRadius: 16,
             padding: 16,
             marginBottom: 16,
             borderWidth: 1.5,
-            borderColor: '#FECACA',
+            borderColor: isDark ? '#7F1D1D' : '#FECACA',
             elevation: 3,
             shadowColor: '#EF4444',
             shadowOffset: { width: 0, height: 4 },
@@ -663,7 +680,7 @@ For support: support@dhobipro.com | 1800-123-4567
                     ORDER CANCELLED
                   </Text>
                 </View>
-                <Text style={{ fontSize: 16, fontWeight: '800', color: '#7F1D1D', marginTop: 2 }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: isDark ? '#FCA5A5' : '#7F1D1D', marginTop: 2 }}>
                   Order Cancelled by Laundry Shop
                 </Text>
               </View>
@@ -671,17 +688,17 @@ For support: support@dhobipro.com | 1800-123-4567
 
             {/* Reason Box */}
             <View style={{
-              backgroundColor: '#FFFFFF',
+              backgroundColor: isDark ? '#1C0D0D' : '#FFFFFF',
               borderRadius: 12,
               padding: 12,
               borderWidth: 1,
-              borderColor: '#FCA5A5',
+              borderColor: isDark ? '#7F1D1D' : '#FCA5A5',
               marginBottom: 12,
             }}>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: '#991B1B', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#FCA5A5' : '#991B1B', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Cancellation Reason Provided by Store:
               </Text>
-              <Text style={{ fontSize: 14, fontWeight: '600', color: '#1E1B4B', marginTop: 4, lineHeight: 20 }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: isDark ? '#FEE2E2' : '#1E1B4B', marginTop: 4, lineHeight: 20 }}>
                 "{order?.cancellation_reason || order?.cancel_reason || order?.notes || 'Store capacity full / Unable to process order at selected time'}"
               </Text>
             </View>
@@ -697,15 +714,15 @@ For support: support@dhobipro.com | 1800-123-4567
                   gap: 6,
                   paddingVertical: 10,
                   borderRadius: 10,
-                  backgroundColor: '#FFFFFF',
+                  backgroundColor: isDark ? colors.card : '#FFFFFF',
                   borderWidth: 1,
-                  borderColor: '#E5E7EB',
+                  borderColor: isDark ? colors.border : '#E5E7EB',
                 }}
                 onPress={() => Linking.openURL(`tel:${shopPhone}`)}
                 activeOpacity={0.8}
               >
-                <MaterialCommunityIcons name="phone" size={16} color="#321D8C" />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#321D8C' }}>Call Store</Text>
+                <MaterialCommunityIcons name="phone" size={16} color={isDark ? colors.text : '#321D8C'} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: isDark ? colors.text : '#321D8C' }}>Call Store</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={{
@@ -729,19 +746,19 @@ For support: support@dhobipro.com | 1800-123-4567
         )}
 
         {/* 1. Booked Laundry Shop Card */}
-        <View style={styles.premiumCard}>
+        <View style={[styles.premiumCard, isDark && { backgroundColor: colors.card, borderColor: colors.border }]}>
           {/* Shop main info row */}
           <View style={styles.shopMainRow}>
             {shopLogo ? (
               <Image source={{ uri: shopLogo }} style={styles.shopLogoImage} />
             ) : (
-              <View style={styles.shopIconBox}>
+              <View style={[styles.shopIconBox, isDark && { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
                 <MaterialCommunityIcons name="washing-machine" size={26} color="#5B52E8" />
               </View>
             )}
             <View style={{ flex: 1 }}>
               <View style={styles.shopTitleRow}>
-                <Text style={styles.shopTitleText}>{shopName}</Text>
+                <Text style={[styles.shopTitleText, isDark && { color: colors.text }]}>{shopName}</Text>
                 <View style={styles.shopRatingPill}>
                   <MaterialCommunityIcons name="star" size={12} color="#F59E0B" />
                   <Text style={styles.shopRatingNumber}>{shopRating}</Text>
@@ -751,45 +768,45 @@ For support: support@dhobipro.com | 1800-123-4567
 
               {shopOwnerName ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3, marginBottom: 2 }}>
-                  <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#4B4869' }}>
+                  <Text style={{ fontSize: 12.5, fontWeight: '600', color: isDark ? colors.textSecondary : '#4B4869' }}>
                     👤 Owner: {shopOwnerName}
                   </Text>
                 </View>
               ) : null}
 
               <View style={styles.shopLocationRow}>
-                <MaterialCommunityIcons name="map-marker-outline" size={14} color="#6B6889" style={{ marginTop: 1, marginRight: 3 }} />
-                <Text style={styles.shopAddressText} numberOfLines={2}>{shopAddress}</Text>
+                <MaterialCommunityIcons name="map-marker-outline" size={14} color={isDark ? colors.textSecondary : '#6B6889'} style={{ marginTop: 1, marginRight: 3 }} />
+                <Text style={[styles.shopAddressText, isDark && { color: colors.textSecondary }]} numberOfLines={2}>{shopAddress}</Text>
               </View>
             </View>
           </View>
 
           {/* Call Store Button */}
           <TouchableOpacity
-            style={styles.callShopBtn}
+            style={[styles.callShopBtn, isDark && { backgroundColor: colors.cardAlt, borderColor: colors.border }]}
             onPress={() => Linking.openURL(`tel:${shopPhone}`)}
             activeOpacity={0.8}
           >
-            <MaterialCommunityIcons name="phone" size={14} color="#5B52E8" />
-            <Text style={styles.callShopBtnText}>Call Store: {shopPhone}</Text>
+            <MaterialCommunityIcons name="phone" size={14} color={isDark ? '#A5B4FC' : '#5B52E8'} />
+            <Text style={[styles.callShopBtnText, isDark && { color: '#A5B4FC' }]}>Call Store: {shopPhone}</Text>
           </TouchableOpacity>
         </View>
 
         {/* 2. Delivery Boy & Vehicle Details Card — Only shown AFTER laundry owner assigns delivery boy */}
         {isDeliveryAssigned ? (
-          <View style={styles.premiumCard}>
+          <View style={[styles.premiumCard, isDark && { backgroundColor: colors.card, borderColor: colors.border }]}>
             {/* Delivery Boy details header row */}
             <View style={styles.riderHeaderRow}>
               <View style={{ flex: 1, marginRight: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.riderNameText}>{deliveryBoyName}</Text>
+                  <Text style={[styles.riderNameText, isDark && { color: colors.text }]}>{deliveryBoyName}</Text>
                   <View style={styles.riderRatingPill}>
                     <MaterialCommunityIcons name="star" size={11} color="#F59E0B" />
                     <Text style={styles.riderRatingText}>{deliveryBoyRating}</Text>
                   </View>
                 </View>
 
-                <Text style={styles.riderRoleSubtext}>
+                <Text style={[styles.riderRoleSubtext, isDark && { color: colors.textSecondary }]}>
                   Delivery Partner • {shopName}
                 </Text>
               </View>
@@ -807,8 +824,8 @@ For support: support@dhobipro.com | 1800-123-4567
             </View>
 
             {/* Dedicated Assigned Delivery Vehicle Box (DhobiPro Electric Delivery Scooter) */}
-            <View style={styles.vehicleShowcaseCard}>
-              <View style={styles.vehicleImageContainer}>
+            <View style={[styles.vehicleShowcaseCard, isDark && { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
+              <View style={[styles.vehicleImageContainer, isDark && { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Image
                   source={require('../../../assets/myimages/delivery_scooter.png')}
                   style={styles.vehicleScooterImage}
@@ -817,17 +834,17 @@ For support: support@dhobipro.com | 1800-123-4567
               </View>
               <View style={styles.vehicleInfoDetails}>
                 <View style={styles.vehicleHeaderLine}>
-                  <Text style={styles.vehicleBrandName} numberOfLines={1}>DhobiPro Electric Scooter</Text>
+                  <Text style={[styles.vehicleBrandName, isDark && { color: colors.text }]} numberOfLines={1}>DhobiPro Electric Scooter</Text>
                   <View style={styles.vehicleElectricBadge}>
                     <MaterialCommunityIcons name="lightning-bolt" size={11} color="#16A34A" />
                     <Text style={styles.vehicleElectricBadgeText}>EV Fast</Text>
                   </View>
                 </View>
-                <View style={styles.vehiclePlateBadge}>
-                  <MaterialCommunityIcons name="card-bulleted-outline" size={12} color="#321D8C" />
-                  <Text style={styles.vehiclePlateText}>{deliveryBoyVehicle}</Text>
+                <View style={[styles.vehiclePlateBadge, isDark && { backgroundColor: '#26243A' }]}>
+                  <MaterialCommunityIcons name="card-bulleted-outline" size={12} color={isDark ? '#A5B4FC' : '#321D8C'} />
+                  <Text style={[styles.vehiclePlateText, isDark && { color: '#C7D2FE' }]}>{deliveryBoyVehicle}</Text>
                 </View>
-                <Text style={styles.vehicleFeatureText}>
+                <Text style={[styles.vehicleFeatureText, isDark && { color: colors.textSecondary }]}>
                   Equipped with DhobiPro laundry cargo box
                 </Text>
               </View>
@@ -842,7 +859,7 @@ For support: support@dhobipro.com | 1800-123-4567
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 8,
-                backgroundColor: '#321D8C',
+                backgroundColor: isDark ? colors.primary : '#321D8C',
                 paddingVertical: 11,
                 borderRadius: 12,
                 marginTop: 12,
@@ -857,33 +874,33 @@ For support: support@dhobipro.com | 1800-123-4567
         ) : isWaitingForAssignment ? (
           /* Waiting for owner to assign delivery boy after customer confirmed */
           <View style={[styles.premiumCard, {
-            backgroundColor: '#FFFBEB',
-            borderColor: '#FDE68A',
+            backgroundColor: isDark ? '#271E0B' : '#FFFBEB',
+            borderColor: isDark ? '#78350F' : '#FDE68A',
             borderWidth: 1.5,
           }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
               <View style={{
                 width: 44, height: 44, borderRadius: 22,
-                backgroundColor: '#FEF3C7',
+                backgroundColor: isDark ? '#451A03' : '#FEF3C7',
                 alignItems: 'center', justifyContent: 'center', marginRight: 12,
               }}>
                 <MaterialCommunityIcons name="clock-outline" size={24} color="#D97706" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, fontWeight: '800', color: '#92400E' }}>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: isDark ? '#FDE68A' : '#92400E' }}>
                   Assigning Delivery Partner...
                 </Text>
-                <Text style={{ fontSize: 12, color: '#B45309', marginTop: 2 }}>
+                <Text style={{ fontSize: 12, color: isDark ? '#FCD34D' : '#B45309', marginTop: 2 }}>
                   The laundry owner is assigning a delivery partner for your order.
                 </Text>
               </View>
             </View>
             <View style={{
-              backgroundColor: '#FEF9C3', borderRadius: 10, padding: 10,
+              backgroundColor: isDark ? '#1C1507' : '#FEF9C3', borderRadius: 10, padding: 10,
               flexDirection: 'row', alignItems: 'center', gap: 8,
             }}>
               <MaterialCommunityIcons name="information-outline" size={16} color="#CA8A04" />
-              <Text style={{ fontSize: 12, color: '#92400E', flex: 1 }}>
+              <Text style={{ fontSize: 12, color: isDark ? '#FDE68A' : '#92400E', flex: 1 }}>
                 You will see the delivery partner's details here once the owner assigns them. This usually takes a few minutes.
               </Text>
             </View>
@@ -891,23 +908,23 @@ For support: support@dhobipro.com | 1800-123-4567
         ) : (
           /* Early status — delivery partner not relevant yet, show a subtle placeholder */
           <View style={[styles.premiumCard, {
-            backgroundColor: '#F8F7FF',
-            borderColor: '#EDE8FF',
+            backgroundColor: isDark ? colors.card : '#F8F7FF',
+            borderColor: colors.border,
             borderWidth: 1,
           }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View style={{
                 width: 44, height: 44, borderRadius: 22,
-                backgroundColor: '#EDE8FF',
+                backgroundColor: isDark ? colors.cardAlt : '#EDE8FF',
                 alignItems: 'center', justifyContent: 'center', marginRight: 12,
               }}>
                 <MaterialCommunityIcons name="account-tie" size={24} color="#8B7FD4" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#4A4668' }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: isDark ? colors.text : '#4A4668' }}>
                   Delivery Partner
                 </Text>
-                <Text style={{ fontSize: 12, color: '#8B7FD4', marginTop: 2 }}>
+                <Text style={{ fontSize: 12, color: isDark ? colors.textSecondary : '#8B7FD4', marginTop: 2 }}>
                   Will be assigned after your order is ready & you confirm delivery availability.
                 </Text>
               </View>
@@ -916,44 +933,44 @@ For support: support@dhobipro.com | 1800-123-4567
         )}
 
         {/* 3. Customer Pickup & Delivery Location Card */}
-        <View style={[styles.premiumCard, { backgroundColor: '#F8F7FF', borderColor: '#EDE8FF' }]}>
+        <View style={[styles.premiumCard, { backgroundColor: isDark ? colors.card : '#F8F7FF', borderColor: colors.border }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, width: '100%' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <MaterialCommunityIcons name="account-outline" size={20} color="#5B52E8" />
-              <Text style={{ fontSize: 14, fontWeight: '800', color: '#1A1830', marginLeft: 6 }}>
+              <MaterialCommunityIcons name="account-outline" size={20} color={colors.primary} />
+              <Text style={{ fontSize: 14, fontWeight: '800', color: isDark ? colors.text : '#1A1830', marginLeft: 6 }}>
                 {user?.name || (order as any)?.customer_name || 'Kajal Gajare'}
               </Text>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EDE8FF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 }}>
-              <MaterialCommunityIcons name="phone" size={12} color="#5B52E8" />
-              <Text style={{ fontSize: 12, fontWeight: '700', color: '#5B52E8', marginLeft: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? colors.cardAlt : '#EDE8FF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 }}>
+              <MaterialCommunityIcons name="phone" size={12} color={colors.primary} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary, marginLeft: 4 }}>
                 {user?.phone || (order as any)?.customer_phone || (order as any)?.customer_mobile || '9309386003'}
               </Text>
             </View>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 4 }}>
-            <MaterialCommunityIcons name="map-marker-radius" size={16} color="#5B52E8" style={{ marginTop: 2, marginRight: 4 }} />
-            <Text style={{ fontSize: 13, color: '#4A4668', lineHeight: 18, fontWeight: '500', flex: 1 }}>
+            <MaterialCommunityIcons name="map-marker-radius" size={16} color={colors.primary} style={{ marginTop: 2, marginRight: 4 }} />
+            <Text style={{ fontSize: 13, color: isDark ? colors.textSecondary : '#4A4668', lineHeight: 18, fontWeight: '500', flex: 1 }}>
               {customerLocation}
             </Text>
           </View>
         </View>
 
         {/* Vertical Order Tracking Flow (Clean timeline: dots & lines only, no icons, no "Completed" text) */}
-        <View style={styles.verticalTimelineCard}>
-          <View style={styles.timelineHeader}>
-            <Text style={styles.timelineHeading}>Order Status</Text>
+        <View style={[styles.verticalTimelineCard, isDark && { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.timelineHeader, isDark && { borderBottomColor: colors.border }]}>
+            <Text style={[styles.timelineHeading, { color: isDark ? colors.text : '#321D8C' }]}>Order Status</Text>
             {isDelivered ? (
-              <View style={[styles.activePill, { backgroundColor: '#E6F8F0' }]}>
+              <View style={[styles.activePill, { backgroundColor: isDark ? '#052E16' : '#E6F8F0' }]}>
                 <MaterialCommunityIcons name="check-decagram" size={14} color="#16A34A" style={{ marginRight: 4 }} />
                 <Text style={[styles.activePillText, { color: '#16A34A' }]}>
                   Delivered
                 </Text>
               </View>
             ) : (
-              <View style={styles.activePill}>
+              <View style={[styles.activePill, isDark && { backgroundColor: colors.cardAlt }]}>
                 <View style={styles.pulsingDot} />
-                <Text style={styles.activePillText}>
+                <Text style={[styles.activePillText, isDark && { color: '#A5B4FC' }]}>
                   {STEPPER_STATUSES[currentStep]?.label || 'Ready'}
                 </Text>
               </View>
@@ -976,13 +993,13 @@ For support: support@dhobipro.com | 1800-123-4567
                         <MaterialCommunityIcons name="check" size={11} color="#FFFFFF" />
                       </View>
                     ) : isCurrent ? (
-                      <View style={styles.activeDotOuter}>
-                        <View style={styles.activeDotInner} />
+                      <View style={[styles.activeDotOuter, isDark && { backgroundColor: colors.cardAlt, borderColor: colors.primary }]}>
+                        <View style={[styles.activeDotInner, isDark && { backgroundColor: colors.primary }]} />
                       </View>
                     ) : isCompleted ? (
-                      <View style={styles.completedDot} />
+                      <View style={[styles.completedDot, isDark && { backgroundColor: colors.primary }]} />
                     ) : (
-                      <View style={styles.pendingDot} />
+                      <View style={[styles.pendingDot, isDark && { backgroundColor: colors.cardAlt, borderColor: colors.border }]} />
                     )}
 
                     {/* Connecting Vertical Line */}
@@ -991,10 +1008,10 @@ For support: support@dhobipro.com | 1800-123-4567
                         style={[
                           styles.timelineLine,
                           (isCompleted || isDelivered)
-                            ? styles.timelineLineCompleted
+                            ? [styles.timelineLineCompleted, isDark && { backgroundColor: colors.primary }]
                             : isCurrent
-                            ? styles.timelineLineCurrent
-                            : styles.timelineLinePending,
+                            ? [styles.timelineLineCurrent, isDark && { backgroundColor: colors.cardAlt }]
+                            : [styles.timelineLinePending, isDark && { backgroundColor: colors.border }],
                         ]}
                       />
                     )}
@@ -1006,7 +1023,7 @@ For support: support@dhobipro.com | 1800-123-4567
                       style={[
                         styles.timelineStepTitle,
                         {
-                          color: (isDelivered && isLast) ? '#166534' : isCurrent ? '#321D8C' : isCompleted ? '#1A1830' : '#8B84B1',
+                          color: (isDelivered && isLast) ? '#22C55E' : isCurrent ? (isDark ? '#A5B4FC' : '#321D8C') : isCompleted ? (isDark ? colors.text : '#1A1830') : (isDark ? colors.textSecondary : '#8B84B1'),
                           fontWeight: (isCurrent || (isDelivered && isLast)) ? '800' : isCompleted ? '700' : '500',
                           fontSize: (isCurrent || (isDelivered && isLast)) ? 14.5 : 13.5,
                         },
@@ -1017,7 +1034,7 @@ For support: support@dhobipro.com | 1800-123-4567
                     <Text
                       style={[
                         styles.timelineStepSubtitle,
-                        { color: (isDelivered && isLast) ? '#16A34A' : isCurrent ? '#4A4668' : isCompleted ? '#6B6889' : '#A09EBF' },
+                        { color: (isDelivered && isLast) ? '#16A34A' : isCurrent ? (isDark ? colors.textSecondary : '#4A4668') : isCompleted ? (isDark ? colors.textSecondary : '#6B6889') : (isDark ? colors.border : '#A09EBF') },
                       ]}
                     >
                       {isDelivered && isLast ? `Delivered on ${formattedDeliveredDate}` : step.subtitle}
@@ -1031,14 +1048,14 @@ For support: support@dhobipro.com | 1800-123-4567
 
         {/* Customer Delivery Availability Check Prompt Card */}
         {!isDelivered && (order?.status === 'ready_for_delivery' || order?.status === 'ready') && !(order as any)?.is_customer_available && (
-          <View style={styles.availabilityCard}>
+          <View style={[styles.availabilityCard, isDark && { backgroundColor: '#13233A', borderColor: '#1E3A8A' }]}>
             <View style={styles.availHeader}>
-              <View style={styles.availIconWrapper}>
-                <MaterialCommunityIcons name="truck-fast" size={24} color="#1D4ED8" />
+              <View style={[styles.availIconWrapper, isDark && { backgroundColor: '#1E293B' }]}>
+                <MaterialCommunityIcons name="truck-fast" size={24} color="#3B82F6" />
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.availTitle}>Your Laundry is Ready for Delivery!</Text>
-                <Text style={styles.availSub}>
+                <Text style={[styles.availTitle, isDark && { color: '#93C5FD' }]}>Your Laundry is Ready for Delivery!</Text>
+                <Text style={[styles.availSub, isDark && { color: '#60A5FA' }]}>
                   Are you available at your address right now to receive your clean clothes?
                 </Text>
               </View>
@@ -1058,12 +1075,12 @@ For support: support@dhobipro.com | 1800-123-4567
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.availRescheduleBtn}
+                style={[styles.availRescheduleBtn, isDark && { backgroundColor: colors.cardAlt, borderColor: colors.border }]}
                 onPress={handleReschedule}
                 activeOpacity={0.85}
               >
-                <MaterialCommunityIcons name="calendar-clock" size={16} color="#64748B" style={{ marginRight: 4 }} />
-                <Text style={styles.availRescheduleText}>Reschedule</Text>
+                <MaterialCommunityIcons name="calendar-clock" size={16} color={isDark ? colors.textSecondary : '#64748B'} style={{ marginRight: 4 }} />
+                <Text style={[styles.availRescheduleText, isDark && { color: colors.text }]}>Reschedule</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1071,14 +1088,14 @@ For support: support@dhobipro.com | 1800-123-4567
 
         {/* Customer Confirmed Availability Badge Card */}
         {!isDelivered && (order?.status === 'customer_confirmed' || (order as any)?.is_customer_available) && (
-          <View style={[styles.availabilityCard, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+          <View style={[styles.availabilityCard, { backgroundColor: isDark ? '#052E16' : '#F0FDF4', borderColor: isDark ? '#166534' : '#BBF7D0' }]}>
             <View style={styles.availHeader}>
-              <View style={[styles.availIconWrapper, { backgroundColor: '#DCFCE7' }]}>
+              <View style={[styles.availIconWrapper, { backgroundColor: isDark ? '#064E3B' : '#DCFCE7' }]}>
                 <MaterialCommunityIcons name="checkbox-marked-circle" size={24} color="#16A34A" />
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={[styles.availTitle, { color: '#166534' }]}>Delivery Availability Confirmed!</Text>
-                <Text style={[styles.availSub, { color: '#15803D' }]}>
+                <Text style={[styles.availTitle, { color: isDark ? '#86EFAC' : '#166534' }]}>Delivery Availability Confirmed!</Text>
+                <Text style={[styles.availSub, { color: isDark ? '#4ADE80' : '#15803D' }]}>
                   You confirmed you are available. The laundry shop is now assigning a delivery partner to dispatch your clothes.
                 </Text>
               </View>
@@ -1086,15 +1103,13 @@ For support: support@dhobipro.com | 1800-123-4567
           </View>
         )}
 
-
-
         {/* Order Items */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Order Items</Text>
-          <Text style={styles.itemsCount}>{order?.items?.length || 2} Items</Text>
+          <Text style={[styles.sectionTitle, { color: isDark ? colors.text : '#1A1830' }]}>Order Items</Text>
+          <Text style={[styles.itemsCount, isDark && { color: '#A5B4FC' }]}>{order?.items?.length || 2} Items</Text>
         </View>
 
-        <View style={styles.itemsContainer}>
+        <View style={[styles.itemsContainer, isDark && { backgroundColor: colors.card, borderColor: colors.border }]}>
           {(order?.items && order.items.length > 0 ? order.items : [
             { name: 'Wash & Fold - Jeans', quantity: 1, price: 100, total: 100 },
             { name: 'Wash & Iron - Saree', quantity: 1, price: 150, total: 150 }
@@ -1116,83 +1131,83 @@ For support: support@dhobipro.com | 1800-123-4567
             const itemsList = order?.items && order.items.length > 0 ? order.items : [1, 2];
 
             return (
-              <View key={index} style={[styles.itemRow, index === itemsList.length - 1 && { borderBottomWidth: 0 }]}>
-                <View style={styles.itemIconWrapper}>
-                  <MaterialCommunityIcons name="tshirt-crew-outline" size={20} color="#5B52E8" />
+              <View key={index} style={[styles.itemRow, isDark && { borderBottomColor: colors.border }, index === itemsList.length - 1 && { borderBottomWidth: 0 }]}>
+                <View style={[styles.itemIconWrapper, isDark && { backgroundColor: colors.cardAlt, borderColor: colors.border }]}>
+                  <MaterialCommunityIcons name="tshirt-crew-outline" size={20} color={colors.primary} />
                 </View>
                 <View style={styles.itemDetails}>
-                  <Text style={styles.itemName}>{cleanName}</Text>
-                  <Text style={styles.itemPrice}>₹{price.toFixed(0)}</Text>
+                  <Text style={[styles.itemName, isDark && { color: colors.text }]}>{cleanName}</Text>
+                  <Text style={[styles.itemPrice, isDark && { color: colors.textSecondary }]}>₹{price.toFixed(0)}</Text>
                 </View>
-                <Text style={styles.itemQty}>× {qty}</Text>
-                <Text style={styles.itemTotal}>₹{total.toFixed(0)}</Text>
+                <Text style={[styles.itemQty, isDark && { color: colors.textSecondary }]}>× {qty}</Text>
+                <Text style={[styles.itemTotal, isDark && { color: colors.text }]}>₹{total.toFixed(0)}</Text>
               </View>
             );
           })}
         </View>
 
         {/* Payment Summary */}
-        <Text style={styles.sectionHeading}>Payment Summary</Text>
-        <View style={styles.summaryContainer}>
+        <Text style={[styles.sectionHeading, { color: isDark ? colors.text : '#1A1830' }]}>Payment Summary</Text>
+        <View style={[styles.summaryContainer, isDark && { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Items Subtotal</Text>
-            <Text style={styles.summaryValue}>₹{displaySubtotal.toFixed(0)}</Text>
+            <Text style={[styles.summaryLabel, isDark && { color: colors.textSecondary }]}>Items Subtotal</Text>
+            <Text style={[styles.summaryValue, isDark && { color: colors.text }]}>₹{displaySubtotal.toFixed(0)}</Text>
           </View>
 
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Pickup & Delivery</Text>
-            <Text style={deliveryFee > 0 ? styles.summaryValue : styles.summaryValueFree}>
+            <Text style={[styles.summaryLabel, isDark && { color: colors.textSecondary }]}>Pickup & Delivery</Text>
+            <Text style={deliveryFee > 0 ? [styles.summaryValue, isDark && { color: colors.text }] : styles.summaryValueFree}>
               {deliveryFee > 0 ? `₹${deliveryFee}` : 'FREE'}
             </Text>
           </View>
 
           {discount > 0 && (
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Discount / Coupon</Text>
+              <Text style={[styles.summaryLabel, isDark && { color: colors.textSecondary }]}>Discount / Coupon</Text>
               <Text style={[styles.summaryValue, { color: '#22C55E' }]}>-₹{discount}</Text>
             </View>
           )}
 
-          <View style={styles.summaryDivider} />
+          <View style={[styles.summaryDivider, isDark && { backgroundColor: colors.border }]} />
 
           <View style={styles.summaryRow}>
-            <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A1830' }}>Total Amount (Incl. Tax)</Text>
-            <Text style={{ fontSize: 18, fontWeight: '900', color: '#5B52E8' }}>₹{finalTotalNum.toFixed(0)}</Text>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: isDark ? colors.text : '#1A1830' }}>Total Amount (Incl. Tax)</Text>
+            <Text style={{ fontSize: 18, fontWeight: '900', color: isDark ? '#A5B4FC' : '#5B52E8' }}>₹{finalTotalNum.toFixed(0)}</Text>
           </View>
 
           <View style={[styles.summaryRow, { marginTop: 12, marginBottom: 0 }]}>
-            <Text style={styles.summaryLabel}>Payment Status</Text>
+            <Text style={[styles.summaryLabel, isDark && { color: colors.textSecondary }]}>Payment Status</Text>
             {isDelivered || order?.payment_status === 'paid' || (order as any)?.payment_status === 'PAID' ? (
-              <View style={{ backgroundColor: '#E6F8F0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <View style={{ backgroundColor: isDark ? '#052E16' : '#E6F8F0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <MaterialCommunityIcons name="check-circle" size={12} color="#16A34A" />
                 <Text style={{ color: '#16A34A', fontSize: 11, fontWeight: '700' }}>
                   Paid {order?.payment_method === 'cash_on_delivery' || (order as any)?.payment_method === 'cod' ? '(Cash on Delivery)' : 'Online'}
                 </Text>
               </View>
             ) : (
-              <View style={{ backgroundColor: '#FFF3E0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-                <Text style={{ color: '#E65100', fontSize: 11, fontWeight: '700' }}>Pending (Cash on Delivery)</Text>
+              <View style={{ backgroundColor: isDark ? '#2E1805' : '#FFF3E0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                <Text style={{ color: isDark ? '#FB923C' : '#E65100', fontSize: 11, fontWeight: '700' }}>Pending (Cash on Delivery)</Text>
               </View>
             )}
           </View>
         </View>
 
         {/* Notes Section (shown below Payment Summary) */}
-        <Text style={styles.sectionHeading}>Notes</Text>
-        <View style={styles.notesCard}>
-          <Text style={styles.notesText}>
+        <Text style={[styles.sectionHeading, { color: isDark ? colors.text : '#1A1830' }]}>Notes</Text>
+        <View style={[styles.notesCard, isDark && { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.notesText, isDark && { color: colors.text }]}>
             {order?.notes || 'Time Slot: 10:00 AM - 12:00 PM. Call before arrival'}
           </Text>
         </View>
 
         {/* Interactive Rate Your Experience & Reorder Card (Shown when order completed or delivered) */}
         {isDelivered && (
-          <View style={styles.rateExperienceCard}>
+          <View style={[styles.rateExperienceCard, isDark && { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.rateHeaderRow}>
               <MaterialCommunityIcons name="star-face" size={22} color="#F59E0B" />
-              <Text style={styles.rateTitle}>Rate Your Laundry & Delivery</Text>
+              <Text style={[styles.rateTitle, isDark && { color: colors.text }]}>Rate Your Laundry & Delivery</Text>
             </View>
-            <Text style={styles.rateSubtitle}>
+            <Text style={[styles.rateSubtitle, isDark && { color: colors.textSecondary }]}>
               How satisfied are you with the laundry quality and doorstep delivery?
             </Text>
 
@@ -1208,12 +1223,12 @@ For support: support@dhobipro.com | 1800-123-4567
                   <MaterialCommunityIcons
                     name={star <= rating ? 'star' : 'star-outline'}
                     size={32}
-                    color={star <= rating ? '#F59E0B' : '#CBD5E1'}
+                    color={star <= rating ? '#F59E0B' : (isDark ? '#4B5563' : '#CBD5E1')}
                   />
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={styles.ratingScoreLabel}>
+            <Text style={[styles.ratingScoreLabel, isDark && { color: '#A5B4FC' }]}>
               {rating === 5 ? '⭐⭐⭐⭐⭐ Excellent (5.0/5.0)' :
                rating === 4 ? '⭐⭐⭐⭐ Very Good (4.0/5.0)' :
                rating === 3 ? '⭐⭐⭐ Good (3.0/5.0)' : 'Feedback Recorded'}
@@ -1227,10 +1242,18 @@ For support: support@dhobipro.com | 1800-123-4567
                   <TouchableOpacity
                     key={tag}
                     onPress={() => toggleTag(tag)}
-                    style={[styles.complimentChip, isSelected && styles.complimentChipSelected]}
+                    style={[
+                      styles.complimentChip,
+                      isDark && { backgroundColor: colors.cardAlt, borderColor: colors.border },
+                      isSelected && (isDark ? { backgroundColor: '#2E2B54', borderColor: colors.primary } : styles.complimentChipSelected),
+                    ]}
                     activeOpacity={0.75}
                   >
-                    <Text style={[styles.complimentChipText, isSelected && styles.complimentChipTextSelected]}>
+                    <Text style={[
+                      styles.complimentChipText,
+                      isDark && { color: colors.textSecondary },
+                      isSelected && (isDark ? { color: '#A5B4FC', fontWeight: '800' } : styles.complimentChipTextSelected),
+                    ]}>
                       {tag}
                     </Text>
                   </TouchableOpacity>
@@ -1241,18 +1264,17 @@ For support: support@dhobipro.com | 1800-123-4567
             {/* Reorder & Invoice Action Buttons */}
             <View style={styles.deliveredActionsRow}>
               <TouchableOpacity
-                style={styles.invoiceBtn}
+                style={[styles.invoiceBtn, isDark && { backgroundColor: colors.cardAlt, borderColor: colors.border }]}
                 onPress={handleDownloadInvoice}
                 activeOpacity={0.8}
               >
-                <MaterialCommunityIcons name="file-document-outline" size={16} color="#5B52E8" />
-                <Text style={styles.invoiceBtnText}>Invoice</Text>
+                <MaterialCommunityIcons name="file-document-outline" size={16} color={isDark ? '#A5B4FC' : '#5B52E8'} />
+                <Text style={[styles.invoiceBtnText, isDark && { color: '#A5B4FC' }]}>Invoice</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.reorderBtn}
                 onPress={() => {
-                  // Pass shop + all previous order items so BookingScreen pre-fills them
                   navigation.navigate('Booking', {
                     shop: shopObj,
                     reorderShop: shopObj,
@@ -1284,46 +1306,46 @@ For support: support@dhobipro.com | 1800-123-4567
         animationType="slide"
         onRequestClose={() => setShowLiveMapModal(false)}
       >
-        <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'flex-end' }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)', justifyContent: 'flex-end' }}>
           <View style={{
-            backgroundColor: '#FFFFFF',
+            backgroundColor: isDark ? colors.card : '#FFFFFF',
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
             padding: 20,
             maxHeight: '85%',
           }}>
-            <View style={{ width: 40, height: 4, backgroundColor: '#CBD5E1', borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
+            <View style={{ width: 40, height: 4, backgroundColor: isDark ? colors.border : '#CBD5E1', borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
             
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <View>
-                <Text style={{ fontSize: 18, fontWeight: '800', color: '#1E1B4B' }}>Live Rider Location</Text>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>Live Rider Location</Text>
                 <Text style={{ fontSize: 12, color: '#16A34A', fontWeight: '700', marginTop: 2 }}>
                   🟢 GPS Active • Coordinates: {riderLat.toFixed(4)}, {riderLng.toFixed(4)}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setShowLiveMapModal(false)} style={{ padding: 6 }}>
-                <Text style={{ fontSize: 18, fontWeight: '800', color: '#64748B' }}>✕</Text>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textSecondary }}>✕</Text>
               </TouchableOpacity>
             </View>
 
             {/* Map Simulation Container */}
             <View style={{
               height: 220,
-              backgroundColor: '#E2E8F0',
+              backgroundColor: isDark ? '#1F2937' : '#E2E8F0',
               borderRadius: 16,
               overflow: 'hidden',
               position: 'relative',
               justifyContent: 'center',
               alignItems: 'center',
               borderWidth: 1,
-              borderColor: '#CBD5E1',
+              borderColor: isDark ? colors.border : '#CBD5E1',
             }}>
               {/* Grid Roads Background */}
-              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#F1F5F9' }}>
-                <View style={{ position: 'absolute', top: 40, left: 0, right: 0, height: 16, backgroundColor: '#CBD5E1' }} />
-                <View style={{ position: 'absolute', top: 120, left: 0, right: 0, height: 20, backgroundColor: '#94A3B8' }} />
-                <View style={{ position: 'absolute', top: 0, bottom: 0, left: 80, width: 16, backgroundColor: '#CBD5E1' }} />
-                <View style={{ position: 'absolute', top: 0, bottom: 0, left: 200, width: 24, backgroundColor: '#94A3B8' }} />
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: isDark ? '#111827' : '#F1F5F9' }}>
+                <View style={{ position: 'absolute', top: 40, left: 0, right: 0, height: 16, backgroundColor: isDark ? '#1F2937' : '#CBD5E1' }} />
+                <View style={{ position: 'absolute', top: 120, left: 0, right: 0, height: 20, backgroundColor: isDark ? '#374151' : '#94A3B8' }} />
+                <View style={{ position: 'absolute', top: 0, bottom: 0, left: 80, width: 16, backgroundColor: isDark ? '#1F2937' : '#CBD5E1' }} />
+                <View style={{ position: 'absolute', top: 0, bottom: 0, left: 200, width: 24, backgroundColor: isDark ? '#374151' : '#94A3B8' }} />
               </View>
 
               {/* Waypoint Route Line */}
@@ -1333,25 +1355,25 @@ For support: support@dhobipro.com | 1800-123-4567
                 left: 90,
                 width: 120,
                 height: 4,
-                backgroundColor: '#5B52E8',
+                backgroundColor: colors.primary,
                 transform: [{ rotate: '25deg' }],
               }} />
 
               {/* Customer Pin */}
               <View style={{ position: 'absolute', top: 40, right: 50, alignItems: 'center' }}>
                 <MaterialCommunityIcons name="home-map-marker" size={32} color="#DC2626" />
-                <View style={{ backgroundColor: '#FFFFFF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, shadowColor: '#000', elevation: 2 }}>
+                <View style={{ backgroundColor: isDark ? colors.card : '#FFFFFF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, shadowColor: '#000', elevation: 2 }}>
                   <Text style={{ fontSize: 10, fontWeight: '800', color: '#DC2626' }}>Your Doorstep</Text>
                 </View>
               </View>
 
-              {/* Rider Vehicle Pin (Never 0, 0!) */}
+              {/* Rider Vehicle Pin */}
               <View style={{ position: 'absolute', top: 90, left: 80, alignItems: 'center' }}>
                 <View style={{
                   width: 44,
                   height: 44,
                   borderRadius: 22,
-                  backgroundColor: '#321D8C',
+                  backgroundColor: colors.primary,
                   alignItems: 'center',
                   justifyContent: 'center',
                   borderWidth: 3,
@@ -1361,7 +1383,7 @@ For support: support@dhobipro.com | 1800-123-4567
                 }}>
                   <MaterialCommunityIcons name="motorbike" size={24} color="#FFFFFF" />
                 </View>
-                <View style={{ backgroundColor: '#1E1B4B', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginTop: 4 }}>
+                <View style={{ backgroundColor: isDark ? '#1E1B4B' : '#1E1B4B', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginTop: 4 }}>
                   <Text style={{ fontSize: 10, fontWeight: '800', color: '#FFFFFF' }}>{deliveryBoyName} • 1.2 km</Text>
                 </View>
               </View>
@@ -1369,22 +1391,22 @@ For support: support@dhobipro.com | 1800-123-4567
 
             {/* Rider Info Card */}
             <View style={{
-              backgroundColor: '#F8F7FF',
+              backgroundColor: isDark ? colors.cardAlt : '#F8F7FF',
               borderRadius: 14,
               padding: 14,
               marginTop: 14,
               borderWidth: 1,
-              borderColor: '#EDE8FF',
+              borderColor: colors.border,
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'space-between',
             }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '800', color: '#1E1B4B' }}>{deliveryBoyName}</Text>
-                <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>{deliveryBoyName}</Text>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
                   Vehicle: {deliveryBoyVehicle} • DhobiPro EV Fast
                 </Text>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#5B52E8', marginTop: 2 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary, marginTop: 2 }}>
                   Estimated Arrival: ~8 mins
                 </Text>
               </View>
@@ -1411,7 +1433,7 @@ For support: support@dhobipro.com | 1800-123-4567
             <TouchableOpacity
               onPress={() => setShowLiveMapModal(false)}
               style={{
-                backgroundColor: '#321D8C',
+                backgroundColor: colors.primary,
                 paddingVertical: 12,
                 borderRadius: 12,
                 alignItems: 'center',
@@ -1630,7 +1652,7 @@ For support: support@dhobipro.com | 1800-123-4567
           </View>
         </View>
       </Modal>
-    </ImageBackground>
+    </MainContainer>
   );
 };
 

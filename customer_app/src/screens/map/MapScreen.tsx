@@ -214,6 +214,11 @@ export const MapScreen = ({ navigation, route }: any) => {
       });
     } else if (targetScreen === 'Profile') {
       navigation.navigate('MainTabs', { screen: 'ProfileTab' });
+    } else if (targetScreen === 'Home') {
+      navigation.navigate('MainTabs', {
+        screen: 'HomeTab',
+        params: { selectedLocation: finalAddress },
+      });
     } else {
       // Return to Booking screen with the newly selected address
       navigation.navigate({

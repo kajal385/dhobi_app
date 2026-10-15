@@ -44,6 +44,7 @@ export const AppNavigator = () => {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MainTabs"       component={MainTabs} />
+      <Stack.Screen name="Home"           component={MainTabs} />
       <Stack.Screen name="Booking"        component={BookingScreen} />
       <Stack.Screen name="OrderDetail"    component={OrderDetailScreen} />
       <Stack.Screen name="Tracking"       component={TrackingScreen} />

@@ -34,6 +34,7 @@ import {
   requestLocationPermission,
   getCurrentLocation,
   reverseGeocode,
+  calculateDistance,
 } from '../../utils/locationUtils';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -877,9 +878,20 @@ const BookingScreenInner = ({ navigation, route }: any) => {
                     <MaterialCommunityIcons name="storefront-outline" size={22} color="#FFF" />
                   </View>
                   <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={{ fontSize: 15, fontWeight: '800', color: isCurrent ? '#321D8C' : colors.text }}>{s.name}</Text>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: isCurrent ? (isDark ? '#A5B4FC' : '#321D8C') : colors.text }}>{s.name}</Text>
                     <Text style={{ fontSize: 12, color: colors.textSecondary }}>📍 {s.address || s.area || 'Pune'}</Text>
-                    <Text style={{ fontSize: 11, color: '#5B52E8', marginTop: 2 }}>⭐ {s.rating} • {s.distance || 'Near you'}</Text>
+                    {(() => {
+                      const custLat = Number(user?.latitude || 18.5980);
+                      const custLng = Number(user?.longitude || 73.7680);
+                      const distText = s.latitude && s.longitude
+                        ? calculateDistance(custLat, custLng, Number(s.latitude), Number(s.longitude))
+                        : (s.distance || '0.8 km away (6 mins)');
+                      return (
+                        <Text style={{ fontSize: 11, color: '#5B52E8', marginTop: 2 }}>
+                          ⭐ {s.rating} • {distText}
+                        </Text>
+                      );
+                    })()}
                   </View>
                   {isCurrent ? (
                     <View style={{ backgroundColor: '#5B52E8', width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
@@ -971,7 +983,7 @@ const BookingScreenInner = ({ navigation, route }: any) => {
                       />
                     </View>
                     <View style={styles.serviceTextContainer}>
-                      <Text style={[styles.serviceTitle, { color: isSelected ? '#321D8C' : colors.text }]}>
+                      <Text style={[styles.serviceTitle, { color: isSelected ? (isDark ? '#A5B4FC' : '#321D8C') : colors.text }]}>
                         {service.title}
                       </Text>
                       <Text style={[styles.serviceDesc, { color: colors.textSecondary }]}>
@@ -1039,7 +1051,7 @@ const BookingScreenInner = ({ navigation, route }: any) => {
             })}
           </View>
 
-          <View style={[styles.promoCard, { backgroundColor: isDark ? '#2D2A5E' : '#F0EEFF' }]}>
+          <View style={[styles.promoCard, { backgroundColor: isDark ? colors.card : '#F0EEFF', borderColor: colors.border }]}>
             <View style={styles.promoImageWrapper}>
               <Image
                 source={require('../../../assets/myimages/delivery_icon.png')}
@@ -1048,15 +1060,15 @@ const BookingScreenInner = ({ navigation, route }: any) => {
               />
             </View>
             <View style={styles.promoTextContainer}>
-              <Text style={[styles.promoTitle, { color: '#321D8C' }]}>Free pickup & delivery</Text>
+              <Text style={[styles.promoTitle, { color: isDark ? colors.text : '#321D8C' }]}>Free pickup & delivery</Text>
               <Text style={[styles.promoDesc, { color: colors.textSecondary }]}>On orders above ₹199</Text>
             </View>
           </View>
         </ScrollView>
 
-        <View style={[styles.bottomDetailsContainer, { backgroundColor: colors.card }]}>
+        <View style={[styles.bottomDetailsContainer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
           <View>
-            <Text style={{ color: '#5B52E8', fontSize: 13, fontWeight: '700' }}>
+            <Text style={{ color: isDark ? '#A5B4FC' : '#5B52E8', fontSize: 13, fontWeight: '700' }}>
               {selectedItemsCount} items selected
             </Text>
             <Text style={{ color: colors.text, fontSize: 26, fontWeight: '800', marginTop: 4 }}>₹{itemsSubtotal}</Text>
@@ -1728,7 +1740,7 @@ const BookingScreenInner = ({ navigation, route }: any) => {
           {/* Amount to Pay Header */}
           <View style={styles.paymentAmountHeader}>
             <Text style={{ color: colors.textSecondary, fontSize: 15, fontWeight: '700' }}>Amount to Pay</Text>
-            <Text style={{ color: '#321D8C', fontSize: 28, fontWeight: '800' }}>₹{totalAmount}</Text>
+            <Text style={{ color: isDark ? '#FFFFFF' : '#321D8C', fontSize: 28, fontWeight: '800' }}>₹{totalAmount}</Text>
           </View>
 
           {/* Payment Methods */}
@@ -1817,7 +1829,7 @@ const BookingScreenInner = ({ navigation, route }: any) => {
             />
           </View>
 
-          <Text style={[styles.confirmedTitle, { color: '#321D8C' }]}>Order Confirmed !</Text>
+          <Text style={[styles.confirmedTitle, { color: isDark ? '#FFFFFF' : '#321D8C' }]}>Order Confirmed !</Text>
           <Text style={[styles.confirmedSubtitle, { color: colors.textSecondary }]}>We've received your order</Text>
 
           {/* Details Table */}
@@ -1904,7 +1916,7 @@ const BookingScreenInner = ({ navigation, route }: any) => {
           <TouchableOpacity
             onPress={() => {
               setStep(1);
-              navigation.navigate('Home');
+              navigation.navigate('MainTabs', { screen: 'HomeTab' });
             }}
             style={styles.backHomeBtn}
           >

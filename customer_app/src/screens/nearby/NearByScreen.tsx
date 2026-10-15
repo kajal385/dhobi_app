@@ -18,7 +18,7 @@ import AppScreen from '../../components/AppScreen';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { resolveImageUrl } from '../../constants/config';
-import { requestLocationPermission, getCurrentLocation, reverseGeocode, GeocodedAddress, calculateDistance } from '../../utils/locationUtils';
+import { requestLocationPermission, getCurrentLocation, reverseGeocode, GeocodedAddress, calculateDistance, getDistanceInKm } from '../../utils/locationUtils';
 import Toast from 'react-native-toast-message';
 import { shopService, ShopListItem, DEFAULT_SHOPS, isApprovedShop } from '../../services/shopService';
 import LocationAccuracyModal from '../../components/LocationAccuracyModal';
@@ -101,12 +101,12 @@ export const NearByScreen = ({ navigation }: any) => {
     return () => {
       isMounted.current = false;
     };
-  }, []);
+  }, [user?.latitude, user?.longitude]);
 
   const fetchLocation = useCallback(async (isRef = false, userTriggered = false) => {
     if (isMounted.current && !isRef) setLoading(true);
-    let lat = 18.5590;
-    let lng = 73.7868;
+    let lat = Number(user?.latitude || 18.5980);
+    let lng = Number(user?.longitude || 73.7680);
 
     try {
       let granted = false;
@@ -194,14 +194,17 @@ export const NearByScreen = ({ navigation }: any) => {
       const data = await shopService.getNearbyShops(lat, lng);
       const rawShops = (data && data.length > 0 ? data : DEFAULT_SHOPS).filter(isApprovedShop);
       const processed = rawShops.map((shop) => {
-        if (shop.latitude && shop.longitude) {
-          return {
-            ...shop,
-            distance: calculateDistance(lat, lng, shop.latitude, shop.longitude),
-          };
-        }
-        return shop;
-      });
+        const km = shop.latitude && shop.longitude
+          ? getDistanceInKm(lat, lng, Number(shop.latitude), Number(shop.longitude))
+          : 999;
+        return {
+          ...shop,
+          distance: shop.latitude && shop.longitude
+            ? calculateDistance(lat, lng, Number(shop.latitude), Number(shop.longitude))
+            : shop.distance,
+          distanceKm: km,
+        };
+      }).sort((a, b) => (a.distanceKm || 999) - (b.distanceKm || 999));
       if (isMounted.current) {
         setShops(processed);
       }
