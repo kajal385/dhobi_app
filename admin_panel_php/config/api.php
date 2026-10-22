@@ -128,3 +128,20 @@ if (!defined('ADMIN_BASE_URL')) {
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Firebase Web App Configuration (Public Client Credentials)
+// ─────────────────────────────────────────────────────────────────────────────
+if (!defined('FIREBASE_API_KEY')) {
+    define('FIREBASE_API_KEY', getenv('FIREBASE_API_KEY') ?: 'AIzaSyDieUYvi0ikEfv6EJI_9Veb8xvcxqRWb1Y');
+}
+if (!defined('FIREBASE_PROJECT_ID')) {
+    define('FIREBASE_PROJECT_ID', getenv('FIREBASE_PROJECT_ID') ?: 'laundry-app-2606a');
+}
+if (!defined('FIREBASE_MESSAGING_SENDER_ID')) {
+    define('FIREBASE_MESSAGING_SENDER_ID', getenv('FIREBASE_MESSAGING_SENDER_ID') ?: '747932342697');
+}
+if (!defined('FIREBASE_APP_ID')) {
+    define('FIREBASE_APP_ID', getenv('FIREBASE_APP_ID') ?: '1:747932342697:web:dhobipro_admin_web');
+}
+

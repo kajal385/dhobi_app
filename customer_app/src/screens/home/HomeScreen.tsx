@@ -33,8 +33,10 @@ import { OrderCard } from '../../components/OrderCard';
 import { SkeletonLoader } from '../../components/SkeletonLoader';
 import LocationAccuracyModal from '../../components/LocationAccuracyModal';
 import Toast from 'react-native-toast-message';
-import { requestLocationPermission, getCurrentLocation, reverseGeocode, calculateDistance, getDistanceInKm } from '../../utils/locationUtils';
+import { requestLocationPermission, getCurrentLocation, reverseGeocode, calculateDistance, getDistanceInKm, geocodeAddress } from '../../utils/locationUtils';
 import { shopService, ShopListItem, DEFAULT_SHOPS, isApprovedShop } from '../../services/shopService';
+import { addressService } from '../../services/addressService';
+import { Address } from '../../types';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { walletService } from '../../services/walletService';
 import { setWallet } from '../../store/walletSlice';
@@ -540,6 +542,32 @@ export const HomeScreen = ({ navigation, route }: any) => {
   const [currentLocationLabel, setCurrentLocationLabel] = useState(user?.area ? `${user.area}, ${user.city || 'Pune'}` : 'Wakad, Pune');
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showLocationPickerModal, setShowLocationPickerModal] = useState(false);
+  const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
+
+  const loadSavedAddresses = useCallback(async () => {
+    try {
+      const data = await addressService.getAddresses();
+      if (Array.isArray(data)) {
+        setSavedAddresses(data);
+      }
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    loadSavedAddresses();
+  }, [loadSavedAddresses, user?.address]);
+
+  // Recalculate distance and reload shops whenever customer changes their address or coordinates anywhere in the app
+  useEffect(() => {
+    if (user?.latitude && user?.longitude) {
+      fetchShops(Number(user.latitude), Number(user.longitude));
+    }
+    if (user?.address) {
+      const parts = user.address.split(',');
+      const label = parts.slice(0, 2).join(',').trim() || user.area || 'Wakad, Pune';
+      setCurrentLocationLabel(label);
+    }
+  }, [user?.latitude, user?.longitude, user?.address]);
 
   const [popularShops, setPopularShops] = useState<ShopListItem[]>(DEFAULT_SHOPS);
   const [nearbyShops, setNearbyShops] = useState<ShopListItem[]>(DEFAULT_SHOPS);
@@ -823,6 +851,38 @@ export const HomeScreen = ({ navigation, route }: any) => {
       type: 'success',
       text1: `📍 Delivery Location: ${hub.name}`,
       text2: 'Distances to laundries recalculated!',
+    });
+  };
+
+  const handleSelectSavedAddress = async (addr: Address) => {
+    setShowLocationPickerModal(false);
+    let lat = Number(addr.latitude || 0);
+    let lng = Number(addr.longitude || 0);
+
+    if (!lat || !lng || lat === 0 || lng === 0) {
+      const geocoded = await geocodeAddress(`${addr.address_line1}, ${addr.city}`);
+      lat = geocoded?.latitude || 18.5980;
+      lng = geocoded?.longitude || 73.7680;
+    }
+
+    const parts = (addr.address_line1 || '').split(',');
+    const shortLabel = parts.slice(0, 2).join(',').trim() || addr.label || 'Wakad, Pune';
+    setCurrentLocationLabel(shortLabel);
+
+    dispatch(updateProfile({
+      latitude: lat,
+      longitude: lng,
+      address: addr.address_line1,
+      city: addr.city || 'Pune',
+      pincode: addr.pincode || '411057',
+      area: addr.label || 'Home',
+    }));
+
+    fetchShops(lat, lng);
+    Toast.show({
+      type: 'success',
+      text1: `📍 Switched to ${addr.label || 'Address'}`,
+      text2: 'Laundry distances recalculated!',
     });
   };
 
@@ -1780,7 +1840,65 @@ export const HomeScreen = ({ navigation, route }: any) => {
                 <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
 
-              {/* Option C: Quick Select Delivery Areas */}
+              {/* Option C: Your Saved Addresses */}
+              {savedAddresses && savedAddresses.length > 0 && (
+                <View style={{ marginBottom: 16 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Your Saved Addresses
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setShowLocationPickerModal(false);
+                        navigation.navigate('SavedAddresses', { returnScreen: 'Home' });
+                      }}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#5B52E8' }}>Manage ▾</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={{ gap: 8 }}>
+                    {savedAddresses.map((addr) => {
+                      const isCurrent = user?.address === addr.address_line1;
+                      return (
+                        <TouchableOpacity
+                          key={addr.id}
+                          activeOpacity={0.75}
+                          onPress={() => handleSelectSavedAddress(addr)}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            padding: 12,
+                            borderRadius: 12,
+                            backgroundColor: isCurrent ? (isDark ? '#26234D' : '#EDE8FF') : (isDark ? colors.cardAlt : '#FAFAFC'),
+                            borderWidth: 1,
+                            borderColor: isCurrent ? '#5B52E8' : colors.border,
+                          }}
+                        >
+                          <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#5B52E8', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                            <MaterialCommunityIcons name={addr.label?.toLowerCase().includes('work') ? 'briefcase-outline' : 'home-outline'} size={18} color="#FFF" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>{addr.label || 'Home'}</Text>
+                              {isCurrent && (
+                                <View style={{ backgroundColor: '#5B52E8', paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 4 }}>
+                                  <Text style={{ fontSize: 9, fontWeight: '800', color: '#FFFFFF' }}>ACTIVE</Text>
+                                </View>
+                              )}
+                            </View>
+                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }} numberOfLines={1}>
+                              {addr.address_line1}, {addr.city}
+                            </Text>
+                          </View>
+                          <MaterialCommunityIcons name="check-circle" size={18} color={isCurrent ? '#5B52E8' : 'transparent'} />
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* Option D: Quick Select Delivery Areas */}
               <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Popular Laundry Hubs (Pune & PCMC)
               </Text>

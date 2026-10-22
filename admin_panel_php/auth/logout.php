@@ -5,7 +5,11 @@ require_once __DIR__ . '/../includes/api-client.php';
 
 // Notify backend if logged in
 if (isLoggedIn()) {
+    $u = currentUser();
     try {
+        if (!empty($u['id'])) {
+            apiPost('/fcm/token/remove', ['user_id' => $u['id']]);
+        }
         apiPost('/auth/logout');
     } catch (\Throwable $e) {
         // Ignore network errors on logout

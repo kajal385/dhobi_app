@@ -6,13 +6,21 @@ require_once __DIR__ . '/../includes/api-client.php';
 $msg = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $title = $_POST['title'] ?? '';
-    $body = $_POST['body'] ?? '';
+    $title = trim($_POST['title'] ?? '');
+    $body = trim($_POST['body'] ?? '');
     $audience = $_POST['audience'] ?? 'ALL_CUSTOMERS';
     $city = $_POST['city'] ?? 'ALL';
 
     if ($title && $body) {
-        $msg = "🚀 Push notification broadcast '{$title}' queued and dispatched to {$audience} in {$city}!";
+        $apiRes = apiClientRequest('POST', '/admin/broadcast', [
+            'title'    => $title,
+            'body'     => $body,
+            'audience' => $audience,
+            'city'     => $city,
+        ]);
+
+        $sentCount = $apiRes['data']['sent_count'] ?? $apiRes['sent_count'] ?? null;
+        $msg = "🚀 Push notification broadcast '{$title}' dispatched to {$audience}!" . ($sentCount !== null ? " ({$sentCount} devices reached)" : "");
     }
 }
 ?>

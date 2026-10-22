@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Colors } from "../../constants/colors";
 import { authService } from "../../services/authService";
+import { firebaseAuthService } from "../../services/firebaseAuthService";
 import { Marquee } from "@animatereactnative/marquee";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import LinearGradient from "react-native-linear-gradient";
@@ -104,6 +105,7 @@ export default function AnimatedAuthScreen() {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [tempAuthData, setTempAuthData] = useState<any>(null);
+  const [firebaseConfirmation, setFirebaseConfirmation] = useState<any>(null);
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
 
@@ -186,11 +188,19 @@ export default function AnimatedAuthScreen() {
     setLoading(true);
     setError("");
     try {
-      const result = await authService.sendOtp(normalizePhone(mobile), callingCode);
-      onContinue();
-      if (result?.data?.dev_otp) setOtpError(`Dev OTP: ${result.data.dev_otp}`);
+      try {
+        const confirmation = await firebaseAuthService.sendPhoneOtp(mobile, callingCode);
+        setFirebaseConfirmation(confirmation);
+        onContinue();
+      } catch (fbErr: any) {
+        console.warn("[Firebase Phone Auth] Falling back to backend OTP:", fbErr?.message);
+        const result = await authService.sendOtp(normalizePhone(mobile), callingCode);
+        setFirebaseConfirmation(null);
+        onContinue();
+        if (result?.data?.dev_otp) setOtpError(`Dev OTP: ${result.data.dev_otp}`);
+      }
     } catch (e: any) {
-      setError(e.message || "Could not send OTP");
+      setError(e.message || "Could not send OTP. Check your connection.");
     } finally {
       setLoading(false);
     }
@@ -201,7 +211,18 @@ export default function AnimatedAuthScreen() {
     setLoading(true);
     setOtpError("");
     try {
-      const result = await authService.sendOtp(normalizePhone(mobile), callingCode);
+      if (firebaseConfirmation) {
+        const confirmation = await firebaseAuthService.sendPhoneOtp(mobile, callingCode);
+        setFirebaseConfirmation(confirmation);
+        setOtpError("New verification code sent to your phone! 📩");
+      } else {
+        const result = await authService.sendOtp(normalizePhone(mobile), callingCode);
+        if (result?.data?.dev_otp) {
+          setOtpError(`Dev OTP: ${result.data.dev_otp}`);
+        } else {
+          setOtpError("OTP resent successfully! Check your phone.");
+        }
+      }
       setTimer(30);
       setCanResend(false);
       const interval = setInterval(() => {
@@ -214,11 +235,6 @@ export default function AnimatedAuthScreen() {
           return prev - 1;
         });
       }, 1000);
-      if (result?.data?.dev_otp) {
-        setOtpError(`Dev OTP: ${result.data.dev_otp}`);
-      } else {
-        setOtpError("OTP resent successfully! Check your phone.");
-      }
     } catch (e: any) {
       setOtpError(e.message || "Failed to resend OTP");
     } finally {
@@ -231,12 +247,29 @@ export default function AnimatedAuthScreen() {
     setLoading(true);
     setOtpError("");
     try {
-      const result = await authService.verifyOtp(normalizePhone(mobile), otp.trim(), callingCode);
-      const isNewUser = result?.data?.is_new_user;
-      const user = result?.data?.user;
-      const token = result?.data?.access_token;
+      let user: any = null;
+      let token: any = null;
+      let isNewUser = false;
 
-      const needsName = isNewUser && (!user.name || /^User \d{4}$/.test(user.name));
+      if (firebaseConfirmation) {
+        // 1. Confirm with Firebase Phone Auth
+        const credential = await firebaseAuthService.confirmOtp(firebaseConfirmation, otp.trim());
+        const idToken = await credential.user.getIdToken();
+
+        // 2. Synchronize with Laravel backend & retrieve user + access_token
+        const syncRes = await firebaseAuthService.syncWithBackend(normalizePhone(mobile), idToken, 'customer');
+        user = syncRes.user;
+        token = syncRes.access_token || syncRes.token;
+        isNewUser = Boolean(syncRes.is_new_user);
+      } else {
+        // Fallback to backend verifyOtp
+        const result = await authService.verifyOtp(normalizePhone(mobile), otp.trim(), callingCode);
+        isNewUser = Boolean(result?.data?.is_new_user);
+        user = result?.data?.user;
+        token = result?.data?.access_token || result?.data?.token;
+      }
+
+      const needsName = isNewUser && (!user?.name || /^User \d{4}$/.test(user.name) || /^Customer \d{4}$/.test(user.name));
 
       if (needsName) {
         setTempAuthData({ user, token });
@@ -247,7 +280,7 @@ export default function AnimatedAuthScreen() {
         dispatch(authSuccess({ user, token }));
       }
     } catch (e: any) {
-      setOtpError(e.message || "Verification failed");
+      setOtpError(e.message || "Verification failed. Invalid or expired OTP.");
     } finally {
       setLoading(false);
     }

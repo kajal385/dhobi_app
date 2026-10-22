@@ -7,6 +7,8 @@
 
   <!-- Main Application JavaScript -->
   <script src="<?= ADMIN_BASE_URL ?>/assets/js/app.js?v=<?= @filemtime(__DIR__ . '/../assets/js/app.js') ?: time() ?>"></script>
+  <!-- Firebase Web Push Notification Engine -->
+  <script src="<?= ADMIN_BASE_URL ?>/assets/js/firebase-web-notifications.js?v=<?= @filemtime(__DIR__ . '/../assets/js/firebase-web-notifications.js') ?: time() ?>"></script>
   <script>
     // Initialize Lucide Icons on document load
     if (window.lucide) {

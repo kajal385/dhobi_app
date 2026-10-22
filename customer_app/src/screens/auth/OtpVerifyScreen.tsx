@@ -7,10 +7,12 @@ import { COLORS, DARK_COLORS, SPACING } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { authSuccess } from '../../store/authSlice';
 import apiClient from '../../api/client';
+import { firebaseAuthService } from '../../services/firebaseAuthService';
 import Toast from 'react-native-toast-message';
 
 export const OtpVerifyScreen = ({ route, navigation }: any) => {
   const { phone } = route.params;
+  const [confirmation, setConfirmation] = useState<any>(route.params?.confirmation || null);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -39,7 +41,13 @@ export const OtpVerifyScreen = ({ route, navigation }: any) => {
     if (!canResend || resending) return;
     setResending(true);
     try {
-      await apiClient.post('/auth/send-otp', { mobile: phone });
+      if (confirmation) {
+        const newConfirmation = await firebaseAuthService.sendPhoneOtp(phone, '91');
+        setConfirmation(newConfirmation);
+      } else {
+        await apiClient.post('/auth/send-otp', { mobile: phone });
+      }
+
       Toast.show({
         type: 'success',
         text1: 'OTP Resent Successfully! 📩',
@@ -61,7 +69,7 @@ export const OtpVerifyScreen = ({ route, navigation }: any) => {
       Toast.show({
         type: 'error',
         text1: 'Resend Failed',
-        text2: e.response?.data?.message || 'Could not resend OTP. Please try again.',
+        text2: e.message || 'Could not resend OTP. Please try again.',
       });
     } finally {
       setResending(false);
@@ -80,13 +88,32 @@ export const OtpVerifyScreen = ({ route, navigation }: any) => {
 
     setLoading(true);
     try {
-      const response = await apiClient.post('/auth/verify-otp', {
-        mobile: phone,
-        otp,
-        country_code: '91',
-      });
+      let user: any = null;
+      let access_token: string = '';
+      let is_new_user: boolean = false;
 
-      const { user, access_token, is_new_user } = response.data.data;
+      if (confirmation) {
+        // 1. Confirm OTP with Firebase
+        const credential = await firebaseAuthService.confirmOtp(confirmation, otp);
+        const idToken = await credential.user.getIdToken();
+
+        // 2. Synchronize with Laravel backend
+        const syncRes = await firebaseAuthService.syncWithBackend(phone, idToken, 'customer');
+        user = syncRes.user;
+        access_token = syncRes.access_token || syncRes.token || '';
+        is_new_user = Boolean(syncRes.is_new_user);
+      } else {
+        // Fallback to backend verification
+        const response = await apiClient.post('/auth/verify-otp', {
+          mobile: phone,
+          otp,
+          country_code: '91',
+        });
+        const data = response.data.data;
+        user = data.user;
+        access_token = data.access_token;
+        is_new_user = Boolean(data.is_new_user);
+      }
 
       // Dispatch token & profile to Redux Store
       dispatch(authSuccess({ user, token: access_token }));
@@ -100,19 +127,12 @@ export const OtpVerifyScreen = ({ route, navigation }: any) => {
       if (is_new_user) {
         navigation.navigate('ProfileSetup');
       }
-      // else: App root will auto-switch to Home Stack based on auth status
     } catch (error: any) {
-      console.error('Verify OTP error:', error.response?.data || error.message);
-      const msg =
-        error.response?.data?.message ||
-        (error.response?.data?.errors
-          ? Object.values(error.response.data.errors).flat().join(', ')
-          : null) ||
-        'Invalid or expired OTP.';
+      console.error('Verify OTP error:', error.message);
       Toast.show({
         type: 'error',
         text1: 'Verification Failed',
-        text2: msg,
+        text2: error.message || 'Invalid or expired OTP. Please try again.',
       });
     } finally {
       setLoading(false);

@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\DeliveryBoy;
 use App\Models\DeliveryAssignment;
 use App\Models\DeliveryLocation;
+use App\Services\FirebaseNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -154,6 +155,35 @@ class DeliveryBoyController extends Controller
             'updated_at' => now(),
         ]);
 
+        // Firebase Push Notifications for Pickup
+        try {
+            FirebaseNotificationService::sendToUser(
+                (int) $order->user_id,
+                'Order Picked Up 🧺',
+                'Your clothes for order #' . ($order->order_number ?: $order->id) . ' have been picked up by our delivery partner.',
+                [
+                    'type'       => 'order_picked_up',
+                    'order_id'   => (string) $order->id,
+                    'channel_id' => 'dhobipro_customer_channel',
+                ]
+            );
+
+            if (!empty($order->shop_id)) {
+                FirebaseNotificationService::sendToShopOwner(
+                    (int) $order->shop_id,
+                    'Clothes Picked Up 🧺',
+                    'Rider has picked up clothes for order #' . ($order->order_number ?: $order->id) . ' and is on the way to your shop.',
+                    [
+                        'type'       => 'order_picked_up',
+                        'order_id'   => (string) $order->id,
+                        'channel_id' => 'dhobipro_partner_channel',
+                    ]
+                );
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('FCM pickup notification failed: ' . $e->getMessage());
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Pickup verified successfully',
@@ -186,6 +216,22 @@ class DeliveryBoyController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        // Firebase Push Notification for Rider Arrival
+        try {
+            FirebaseNotificationService::sendToUser(
+                (int) $order->user_id,
+                'Rider at Doorstep 🛵',
+                'Your delivery partner has reached your address for order #' . ($order->order_number ?: $order->id) . '. Please hand over or collect clothes.',
+                [
+                    'type'       => 'rider_arrived',
+                    'order_id'   => (string) $order->id,
+                    'channel_id' => 'dhobipro_customer_channel',
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('FCM rider arrived notification failed: ' . $e->getMessage());
+        }
 
         return response()->json([
             'success' => true,
@@ -235,6 +281,35 @@ class DeliveryBoyController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        // Firebase Push Notifications for Delivery Completion
+        try {
+            FirebaseNotificationService::sendToUser(
+                (int) $order->user_id,
+                'Order Delivered Successfully 🎉',
+                'Your laundry order #' . ($order->order_number ?: $order->id) . ' has been delivered. Thank you for choosing DhobiPro!',
+                [
+                    'type'       => 'order_delivered',
+                    'order_id'   => (string) $order->id,
+                    'channel_id' => 'dhobipro_customer_channel',
+                ]
+            );
+
+            if (!empty($order->shop_id)) {
+                FirebaseNotificationService::sendToShopOwner(
+                    (int) $order->shop_id,
+                    'Order Delivered 🎉',
+                    'Order #' . ($order->order_number ?: $order->id) . ' has been successfully handed over to the customer.',
+                    [
+                        'type'       => 'order_delivered',
+                        'order_id'   => (string) $order->id,
+                        'channel_id' => 'dhobipro_partner_channel',
+                    ]
+                );
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('FCM delivery completion notification failed: ' . $e->getMessage());
+        }
 
         return response()->json([
             'success' => true,

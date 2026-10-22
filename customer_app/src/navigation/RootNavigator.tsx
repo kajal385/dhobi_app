@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import AppNavigator from './AppNavigator';
 import SplashScreen from '../screens/auth/SplashScreen';
 import AnimatedAuthScreen from '../screens/auth/AnimatedAuthScreen';
-
+import { fcmService } from '../services/fcmService';
 import { useTheme } from '../context/ThemeContext';
 
+export const navigationRef = createNavigationContainerRef();
 const Stack = createStackNavigator();
 
 export const RootNavigator = () => {
-  const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
+  const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
   const { navigationTheme } = useTheme();
   const [showSplash, setShowSplash] = useState(true);
 
@@ -23,12 +24,26 @@ export const RootNavigator = () => {
     return () => clearTimeout(timer);
   }, []);
 
+  // Initialize Firebase Cloud Messaging listeners
+  useEffect(() => {
+    fcmService.requestPermission();
+    fcmService.setupListeners(navigationRef);
+
+    if (isAuthenticated && user?.id) {
+      fcmService.registerTokenWithBackend(undefined, user.id);
+    }
+
+    return () => {
+      fcmService.destroy();
+    };
+  }, [isAuthenticated, user?.id]);
+
   if (showSplash) {
     return <SplashScreen />;
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       {isAuthenticated ? (
         <AppNavigator />
       ) : (

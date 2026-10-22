@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "747932342697",
+    "project_id": "laundry-app-2606a",
+    "storage_bucket": "laundry-app-2606a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:747932342697:android:fc233889a95c2436e28cb8",
+        "android_client_info": {
+          "package_name": "com.dhobipro.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDieUYvi0ikEfv6EJI_9Veb8xvcxqRWb1Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:747932342697:android:a12a1f797824e5a3e28cb8",
+        "android_client_info": {
+          "package_name": "com.partner_delivery_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDieUYvi0ikEfv6EJI_9Veb8xvcxqRWb1Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

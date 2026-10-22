@@ -22,6 +22,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { addOrder } from '../../store/orderSlice';
+import { updateProfile } from '../../store/authSlice';
 import { orderService } from '../../services/orderService';
 import { addressService } from '../../services/addressService';
 import { DEFAULT_SHOPS, shopService, ShopService, ServiceItem } from '../../services/shopService';
@@ -35,6 +36,7 @@ import {
   getCurrentLocation,
   reverseGeocode,
   calculateDistance,
+  geocodeAddress,
 } from '../../utils/locationUtils';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -324,6 +326,7 @@ const BookingScreenInner = ({ navigation, route }: any) => {
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [showShopPickerModal, setShowShopPickerModal] = useState(false);
+  const [showAddressPickerModal, setShowAddressPickerModal] = useState(false);
 
   // ── Shop Info & Dynamic Owner Services ─────────────────
   const initialShopId = Number(route.params?.shopId || route.params?.shop_id || (route.params?.shop?.id) || DEFAULT_SHOPS[0]?.id || 47);
@@ -332,6 +335,15 @@ const BookingScreenInner = ({ navigation, route }: any) => {
   const [availableShops, setAvailableShops] = useState<any[]>(DEFAULT_SHOPS);
   const targetShop = route.params?.shop || route.params?.reorderShop || availableShops.find(s => s.id === selectedShopId) || DEFAULT_SHOPS[0];
   const [shopDetails, setShopDetails] = useState<any>(targetShop);
+
+  // Dynamic distance and estimated travel time from customer address to selected laundry store
+  const customerCurrentLat = Number(selectedAddress?.latitude || user?.latitude || 18.5980);
+  const customerCurrentLng = Number(selectedAddress?.longitude || user?.longitude || 73.7680);
+  const currentShopLat = Number(shopDetails?.latitude || targetShop?.latitude || 18.6112);
+  const currentShopLng = Number(shopDetails?.longitude || targetShop?.longitude || 73.7925);
+  const distanceToShopText = (currentShopLat && currentShopLng)
+    ? calculateDistance(customerCurrentLat, customerCurrentLng, currentShopLat, currentShopLng)
+    : (targetShop?.distance || '0.8 km away (6 mins)');
 
   React.useEffect(() => {
     if (route.params?.shop) {
@@ -593,8 +605,13 @@ const BookingScreenInner = ({ navigation, route }: any) => {
           setAddedCombinations(route.params.currentCombinations);
         }
         setStep(4);
+      } else if (route.params?.selectedAddressFromSaved) {
+        const addr = route.params.selectedAddressFromSaved;
+        setSelectedAddress(addr);
+        setAddresses(prev => [addr, ...prev.filter(a => a.id !== addr.id)]);
+        setStep(4);
       }
-    }, [route.params?.selectedAddressFromMap, route.params?.currentCombinations])
+    }, [route.params?.selectedAddressFromMap, route.params?.selectedAddressFromSaved, route.params?.currentCombinations])
   );
 
   const loadAddresses = async () => {
@@ -609,8 +626,9 @@ const BookingScreenInner = ({ navigation, route }: any) => {
         });
         return merged;
       });
-      if (data.length > 0 && !route.params?.selectedAddressFromMap) {
-        setSelectedAddress(prev => prev || data.find(a => a.is_default) || data[0]);
+      if (data.length > 0 && !route.params?.selectedAddressFromMap && !route.params?.selectedAddressFromSaved) {
+        const matched = (user?.address ? data.find(a => a.address_line1 === user.address) : null) || data.find(a => a.is_default) || data[0];
+        setSelectedAddress(prev => prev || matched);
       }
     } catch (error) {
       console.log('Failed to load addresses', error);
@@ -907,6 +925,195 @@ const BookingScreenInner = ({ navigation, route }: any) => {
     </Modal>
   );
 
+  const renderAddressPickerModal = () => (
+    <Modal
+      visible={showAddressPickerModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowAddressPickerModal(false)}
+    >
+      <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.65)', justifyContent: 'flex-end' }}>
+        <TouchableOpacity
+          style={{ flex: 1 }}
+          activeOpacity={1}
+          onPress={() => setShowAddressPickerModal(false)}
+        />
+        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '85%' }}>
+          <View style={{ width: 40, height: 4, backgroundColor: isDark ? colors.border : '#CBD5E1', borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
+          
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <MaterialCommunityIcons name="map-marker-radius" size={24} color="#5B52E8" />
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>Select Pickup Address</Text>
+            </View>
+            <TouchableOpacity onPress={() => setShowAddressPickerModal(false)} style={{ padding: 6 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textSecondary }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 16 }}>
+            Distance and travel time to {targetShopName} will recalculate automatically from your selected address.
+          </Text>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Option 1: Pick on Google Map */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                setShowAddressPickerModal(false);
+                navigation.navigate('MapScreen', { returnScreen: 'Booking', currentCombinations: addedCombinations });
+              }}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                padding: 14,
+                borderRadius: 14,
+                backgroundColor: isDark ? '#26234D' : '#F0EEFF',
+                borderWidth: 1.5,
+                borderColor: '#5B52E8',
+                marginBottom: 14,
+              }}
+            >
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#EA4335', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <MaterialCommunityIcons name="google-maps" size={22} color="#FFFFFF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>Choose Location on Google Map</Text>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                  Drag pin to your exact building or doorstep
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            {/* Option 2: Saved Customer Addresses */}
+            <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Your Saved Addresses
+            </Text>
+
+            {addresses && addresses.length > 0 ? (
+              addresses.map((addr) => {
+                const isCurrent = (selectedAddress?.id === addr.id) || (selectedAddress?.address_line1 === addr.address_line1);
+                const addrLat = Number(addr.latitude || 0);
+                const addrLng = Number(addr.longitude || 0);
+                const distStr = (addrLat && addrLng && currentShopLat && currentShopLng)
+                  ? calculateDistance(addrLat, addrLng, currentShopLat, currentShopLng)
+                  : '0.8 km away (6 mins)';
+
+                return (
+                  <TouchableOpacity
+                    key={addr.id}
+                    activeOpacity={0.75}
+                    onPress={async () => {
+                      let resolvedLat = addrLat;
+                      let resolvedLng = addrLng;
+                      if (!resolvedLat || !resolvedLng) {
+                        const geocoded = await geocodeAddress(`${addr.address_line1}, ${addr.city}`);
+                        resolvedLat = geocoded?.latitude || 18.5980;
+                        resolvedLng = geocoded?.longitude || 73.7680;
+                      }
+
+                      const updatedAddr = { ...addr, latitude: resolvedLat, longitude: resolvedLng };
+                      setSelectedAddress(updatedAddr);
+                      dispatch(updateProfile({
+                        latitude: resolvedLat,
+                        longitude: resolvedLng,
+                        address: addr.address_line1,
+                        city: addr.city,
+                        pincode: addr.pincode,
+                        area: addr.label,
+                      }));
+                      setShowAddressPickerModal(false);
+                      Toast.show({
+                        type: 'success',
+                        text1: `📍 Pickup Address: ${addr.label || 'Updated'}`,
+                        text2: `Distance to ${targetShopName} recalculated!`,
+                      });
+                    }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      padding: 14,
+                      borderRadius: 14,
+                      marginBottom: 10,
+                      backgroundColor: isCurrent ? (isDark ? '#26234D' : '#EDE8FF') : (isDark ? colors.card : '#FAFAFC'),
+                      borderWidth: isCurrent ? 2 : 1,
+                      borderColor: isCurrent ? '#5B52E8' : colors.border,
+                    }}
+                  >
+                    <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: isCurrent ? '#5B52E8' : (isDark ? '#3D387A' : '#E2E8F0'), alignItems: 'center', justifyContent: 'center' }}>
+                      <MaterialCommunityIcons
+                        name={addr.label?.toLowerCase().includes('work') ? 'briefcase-outline' : 'home-outline'}
+                        size={20}
+                        color={isCurrent ? '#FFF' : colors.text}
+                      />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '800', color: isCurrent ? (isDark ? '#A5B4FC' : '#321D8C') : colors.text }}>
+                          {addr.label || 'Address'}
+                        </Text>
+                        {isCurrent && (
+                          <View style={{ backgroundColor: '#5B52E8', paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 4 }}>
+                            <Text style={{ fontSize: 9, fontWeight: '800', color: '#FFF' }}>SELECTED</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }} numberOfLines={1}>
+                        {addr.address_line1}, {addr.city}
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                        <MaterialCommunityIcons name="moped-electric" size={13} color="#5B52E8" />
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#5B52E8' }}>
+                          {distStr}
+                        </Text>
+                      </View>
+                    </View>
+                    {isCurrent && (
+                      <View style={{ backgroundColor: '#5B52E8', width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '900' }}>✓</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              <View style={{ padding: 16, alignItems: 'center' }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>No saved addresses found</Text>
+              </View>
+            )}
+
+            {/* Option 3: Add New Address */}
+            <TouchableOpacity
+              onPress={() => {
+                setShowAddressPickerModal(false);
+                navigation.navigate('SavedAddresses', { returnScreen: 'Booking' });
+              }}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 12,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderStyle: 'dashed',
+                borderColor: '#5B52E8',
+                marginTop: 6,
+                marginBottom: 16,
+                gap: 6,
+              }}
+            >
+              <MaterialCommunityIcons name="plus-circle-outline" size={18} color="#5B52E8" />
+              <Text style={{ color: '#5B52E8', fontWeight: '800', fontSize: 13 }}>
+                + Add or Manage Saved Addresses
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+
   // STEP 1: Service Selection
   if (step === 1) {
     return (
@@ -947,6 +1154,14 @@ const BookingScreenInner = ({ navigation, route }: any) => {
                     📍 {targetShopAddress}
                   </Text>
                 ) : null}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                  <View style={{ backgroundColor: isDark ? '#26234D' : '#EDE8FF', paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <MaterialCommunityIcons name="moped-electric" size={13} color="#5B52E8" />
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#5B52E8' }}>
+                      {distanceToShopText} from your pickup location
+                    </Text>
+                  </View>
+                </View>
               </View>
             </View>
           </View>
@@ -1472,28 +1687,61 @@ const BookingScreenInner = ({ navigation, route }: any) => {
           {/* Address Header */}
           <View style={styles.itemsReviewHeader}>
             <Text style={[styles.itemsReviewTitle, { color: colors.text }]}>Pickups Address</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('MapScreen', { returnScreen: 'Booking', currentCombinations: addedCombinations })}>
-              <Text style={styles.editItemsText}>Change</Text>
+            <TouchableOpacity onPress={() => setShowAddressPickerModal(true)}>
+              <Text style={styles.editItemsText}>Change Address ▾</Text>
             </TouchableOpacity>
           </View>
 
           {/* Address Selection */}
           <TouchableOpacity
-            style={[styles.addressReviewBox, { backgroundColor: colors.card }]}
-            onPress={() => navigation.navigate('MapScreen', { returnScreen: 'Booking', currentCombinations: addedCombinations })}
+            style={[styles.addressReviewBox, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}
+            onPress={() => setShowAddressPickerModal(true)}
+            activeOpacity={0.8}
           >
             <View style={styles.addressIconWrapper}>
               <Text style={{ fontSize: 20 }}>📍</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.addressTitle, { color: colors.text }]}>
-                {selectedAddress ? selectedAddress.label : 'Select Address'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={[styles.addressTitle, { color: colors.text }]}>
+                  {selectedAddress ? selectedAddress.label : 'Select Pickup Address'}
+                </Text>
+                <Text style={{ fontSize: 11, color: '#5B52E8', fontWeight: '700' }}>Change</Text>
+              </View>
               <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 4 }}>
-                {selectedAddress ? `${selectedAddress.address_line1}, ${selectedAddress.city} - ${selectedAddress.pincode}` : 'Tap to select address'}
+                {selectedAddress ? `${selectedAddress.address_line1}, ${selectedAddress.city} - ${selectedAddress.pincode}` : 'Tap here to choose pickup address'}
               </Text>
             </View>
           </TouchableOpacity>
+
+          {/* Real-time Distance & Travel Time from selected address to the laundry store */}
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            marginTop: 10,
+            marginBottom: 16,
+            padding: 12,
+            borderRadius: 14,
+            backgroundColor: isDark ? '#1F1E38' : '#F0EEFF',
+            borderWidth: 1.5,
+            borderColor: isDark ? '#3D387A' : '#DDD6FE',
+          }}>
+            <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#5B52E8', alignItems: 'center', justifyContent: 'center' }}>
+              <MaterialCommunityIcons name="moped-electric" size={22} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Distance to {targetShopName}
+              </Text>
+              <Text style={{ fontSize: 14, fontWeight: '800', color: isDark ? '#A5B4FC' : '#321D8C', marginTop: 1 }}>
+                📍 {distanceToShopText}
+              </Text>
+            </View>
+            <View style={{ backgroundColor: '#10B981', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: '#FFF' }}>GOOGLE MAPS</Text>
+            </View>
+          </View>
 
           {/* Pickup Date Header & Schedule Status */}
           <View style={styles.dateHeaderRow}>
@@ -1722,6 +1970,7 @@ const BookingScreenInner = ({ navigation, route }: any) => {
             </LinearGradient>
           </TouchableOpacity>
         </View>
+        {renderAddressPickerModal()}
       </LinearGradient>
     );
   }

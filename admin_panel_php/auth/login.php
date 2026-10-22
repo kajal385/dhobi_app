@@ -285,6 +285,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= ADMIN_BASE_URL ?>/assets/css/style.css">
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Firebase Web SDK (v10 compat) for Phone Auth -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script>
+    const FIREBASE_CONFIG = {
+      apiKey: "<?= FIREBASE_API_KEY ?>",
+      projectId: "<?= FIREBASE_PROJECT_ID ?>",
+      messagingSenderId: "<?= FIREBASE_MESSAGING_SENDER_ID ?>",
+      appId: "<?= FIREBASE_APP_ID ?>"
+    };
+    if (!firebase.apps.length) {
+      firebase.initializeApp(FIREBASE_CONFIG);
+    }
+  </script>
 <style>
     body {
         margin: 0;
@@ -643,6 +657,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
           <?php endif; ?>
 
+          <!-- Login Mode Switcher Tabs -->
+          <div style="display: flex; background: #F1F5F9; padding: 4px; border-radius: 12px; margin-bottom: 1.25rem;">
+            <button type="button" id="tabPasswordBtn" onclick="switchLoginMode('password')" style="flex: 1; border: none; padding: 0.55rem 0.5rem; border-radius: 9px; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all 0.2s; background: #FFF; color: #8162EE; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
+              Password Sign In
+            </button>
+            <button type="button" id="tabOtpBtn" onclick="switchLoginMode('otp')" style="flex: 1; border: none; padding: 0.55rem 0.5rem; border-radius: 9px; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all 0.2s; background: transparent; color: #64748B;">
+              📱 Mobile OTP (Firebase)
+            </button>
+          </div>
+
+          <!-- Invisible reCAPTCHA container for Firebase Phone Auth -->
+          <div id="recaptcha-container"></div>
+
+          <!-- Status and Error Feedback -->
+          <div id="phoneAuthFeedback" style="display: none; padding: 0.75rem; border-radius: 10px; margin-bottom: 1rem; font-size: 0.8rem; font-weight: 700;"></div>
+
+          <!-- Form 1: Password Login (Original) -->
           <form method="POST" action="" id="loginForm">
             <!-- Identifier Field (Email or Mobile) -->
             <div class="form-group">
@@ -697,6 +728,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               Sign In <i data-lucide="arrow-right" style="width:18px;height:18px;"></i>
             </button>
           </form>
+
+          <!-- Form 2: Firebase Phone OTP Login -->
+          <div id="otpLoginForm" style="display: none;">
+            <!-- Step A: Mobile Number Input -->
+            <div id="phoneInputStep">
+              <div class="form-group">
+                <label class="form-label">Registered Mobile Number</label>
+                <div style="display: flex; gap: 8px;">
+                  <div style="width: 80px; position: relative;">
+                    <input type="text" value="+91" readonly class="form-control-modern" style="padding-left: 1rem; text-align: center; font-weight: 800; background: #F1F5F9; color: #475569;" />
+                  </div>
+                  <div style="flex: 1; position: relative;">
+                    <input
+                      id="otpMobileInput"
+                      type="tel"
+                      maxlength="10"
+                      class="form-control-modern"
+                      placeholder="9876543210"
+                      style="padding-left: 2.5rem;"
+                    />
+                    <i data-lucide="phone" class="input-icon" style="width: 18px; height: 18px;"></i>
+                  </div>
+                </div>
+                <div style="font-size: 0.73rem; color: #64748B; margin-top: 0.35rem;">
+                  A genuine 6-digit SMS verification code will be sent to your phone.
+                </div>
+              </div>
+
+              <button type="button" id="sendOtpBtn" onclick="handleSendWebOtp()" class="btn-login-premium">
+                Send Verification OTP <i data-lucide="send" style="width: 18px; height: 18px;"></i>
+              </button>
+            </div>
+
+            <!-- Step B: OTP Code Verification -->
+            <div id="otpVerifyStep" style="display: none;">
+              <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                  <label class="form-label" style="margin: 0;">Enter 6-Digit OTP</label>
+                  <span id="targetPhoneLabel" style="font-size: 0.74rem; font-weight: 700; color: #8162EE;"></span>
+                </div>
+                <div style="position: relative;">
+                  <input
+                    id="otpCodeInput"
+                    type="text"
+                    maxlength="6"
+                    class="form-control-modern"
+                    placeholder="123456"
+                    style="letter-spacing: 6px; font-size: 1.15rem; font-weight: 800; text-align: center; padding: 0.75rem;"
+                    autocomplete="one-time-code"
+                  />
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; font-size: 0.76rem;">
+                  <span id="countdownText" style="color: #64748B; font-weight: 600;">Resend OTP in <b id="countdownTimer">30</b>s</span>
+                  <button type="button" id="resendOtpBtn" onclick="handleResendWebOtp()" disabled style="background: none; border: none; font-weight: 700; color: #94A3B8; cursor: not-allowed; padding: 0;">
+                    Resend Code
+                  </button>
+                </div>
+              </div>
+
+              <button type="button" id="verifyOtpBtn" onclick="handleVerifyWebOtp()" class="btn-login-premium">
+                Verify & Sign In <i data-lucide="check-circle" style="width: 18px; height: 18px;"></i>
+              </button>
+
+              <button type="button" onclick="resetToPhoneStep()" style="width: 100%; background: none; border: none; margin-top: 0.75rem; font-size: 0.78rem; font-weight: 700; color: #64748B; cursor: pointer; text-decoration: underline;">
+                &larr; Change Mobile Number
+              </button>
+            </div>
+          </div>
       </div>
     </div>
   </div>
@@ -733,6 +832,226 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     btn.style.opacity = '0.85';
     btn.disabled = true;
   });
+
+  // ── Firebase Web Phone Authentication Logic ──────────────────────────────
+  let confirmationResult = null;
+  let recaptchaVerifier = null;
+  let countdownInterval = null;
+
+  function switchLoginMode(mode) {
+    const pwForm = document.getElementById('loginForm');
+    const otpForm = document.getElementById('otpLoginForm');
+    const tabPw = document.getElementById('tabPasswordBtn');
+    const tabOtp = document.getElementById('tabOtpBtn');
+    const feedback = document.getElementById('phoneAuthFeedback');
+    feedback.style.display = 'none';
+
+    if (mode === 'otp') {
+      pwForm.style.display = 'none';
+      otpForm.style.display = 'block';
+      tabOtp.style.background = '#FFF';
+      tabOtp.style.color = '#8162EE';
+      tabOtp.style.boxShadow = '0 2px 6px rgba(0,0,0,0.06)';
+      tabPw.style.background = 'transparent';
+      tabPw.style.color = '#64748B';
+      tabPw.style.boxShadow = 'none';
+      initRecaptcha();
+    } else {
+      pwForm.style.display = 'block';
+      otpForm.style.display = 'none';
+      tabPw.style.background = '#FFF';
+      tabPw.style.color = '#8162EE';
+      tabPw.style.boxShadow = '0 2px 6px rgba(0,0,0,0.06)';
+      tabOtp.style.background = 'transparent';
+      tabOtp.style.color = '#64748B';
+      tabOtp.style.boxShadow = 'none';
+    }
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  function initRecaptcha() {
+    if (!recaptchaVerifier) {
+      try {
+        recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+          size: 'invisible',
+          callback: () => {
+            console.log('[Firebase Phone Auth] reCAPTCHA solved.');
+          },
+          'expired-callback': () => {
+            showPhoneFeedback('reCAPTCHA expired. Please try again.', 'error');
+          }
+        });
+        recaptchaVerifier.render();
+      } catch (e) {
+        console.warn('[Firebase Phone Auth] Recaptcha setup warning:', e);
+      }
+    }
+  }
+
+  function showPhoneFeedback(msg, type = 'error') {
+    const el = document.getElementById('phoneAuthFeedback');
+    el.style.display = 'block';
+    if (type === 'error') {
+      el.style.background = '#FEF2F2';
+      el.style.color = '#DC2626';
+      el.style.border = '1px solid #FECACA';
+    } else {
+      el.style.background = '#ECFDF5';
+      el.style.color = '#059669';
+      el.style.border = '1px solid #A7F3D0';
+    }
+    el.innerHTML = msg;
+  }
+
+  function startCountdown(seconds = 30) {
+    let timeLeft = seconds;
+    const timerEl = document.getElementById('countdownTimer');
+    const resendBtn = document.getElementById('resendOtpBtn');
+    const countdownText = document.getElementById('countdownText');
+
+    resendBtn.disabled = true;
+    resendBtn.style.color = '#94A3B8';
+    resendBtn.style.cursor = 'not-allowed';
+    countdownText.style.display = 'inline';
+
+    if (countdownInterval) clearInterval(countdownInterval);
+
+    countdownInterval = setInterval(() => {
+      timeLeft--;
+      if (timerEl) timerEl.textContent = timeLeft;
+      if (timeLeft <= 0) {
+        clearInterval(countdownInterval);
+        resendBtn.disabled = false;
+        resendBtn.style.color = '#8162EE';
+        resendBtn.style.cursor = 'pointer';
+        countdownText.style.display = 'none';
+      }
+    }, 1000);
+  }
+
+  async function handleSendWebOtp() {
+    const rawDigits = document.getElementById('otpMobileInput').value.replace(/\D/g, '');
+    if (!rawDigits || rawDigits.length !== 10) {
+      showPhoneFeedback('Please enter a valid 10-digit mobile number.', 'error');
+      return;
+    }
+
+    const fullPhone = '+91' + rawDigits;
+    const sendBtn = document.getElementById('sendOtpBtn');
+    sendBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.9s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>&nbsp; Sending OTP...';
+    sendBtn.disabled = true;
+
+    try {
+      initRecaptcha();
+      confirmationResult = await firebase.auth().signInWithPhoneNumber(fullPhone, recaptchaVerifier);
+      document.getElementById('phoneInputStep').style.display = 'none';
+      document.getElementById('otpVerifyStep').style.display = 'block';
+      document.getElementById('targetPhoneLabel').textContent = `+91 ${rawDigits}`;
+      showPhoneFeedback(`SMS verification code sent to +91 ${rawDigits}. Please enter 6 digits.`, 'success');
+      startCountdown(30);
+    } catch (err) {
+      console.error('[Firebase Phone Auth] Error sending OTP:', err);
+      let errMsg = 'Failed to send OTP code. ';
+      if (err.code === 'auth/invalid-phone-number') errMsg = 'Invalid phone number format.';
+      else if (err.code === 'auth/too-many-requests') errMsg = 'Too many requests. Please wait a few moments before retrying.';
+      else if (err.code === 'auth/quota-exceeded') errMsg = 'Daily SMS quota limit reached. Please contact platform support.';
+      else if (err.message) errMsg += err.message;
+      showPhoneFeedback(errMsg, 'error');
+      if (recaptchaVerifier) {
+        recaptchaVerifier.clear();
+        recaptchaVerifier = null;
+      }
+    } finally {
+      sendBtn.innerHTML = 'Send Verification OTP <i data-lucide="send" style="width: 18px; height: 18px;"></i>';
+      sendBtn.disabled = false;
+      if (window.lucide) window.lucide.createIcons();
+    }
+  }
+
+  async function handleResendWebOtp() {
+    const rawDigits = document.getElementById('otpMobileInput').value.replace(/\D/g, '');
+    const fullPhone = '+91' + rawDigits;
+    const resendBtn = document.getElementById('resendOtpBtn');
+    resendBtn.disabled = true;
+
+    try {
+      initRecaptcha();
+      confirmationResult = await firebase.auth().signInWithPhoneNumber(fullPhone, recaptchaVerifier);
+      showPhoneFeedback('New verification code sent to your phone! 📩', 'success');
+      startCountdown(30);
+    } catch (err) {
+      showPhoneFeedback(err.message || 'Could not resend OTP. Please wait.', 'error');
+      resendBtn.disabled = false;
+    }
+  }
+
+  function resetToPhoneStep() {
+    document.getElementById('phoneInputStep').style.display = 'block';
+    document.getElementById('otpVerifyStep').style.display = 'none';
+    document.getElementById('phoneAuthFeedback').style.display = 'none';
+    if (countdownInterval) clearInterval(countdownInterval);
+  }
+
+  async function handleVerifyWebOtp() {
+    const code = document.getElementById('otpCodeInput').value.trim();
+    if (!code || code.length !== 6) {
+      showPhoneFeedback('Please enter the complete 6-digit verification code.', 'error');
+      return;
+    }
+
+    const verifyBtn = document.getElementById('verifyOtpBtn');
+    verifyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.9s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>&nbsp; Verifying Code...';
+    verifyBtn.disabled = true;
+
+    try {
+      if (!confirmationResult) {
+        throw new Error('Verification session expired. Please request a new OTP.');
+      }
+
+      // 1. Confirm code with Firebase Phone Auth
+      const userCredential = await confirmationResult.confirm(code);
+      const idToken = await userCredential.user.getIdToken();
+      const rawPhone = document.getElementById('otpMobileInput').value.replace(/\D/g, '');
+
+      // 2. Synchronize with Backend Web Login Bridge
+      const bridgeUrl = '<?= ADMIN_BASE_URL ?>/auth/firebase_web_login.php';
+      const fcmToken = localStorage.getItem('dhobipro_web_fcm_token') || null;
+
+      const res = await fetch(bridgeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id_token: idToken,
+          phone: rawPhone,
+          fcm_token: fcmToken
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        showPhoneFeedback('Verification successful! Redirecting...', 'success');
+        setTimeout(() => {
+          window.location.href = data.redirect || '<?= ADMIN_BASE_URL ?>/dashboard/index.php';
+        }, 600);
+      } else {
+        showPhoneFeedback(data.message || 'Login failed. Account not authorized.', 'error');
+        verifyBtn.innerHTML = 'Verify & Sign In <i data-lucide="check-circle" style="width: 18px; height: 18px;"></i>';
+        verifyBtn.disabled = false;
+        if (window.lucide) window.lucide.createIcons();
+      }
+    } catch (err) {
+      console.error('[Firebase Phone Auth] Verification error:', err);
+      let errMsg = 'Verification failed. ';
+      if (err.code === 'auth/invalid-verification-code') errMsg = 'Incorrect verification code. Please check and re-enter.';
+      else if (err.code === 'auth/session-expired') errMsg = 'Code has expired. Please request a new OTP.';
+      else if (err.message) errMsg += err.message;
+      showPhoneFeedback(errMsg, 'error');
+      verifyBtn.innerHTML = 'Verify & Sign In <i data-lucide="check-circle" style="width: 18px; height: 18px;"></i>';
+      verifyBtn.disabled = false;
+      if (window.lucide) window.lucide.createIcons();
+    }
+  }
 
   const style = document.createElement('style');
   style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';

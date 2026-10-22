@@ -101,7 +101,7 @@ export const NearByScreen = ({ navigation }: any) => {
     return () => {
       isMounted.current = false;
     };
-  }, [user?.latitude, user?.longitude]);
+  }, [user?.latitude, user?.longitude, user?.address]);
 
   const fetchLocation = useCallback(async (isRef = false, userTriggered = false) => {
     if (isMounted.current && !isRef) setLoading(true);

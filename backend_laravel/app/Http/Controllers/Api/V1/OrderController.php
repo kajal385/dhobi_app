@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\LaundryShop;
+use App\Services\FirebaseNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -249,6 +250,37 @@ class OrderController extends Controller
 
             DB::commit();
 
+            // Firebase Push Notifications for Order Booking
+            try {
+                // 1. Notify Customer
+                FirebaseNotificationService::sendToUser(
+                    (int) $userId,
+                    'Order Booking Confirmed 🎉',
+                    'Your order #' . ($order->order_number ?: $order->id) . ' of ₹' . $order->total_amount . ' has been booked successfully.',
+                    [
+                        'type'       => 'order_created',
+                        'order_id'   => (string) $order->id,
+                        'channel_id' => 'dhobipro_customer_channel',
+                    ]
+                );
+
+                // 2. Notify Laundry Owner
+                if (!empty($shopId)) {
+                    FirebaseNotificationService::sendToShopOwner(
+                        (int) $shopId,
+                        'New Order Received! 🧺',
+                        'New order #' . ($order->order_number ?: $order->id) . ' for ₹' . $order->total_amount . ' received. Tap to review.',
+                        [
+                            'type'       => 'new_order',
+                            'order_id'   => (string) $order->id,
+                            'channel_id' => 'dhobipro_partner_channel',
+                        ]
+                    );
+                }
+            } catch (\Throwable $fcmErr) {
+                \Illuminate\Support\Facades\Log::warning('FCM order booking notification failed: ' . $fcmErr->getMessage());
+            }
+
             $fullOrder = Order::with(['customer', 'laundryShop', 'deliveryPartner', 'statusHistory', 'items'])->find($order->id);
 
             return response()->json([
@@ -359,6 +391,31 @@ class OrderController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            // Firebase Push Notifications
+            FirebaseNotificationService::sendToUser(
+                (int) $order->user_id,
+                'Order Cancelled',
+                'Your order #' . ($order->order_number ?? $order->id) . ' has been cancelled.' . ($refundProcessed ? " Refund of ₹{$totalRefund} credited to your wallet." : ''),
+                [
+                    'type'       => 'order_cancelled',
+                    'order_id'   => (string) $order->id,
+                    'channel_id' => 'dhobipro_customer_channel',
+                ]
+            );
+
+            if (!empty($order->shop_id)) {
+                FirebaseNotificationService::sendToShopOwner(
+                    (int) $order->shop_id,
+                    'Order Cancelled',
+                    'Order #' . ($order->order_number ?? $order->id) . ' was cancelled by the customer.',
+                    [
+                        'type'       => 'order_cancelled',
+                        'order_id'   => (string) $order->id,
+                        'channel_id' => 'dhobipro_partner_channel',
+                    ]
+                );
+            }
         } catch (\Throwable $e) {}
 
         $refundBreakdown = [

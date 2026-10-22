@@ -8,6 +8,7 @@ use App\Models\LaundryShop;
 use App\Models\Order;
 use App\Models\LaundryDocument;
 use App\Models\DeliveryBoy;
+use App\Services\FirebaseNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -182,6 +183,22 @@ class LaundryOwnerController extends Controller
                     'uploaded_at'         => now(),
                 ]
             );
+        }
+
+        // Notify Super Admin of new laundry registration
+        try {
+            FirebaseNotificationService::sendToRole(
+                'admin',
+                'New Laundry Verification Request 🏪',
+                'Shop "' . $shop->name . '" by ' . $shop->owner_name . ' has submitted documents for verification.',
+                [
+                    'type'       => 'verification_request',
+                    'shop_id'    => (string) $shop->id,
+                    'channel_id' => 'dhobipro_orders_channel',
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('FCM admin verification alert failed: ' . $e->getMessage());
         }
 
         return response()->json([
@@ -403,7 +420,38 @@ class LaundryOwnerController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-        } catch (\Throwable $e) {}
+
+            // Dispatch Firebase Cloud Messaging Push Notification to Customer
+            $statusTitles = [
+                'ACCEPTED'         => 'Order Accepted! 🧺',
+                'REJECTED'         => 'Order Declined ❌',
+                'PROCESSING'       => 'Order In Process 🧼',
+                'IN_PROCESS'       => 'Order In Process 🧼',
+                'WASHING'          => 'Clothes Being Washed 💧',
+                'IRONING'          => 'Steam Ironing in Progress 👔',
+                'READY'            => 'Order Ready! ✨',
+                'READY_FOR_PICKUP' => 'Order Ready for Pickup! ✨',
+                'OUT_FOR_DELIVERY' => 'Out for Delivery 🛵',
+                'DELIVERED'        => 'Order Completed & Delivered 🎉',
+                'COMPLETED'        => 'Order Completed 🎉',
+                'CANCELLED'        => 'Order Cancelled 🚫',
+            ];
+            $pushTitle = $statusTitles[$status] ?? ('Order Update: #' . ($order->order_number ?? $order->id));
+
+            FirebaseNotificationService::sendToUser(
+                (int) $order->user_id,
+                $pushTitle,
+                $message,
+                [
+                    'type'       => 'order_status_update',
+                    'order_id'   => (string) $order->id,
+                    'status'     => $status,
+                    'channel_id' => 'dhobipro_customer_channel',
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('FCM status update notification failed: ' . $e->getMessage());
+        }
 
         return response()->json([
             'success' => true,
@@ -454,6 +502,32 @@ class LaundryOwnerController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            // Notify Customer of assignment
+            FirebaseNotificationService::sendToUser(
+                (int) $order->user_id,
+                $type === 'pickup' ? 'Pickup Partner Assigned 🛵' : 'Out for Delivery 🛵',
+                'A delivery partner has been assigned for order #' . ($order->order_number ?? $order->id),
+                [
+                    'type'       => 'delivery_assigned',
+                    'order_id'   => (string) $order->id,
+                    'channel_id' => 'dhobipro_customer_channel',
+                ]
+            );
+
+            // Notify Delivery Agent
+            if ($userId) {
+                FirebaseNotificationService::sendToUser(
+                    (int) $userId,
+                    'New Task Assigned! 📦',
+                    'You have a new ' . $type . ' assignment for Order #' . ($order->order_number ?? $order->id),
+                    [
+                        'type'       => 'task_assigned',
+                        'order_id'   => (string) $order->id,
+                        'channel_id' => 'dhobipro_partner_channel',
+                    ]
+                );
+            }
         } catch (\Throwable $th) {}
 
         return response()->json([

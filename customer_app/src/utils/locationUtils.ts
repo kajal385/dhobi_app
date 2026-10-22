@@ -135,6 +135,66 @@ export async function reverseGeocode(
 
 const GOOGLE_API_KEY = 'AIzaSyBXTHZ-XiK_QmQ6HV6hFqqetu5JR8Pwgnk';
 
+/** Curated coordinates for common Pune & PCMC hubs for instant zero-latency resolution */
+export const KNOWN_LOCALITIES: Record<string, { lat: number; lng: number; name: string }> = {
+  wakad: { lat: 18.5980, lng: 73.7680, name: 'Wakad' },
+  hinjawadi: { lat: 18.5913, lng: 73.7389, name: 'Hinjawadi' },
+  hinjewadi: { lat: 18.5913, lng: 73.7389, name: 'Hinjawadi' },
+  baner: { lat: 18.5590, lng: 73.7868, name: 'Baner' },
+  pimpri: { lat: 18.6279, lng: 73.8009, name: 'Pimpri' },
+  chinchwad: { lat: 18.6298, lng: 73.7997, name: 'Chinchwad' },
+  kalewadi: { lat: 18.6112, lng: 73.7925, name: 'Kalewadi' },
+  aundh: { lat: 18.5602, lng: 73.8077, name: 'Aundh' },
+  kothrud: { lat: 18.5074, lng: 73.8077, name: 'Kothrud' },
+  ravet: { lat: 18.6540, lng: 73.7430, name: 'Ravet' },
+  nigdi: { lat: 18.6517, lng: 73.7688, name: 'Nigdi' },
+  viman: { lat: 18.5679, lng: 73.9143, name: 'Viman Nagar' },
+  kalyani: { lat: 18.5463, lng: 73.9033, name: 'Kalyani Nagar' },
+  hadapsar: { lat: 18.5089, lng: 73.9259, name: 'Hadapsar' },
+  magarpatta: { lat: 18.5147, lng: 73.9287, name: 'Magarpatta' },
+  koregaon: { lat: 18.5362, lng: 73.8940, name: 'Koregaon Park' },
+  shivaji: { lat: 18.5314, lng: 73.8446, name: 'Shivaji Nagar' },
+  bavdhan: { lat: 18.5158, lng: 73.7712, name: 'Bavdhan' },
+  dange: { lat: 18.6044, lng: 73.7844, name: 'Dange Chowk' },
+  thergaon: { lat: 18.6080, lng: 73.7760, name: 'Thergaon' },
+  pashan: { lat: 18.5410, lng: 73.7920, name: 'Pashan' },
+  sangvi: { lat: 18.5810, lng: 73.8180, name: 'Sangvi' },
+  moshi: { lat: 18.6740, lng: 73.8470, name: 'Moshi' },
+};
+
+/** Convert address string into exact latitude and longitude using Google Geocoding API + fallback */
+export async function geocodeAddress(addressText: string): Promise<{ latitude: number; longitude: number; formattedAddress?: string } | null> {
+  if (!addressText || !addressText.trim()) return null;
+  const clean = addressText.toLowerCase().trim();
+
+  // 1. Check known locality list for instant matching
+  for (const [key, coords] of Object.entries(KNOWN_LOCALITIES)) {
+    if (clean.includes(key)) {
+      return { latitude: coords.lat, longitude: coords.lng, formattedAddress: coords.name };
+    }
+  }
+
+  // 2. Query Google Maps Geocoding API
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addressText + ', Pune, Maharashtra')}&key=${GOOGLE_API_KEY}`;
+    const res = await fetch(url);
+    const json = await res.json();
+    if (json.status === 'OK' && json.results && json.results.length > 0) {
+      const loc = json.results[0].geometry.location;
+      return {
+        latitude: loc.lat,
+        longitude: loc.lng,
+        formattedAddress: json.results[0].formatted_address,
+      };
+    }
+  } catch (e) {
+    console.warn('Google geocoding error:', e);
+  }
+
+  // 3. Fallback to Wakad, Pune default coordinates
+  return { latitude: 18.5980, longitude: 73.7680 };
+}
+
 /** In-memory cache for Google Maps distance calculations to prevent duplicate API hits */
 const distanceMatrixCache = new Map<string, { distanceText: string; durationText: string; km: number; mins: number }>();
 
@@ -239,4 +299,66 @@ export function calculateDistance(
 
   const distStr = roadKm < 0.3 ? `${Math.round(roadKm * 1000)} m` : `${roadKm.toFixed(1)} km`;
   return `${distStr} away (${mins} mins)`;
+}
+
+export interface DistanceDetails {
+  distanceText: string;
+  durationText: string;
+  fullText: string;
+  km: number;
+  mins: number;
+}
+
+/** 
+ * Returns detailed distance and travel duration breakdown for UI chips and badges
+ */
+export function calculateDistanceDetails(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): DistanceDetails {
+  if (!lat1 || !lon1 || !lat2 || !lon2) {
+    return {
+      distanceText: '0.8 km',
+      durationText: '6 mins',
+      fullText: '0.8 km away (6 mins)',
+      km: 0.8,
+      mins: 6,
+    };
+  }
+
+  const cacheKey = `${lat1.toFixed(3)},${lon1.toFixed(3)}-${lat2.toFixed(3)},${lon2.toFixed(3)}`;
+  if (distanceMatrixCache.has(cacheKey)) {
+    const cached = distanceMatrixCache.get(cacheKey)!;
+    return {
+      distanceText: cached.distanceText || `${cached.km.toFixed(1)} km`,
+      durationText: cached.durationText || `${cached.mins} mins`,
+      fullText: `${cached.distanceText} away (${cached.durationText})`,
+      km: cached.km,
+      mins: cached.mins,
+    };
+  }
+
+  fetchGoogleDistanceMatrix(lat1, lon1, lat2, lon2).catch(() => {});
+
+  const roadKm = getDistanceInKm(lat1, lon1, lat2, lon2);
+  let mins: number;
+  if (roadKm < 0.8) {
+    mins = Math.max(2, Math.round(roadKm * 4 + 2));
+  } else if (roadKm < 3.0) {
+    mins = Math.round(roadKm * 3.0 + 2);
+  } else {
+    mins = Math.round(roadKm * 2.4 + 3);
+  }
+
+  const distStr = roadKm < 0.3 ? `${Math.round(roadKm * 1000)} m` : `${roadKm.toFixed(1)} km`;
+  const durStr = `${mins} mins`;
+  return {
+    distanceText: distStr,
+    durationText: durStr,
+    fullText: `${distStr} away (${durStr})`,
+    km: roadKm,
+    mins,
+  };
 }

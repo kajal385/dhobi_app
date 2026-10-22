@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\ShopController;
 use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\WalletController;
 use App\Http\Controllers\Api\V1\ShopServiceController;
+use App\Http\Controllers\Api\V1\FcmTokenController;
 
 /*
 |--------------------------------------------------------------------------
@@ -34,6 +35,9 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/send-otp', [AuthController::class, 'sendOtp']);
     Route::post('/auth/resend-otp', [AuthController::class, 'sendOtp']);
     Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp']);
+    Route::post('/auth/firebase-login', [AuthController::class, 'firebaseLogin']);
+    Route::post('/fcm/token', [FcmTokenController::class, 'register']);
+    Route::post('/fcm/token/remove', [FcmTokenController::class, 'remove']);
     Route::get('/profile', [AuthController::class, 'profile']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
     Route::post('/profile', [AuthController::class, 'updateProfile']);
@@ -80,6 +84,9 @@ Route::prefix('v1')->group(function () {
     // ──────────────────────────────────────────────
     Route::prefix('owner')->group(function () {
         Route::post('/login', [AuthController::class, 'login']);
+        Route::post('/firebase-login', [AuthController::class, 'firebaseLogin']);
+        Route::post('/fcm/token', [FcmTokenController::class, 'register']);
+        Route::post('/fcm/token/remove', [FcmTokenController::class, 'remove']);
         Route::post('/register-shop', [LaundryOwnerController::class, 'registerShop']);
         Route::get('/shop-status', [LaundryOwnerController::class, 'shopStatus']);
         Route::get('/dashboard', [LaundryOwnerController::class, 'dashboardStats']);
@@ -219,5 +226,6 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin-users', [AdminDashboardController::class, 'adminUsers']);
         Route::post('/admin-users', [AdminDashboardController::class, 'createAdminUser']);
         Route::get('/audit-logs', [AdminDashboardController::class, 'auditLogs']);
+        Route::post('/broadcast', [AdminDashboardController::class, 'broadcastNotification']);
     });
 });

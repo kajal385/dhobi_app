@@ -21,6 +21,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 
 import { useAuth } from '../../context/AuthContext';
 import { partnerService } from '../../services/partnerService';
+import { firebasePartnerAuthService } from '../../services/firebaseAuthService';
 import { SplashScreen } from '../SplashScreen';
 
 type AuthStackParamList = {
@@ -37,8 +38,14 @@ export const LoginScreen = () => {
   const scrollRef = useRef<any>(null);
 
   const [role, setRole] = useState<'owner' | 'delivery_boy'>('owner');
+  const [authMethod, setAuthMethod] = useState<'otp' | 'password'>('otp');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [confirmation, setConfirmation] = useState<any>(null);
+  const [isOtpSent, setIsOtpSent] = useState(false);
+  const [countdown, setCountdown] = useState(30);
+  const [canResend, setCanResend] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
@@ -62,6 +69,26 @@ export const LoginScreen = () => {
     shop: any;
   } | null>(null);
 
+  // Resend OTP countdown timer
+  useEffect(() => {
+    let interval: any = null;
+    if (isOtpSent && countdown > 0) {
+      interval = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setCanResend(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isOtpSent, countdown]);
+
   useEffect(() => {
     const showSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
@@ -79,6 +106,190 @@ export const LoginScreen = () => {
 
   const handleRoleChange = (newRole: 'owner' | 'delivery_boy') => {
     setRole(newRole);
+    setIsOtpSent(false);
+    setOtp('');
+    setConfirmation(null);
+  };
+
+  const handleSendFirebaseOtp = async () => {
+    const cleanDigits = phone.replace(/\D/g, '');
+    if (!cleanDigits || cleanDigits.length < 10) {
+      setFeedbackModal({
+        visible: true,
+        type: 'warning',
+        icon: '📱',
+        badgeLabel: 'Validation Error',
+        title: 'Invalid Mobile Number',
+        subtitle: 'Please enter a valid 10-digit mobile number with country code (+91).',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const confirmResult = await firebasePartnerAuthService.sendPhoneOtp(cleanDigits, '91');
+      setConfirmation(confirmResult);
+      setIsOtpSent(true);
+      setCountdown(30);
+      setCanResend(false);
+      setFeedbackModal({
+        visible: true,
+        type: 'success',
+        icon: '📩',
+        badgeLabel: 'OTP Sent',
+        title: 'Verification Code Sent',
+        subtitle: `A 6-digit verification code was sent to +91 ${cleanDigits.slice(-10)}.`,
+      });
+    } catch (err: any) {
+      setFeedbackModal({
+        visible: true,
+        type: 'error',
+        icon: '⚠️',
+        badgeLabel: 'Verification Error',
+        title: 'Could Not Send OTP',
+        subtitle: err.message || 'Please check your connection and try again.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendFirebaseOtp = async () => {
+    if (!canResend || isLoading) return;
+    setIsLoading(true);
+    const cleanDigits = phone.replace(/\D/g, '');
+    try {
+      const confirmResult = await firebasePartnerAuthService.sendPhoneOtp(cleanDigits, '91');
+      setConfirmation(confirmResult);
+      setCountdown(30);
+      setCanResend(false);
+      setFeedbackModal({
+        visible: true,
+        type: 'success',
+        icon: '🔄',
+        badgeLabel: 'Resent',
+        title: 'OTP Resent Successfully',
+        subtitle: 'A new 6-digit code has been sent to your phone.',
+      });
+    } catch (err: any) {
+      setFeedbackModal({
+        visible: true,
+        type: 'error',
+        icon: '⚠️',
+        badgeLabel: 'Resend Failed',
+        title: 'Failed to Resend',
+        subtitle: err.message || 'Could not resend OTP.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyFirebaseOtp = async () => {
+    if (!otp.trim() || otp.trim().length !== 6) {
+      setFeedbackModal({
+        visible: true,
+        type: 'warning',
+        icon: '🔢',
+        badgeLabel: 'Invalid Code',
+        title: 'Enter 6-Digit OTP',
+        subtitle: 'Please enter the complete 6-digit verification code.',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      if (!confirmation) {
+        throw new Error('Please request an OTP first.');
+      }
+
+      // 1. Confirm code with Firebase Phone Authentication
+      const userCredential = await firebasePartnerAuthService.confirmOtp(confirmation, otp);
+      const idToken = await userCredential.user.getIdToken();
+
+      // 2. Synchronize with Laravel backend API
+      const res = await firebasePartnerAuthService.syncOwnerWithBackend(phone, idToken, role);
+
+      const status = (
+        res?.verification_status ||
+        res?.shop?.verification_status ||
+        res?.data?.verification_status ||
+        res?.data?.shop?.verification_status ||
+        'APPROVED'
+      ).toUpperCase();
+
+      if (!res?.success) {
+        setIsLoading(false);
+        setFeedbackModal({
+          visible: true,
+          type: 'error',
+          icon: '❌',
+          badgeLabel: 'Authentication',
+          title: 'Login Failed',
+          subtitle: res?.message || 'Verification failed. Please try again.',
+        });
+        return;
+      }
+
+      if (status === 'REJECTED') {
+        setIsLoading(false);
+        setFeedbackModal({
+          visible: true,
+          type: 'error',
+          icon: '🚫',
+          badgeLabel: 'Application Rejected',
+          title: 'Account Not Approved',
+          subtitle: 'Your Laundry Shop registration was rejected by Admin. Please contact customer support for assistance.',
+        });
+        return;
+      }
+
+      if (status === 'PENDING') {
+        setIsLoading(false);
+        setFeedbackModal({
+          visible: true,
+          type: 'info',
+          icon: '⏳',
+          badgeLabel: 'Under Review',
+          title: 'Verification Pending',
+          subtitle: 'Your shop application is still under Admin review. You will be notified immediately once approved.',
+        });
+        return;
+      }
+
+      if (status === 'DOCS_REQUIRED') {
+        setIsLoading(false);
+        setFeedbackModal({
+          visible: true,
+          type: 'warning',
+          icon: '📄',
+          badgeLabel: 'Documents Needed',
+          title: 'Documents Required',
+          subtitle: 'Admin has requested additional verification documents. Please check your registered email for details.',
+        });
+        return;
+      }
+
+      // Successful verification
+      setPendingAuth({
+        role,
+        user: res?.user || res?.data?.user || { phone },
+        shop: res?.shop || res?.data?.shop,
+      });
+      setShowSplashOnLogin(true);
+    } catch (err: any) {
+      setFeedbackModal({
+        visible: true,
+        type: 'error',
+        icon: '⚠️',
+        badgeLabel: 'Verification Failed',
+        title: 'Invalid OTP',
+        subtitle: err.message || 'Verification failed. Please check the code and try again.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleLogin = async () => {
@@ -290,40 +501,135 @@ export const LoginScreen = () => {
               </View>
             </View>
 
+            {/* Auth Method Selector */}
+            <View style={styles.authMethodContainer}>
+              <TouchableOpacity
+                style={[styles.authMethodTab, authMethod === 'otp' && styles.authMethodTabActive]}
+                onPress={() => setAuthMethod('otp')}
+              >
+                <Text style={[styles.authMethodText, authMethod === 'otp' && styles.authMethodTextActive]}>
+                  📱 Mobile OTP
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.authMethodTab, authMethod === 'password' && styles.authMethodTabActive]}
+                onPress={() => setAuthMethod('password')}
+              >
+                <Text style={[styles.authMethodText, authMethod === 'password' && styles.authMethodTextActive]}>
+                  🔑 Password
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Form */}
             <View style={styles.form}>
-              <AppInput
-                label="Email or Mobile Number"
-                placeholder="Enter email or mobile number"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={phone}
-                onChangeText={setPhone}
-                onFocus={() => {
-                  setTimeout(() => {
-                    scrollRef.current?.scrollTo({ y: 40, animated: true });
-                  }, 120);
-                }}
-              />
-              <AppInput
-                label="Password"
-                placeholder="Enter password"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-                onFocus={() => {
-                  setTimeout(() => {
-                    scrollRef.current?.scrollTo({ y: 190, animated: true });
-                  }, 120);
-                }}
-              />
+              {authMethod === 'otp' ? (
+                <>
+                  {!isOtpSent ? (
+                    <>
+                      <AppInput
+                        label="Registered Mobile Number"
+                        placeholder="Enter 10-digit number"
+                        keyboardType="phone-pad"
+                        maxLength={10}
+                        value={phone}
+                        onChangeText={setPhone}
+                      />
 
-              <AppButton
-                title={`Login as ${role === 'owner' ? 'Laundry Owner' : 'Delivery Boy'}`}
-                onPress={handleLogin}
-                isLoading={isLoading}
-                style={styles.loginButton}
-              />
+                      <AppButton
+                        title={`Send OTP for ${role === 'owner' ? 'Owner' : 'Delivery Boy'}`}
+                        onPress={handleSendFirebaseOtp}
+                        isLoading={isLoading}
+                        style={styles.loginButton}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.otpHeaderRow}>
+                        <Text style={styles.otpSentToText}>
+                          Code sent to: <Text style={{ fontWeight: '700', color: COLORS.text }}>+91 {phone.replace(/\D/g, '').slice(-10)}</Text>
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setIsOtpSent(false);
+                            setOtp('');
+                          }}
+                        >
+                          <Text style={styles.changePhoneText}>Change</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <AppInput
+                        label="6-Digit Verification Code"
+                        placeholder="Enter 6-digit OTP"
+                        keyboardType="number-pad"
+                        maxLength={6}
+                        value={otp}
+                        onChangeText={setOtp}
+                      />
+
+                      <View style={styles.resendRow}>
+                        <Text style={styles.resendPrompt}>Didn't receive code? </Text>
+                        <TouchableOpacity
+                          onPress={handleResendFirebaseOtp}
+                          disabled={!canResend || isLoading}
+                        >
+                          <Text
+                            style={[
+                              styles.resendBtnText,
+                              { color: canResend ? COLORS.primary : COLORS.textSecondary },
+                            ]}
+                          >
+                            {canResend ? 'Resend OTP' : `Resend in ${countdown}s`}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <AppButton
+                        title="Verify OTP & Sign In"
+                        onPress={handleVerifyFirebaseOtp}
+                        isLoading={isLoading}
+                        style={styles.loginButton}
+                      />
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <AppInput
+                    label="Email or Mobile Number"
+                    placeholder="Enter email or mobile number"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    value={phone}
+                    onChangeText={setPhone}
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollRef.current?.scrollTo({ y: 40, animated: true });
+                      }, 120);
+                    }}
+                  />
+                  <AppInput
+                    label="Password"
+                    placeholder="Enter password"
+                    secureTextEntry
+                    value={password}
+                    onChangeText={setPassword}
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollRef.current?.scrollTo({ y: 190, animated: true });
+                      }, 120);
+                    }}
+                  />
+
+                  <AppButton
+                    title={`Login as ${role === 'owner' ? 'Laundry Owner' : 'Delivery Boy'}`}
+                    onPress={handleLogin}
+                    isLoading={isLoading}
+                    style={styles.loginButton}
+                  />
+                </>
+              )}
             </View>
 
             {role === 'owner' && (
@@ -461,6 +767,66 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.semiBold,
     fontSize: 14,
     color: COLORS.primary,
+  },
+  authMethodContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.card,
+    borderRadius: SIZES.radius_md,
+    padding: 4,
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  authMethodTab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: SIZES.radius_sm,
+  },
+  authMethodTabActive: {
+    backgroundColor: COLORS.primary,
+  },
+  authMethodText: {
+    fontFamily: FONTS.medium,
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  authMethodTextActive: {
+    color: '#FFF',
+    fontFamily: FONTS.bold,
+  },
+  otpHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+    paddingHorizontal: 4,
+  },
+  otpSentToText: {
+    fontFamily: FONTS.regular,
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  changePhoneText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 13,
+    color: COLORS.primary,
+    textDecorationLine: 'underline',
+  },
+  resendRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: SPACING.md,
+  },
+  resendPrompt: {
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  resendBtnText: {
+    fontFamily: FONTS.bold,
+    fontSize: 14,
   },
 });
 

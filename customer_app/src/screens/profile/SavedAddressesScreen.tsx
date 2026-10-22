@@ -24,8 +24,15 @@ import { updateProfile } from '../../store/authSlice';
 import { addressService } from '../../services/addressService';
 import Toast from 'react-native-toast-message';
 import { SkeletonLoader } from '../../components/SkeletonLoader';
+import {
+  geocodeAddress,
+  requestLocationPermission,
+  getCurrentLocation,
+  reverseGeocode,
+} from '../../utils/locationUtils';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
-export const SavedAddressesScreen = ({ navigation }: any) => {
+export const SavedAddressesScreen = ({ navigation, route }: any) => {
   const { isDark, colors } = useTheme();
   const dispatch = useDispatch();
   const { user } = useSelector((s: RootState) => s.auth);
@@ -84,16 +91,21 @@ export const SavedAddressesScreen = ({ navigation }: any) => {
 
     setSaving(true);
     try {
+      // Automatically compute latitude and longitude from the address text using Google Geocoding
+      const geocoded = await geocodeAddress(`${addressLine1}, ${city} ${pincode}`);
+      const lat = geocoded?.latitude || 18.5980;
+      const lng = geocoded?.longitude || 73.7680;
+
       const newAddress = await addressService.addAddress({
         label: label || 'Home',
         address_line1: addressLine1,
         address_line2: '',
         city,
-        state: state || 'Default',
+        state: state || 'Maharashtra',
         pincode,
         country: 'India',
-        latitude: 0,
-        longitude: 0,
+        latitude: lat,
+        longitude: lng,
       });
       setAddresses([newAddress, ...addresses]);
       setShowAddModal(false);
@@ -102,11 +114,32 @@ export const SavedAddressesScreen = ({ navigation }: any) => {
       setCity('');
       setState('');
       setPincode('');
-      Toast.show({ type: 'success', text1: 'Address saved!' });
+      Toast.show({ type: 'success', text1: 'Address saved with GPS coordinates! 📍' });
     } catch {
       Toast.show({ type: 'error', text1: 'Could not save address' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUseGpsInModal = async () => {
+    try {
+      const granted = await requestLocationPermission();
+      if (!granted) {
+        Toast.show({ type: 'error', text1: 'Location permission denied' });
+        return;
+      }
+      Toast.show({ type: 'info', text1: 'Detecting GPS location...' });
+      const { latitude, longitude } = await getCurrentLocation();
+      const geo = await reverseGeocode(latitude, longitude);
+      setAddressLine1(geo.address_line1);
+      setCity(geo.city || 'Pune');
+      setState('Maharashtra');
+      setPincode(geo.pincode || '411057');
+      if (!label) setLabel('Current Location');
+      Toast.show({ type: 'success', text1: 'GPS Address Filled! 📍' });
+    } catch {
+      Toast.show({ type: 'error', text1: 'Could not fetch GPS' });
     }
   };
 
@@ -129,20 +162,61 @@ export const SavedAddressesScreen = ({ navigation }: any) => {
     ]);
   };
 
-  const handleSelectAddress = (item: Address) => {
+  const handleSelectAddress = async (item: Address) => {
+    let lat = Number(item.latitude || 0);
+    let lng = Number(item.longitude || 0);
+
+    if (!lat || !lng || lat === 0 || lng === 0) {
+      // Resolve coordinates from address text using geocoder
+      const geocoded = await geocodeAddress(`${item.address_line1}, ${item.city}`);
+      if (geocoded) {
+        lat = geocoded.latitude;
+        lng = geocoded.longitude;
+      } else {
+        lat = 18.5980;
+        lng = 73.7680;
+      }
+    }
+
     dispatch(
       updateProfile({
         address: item.address_line1,
         city: item.city,
         pincode: item.pincode,
+        area: item.label,
+        latitude: lat,
+        longitude: lng,
       })
     );
+
     Toast.show({
       type: 'success',
-      text1: 'Address Selected as Active! 📍',
-      text2: item.address_line1,
+      text1: '📍 Active Address Updated!',
+      text2: `Laundry distances now calculated from ${item.address_line1}`,
     });
-    navigation.navigate('MainTabs', { screen: 'ProfileTab' });
+
+    if (route?.params?.returnScreen === 'Booking') {
+      navigation.navigate('Booking', {
+        selectedAddressFromSaved: {
+          ...item,
+          latitude: lat,
+          longitude: lng,
+        },
+      });
+    } else if (route?.params?.returnScreen === 'Home') {
+      navigation.navigate('MainTabs', {
+        screen: 'HomeTab',
+        params: {
+          selectedLocation: item.address_line1,
+          latitude: lat,
+          longitude: lng,
+        },
+      });
+    } else if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('MainTabs', { screen: 'ProfileTab' });
+    }
   };
 
   const renderItem = ({ item }: { item: Address }) => (
@@ -233,6 +307,27 @@ export const SavedAddressesScreen = ({ navigation }: any) => {
               placeholder="Home"
               placeholderTextColor={colors.textLight}
             />
+
+            {/* Quick GPS auto-fill */}
+            <TouchableOpacity
+              onPress={handleUseGpsInModal}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#EDE8FF',
+                paddingVertical: 10,
+                borderRadius: 10,
+                marginTop: 14,
+                marginBottom: 6,
+                gap: 8,
+              }}
+            >
+              <MaterialCommunityIcons name="crosshairs-gps" size={18} color="#5B52E8" />
+              <Text style={{ color: '#5B52E8', fontWeight: '700', fontSize: 13 }}>
+                Autofill from Current GPS
+              </Text>
+            </TouchableOpacity>
 
             <Text style={[styles.inputLabel, { color: colors.text }]}>Address Line 1 *</Text>
             <TextInput

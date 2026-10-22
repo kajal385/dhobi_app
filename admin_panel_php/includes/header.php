@@ -36,12 +36,22 @@ $pageTitle = $pageTitle ?? 'DhobiPro - Admin Platform';
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+  <!-- Firebase Web SDK (v10 compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
+
   <script>
     window.DHOBI_CONFIG = {
       baseUrl: '<?= ADMIN_BASE_URL ?>',
       apiBaseUrl: '<?= API_BASE_URL ?>',
       user: <?= json_encode($user) ?>,
-      isLaundryOwner: <?= $isOwner ? 'true' : 'false' ?>
+      isLaundryOwner: <?= $isOwner ? 'true' : 'false' ?>,
+      firebase: {
+        apiKey: "<?= FIREBASE_API_KEY ?>",
+        projectId: "<?= FIREBASE_PROJECT_ID ?>",
+        messagingSenderId: "<?= FIREBASE_MESSAGING_SENDER_ID ?>",
+        appId: "<?= FIREBASE_APP_ID ?>"
+      }
     };
   </script>
 </head>
@@ -117,6 +127,11 @@ $pageTitle = $pageTitle ?? 'DhobiPro - Admin Platform';
           <!-- Theme Mode Toggle -->
           <button id="themeToggleBtn" type="button" class="btn btn-secondary" style="width: 40px; height: 40px; padding: 0; border-radius: 12px; display: flex; align-items: center; justify-content: center;" title="Toggle Light/Dark Theme">
             <i data-lucide="moon" id="themeIcon" style="width: 18px; height: 18px;"></i>
+          </button>
+
+          <!-- Desktop Push Notification Toggle Indicator -->
+          <button id="webPushToggleBtn" class="btn" style="height: 38px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(129, 98, 238, 0.25); background: rgba(129, 98, 238, 0.08); color: #8162EE; font-size: 0.78rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;" title="Manage Web Push Notifications">
+            <span>🔔</span> Alerts
           </button>
 
           <!-- Notification Bell -->

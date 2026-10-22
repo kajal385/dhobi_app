@@ -661,6 +661,22 @@ class AdminDashboardController extends Controller
             'updated_at'      => now(),
         ]);
 
+        // Firebase Push Notification to Laundry Shop Owner
+        try {
+            \App\Services\FirebaseNotificationService::sendToShopOwner(
+                (int) $shop->id,
+                'Laundry Verification Approved! 🎉',
+                'Your laundry shop "' . $shop->name . '" has been verified and approved by admin. You can now accept customer orders.',
+                [
+                    'type'       => 'shop_approved',
+                    'shop_id'    => (string) $shop->id,
+                    'channel_id' => 'dhobipro_partner_channel',
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('FCM shop approved notification failed: ' . $e->getMessage());
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Laundry shop approved successfully! It is now live in Customer App.',
@@ -678,6 +694,22 @@ class AdminDashboardController extends Controller
         $shop->suspension_reason = $request->input('reason', 'Verification rejected by admin');
         $shop->save();
 
+        // Firebase Push Notification to Laundry Shop Owner
+        try {
+            \App\Services\FirebaseNotificationService::sendToShopOwner(
+                (int) $shop->id,
+                'Laundry Verification Update',
+                'Your shop verification for "' . $shop->name . '" was rejected. Reason: ' . ($shop->suspension_reason ?: 'Contact support for details.'),
+                [
+                    'type'       => 'shop_rejected',
+                    'shop_id'    => (string) $shop->id,
+                    'channel_id' => 'dhobipro_partner_channel',
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('FCM shop rejected notification failed: ' . $e->getMessage());
+        }
+
         return response()->json(['success' => true, 'message' => 'Laundry shop rejected']);
     }
 
@@ -689,6 +721,22 @@ class AdminDashboardController extends Controller
         $shop = LaundryShop::findOrFail($id);
         $shop->verification_status = 'DOCS_REQUIRED';
         $shop->save();
+
+        // Firebase Push Notification to Laundry Shop Owner
+        try {
+            \App\Services\FirebaseNotificationService::sendToShopOwner(
+                (int) $shop->id,
+                'Additional Documents Required 📄',
+                'Admin has requested additional business verification documents for "' . $shop->name . '". Please upload required documents.',
+                [
+                    'type'       => 'docs_required',
+                    'shop_id'    => (string) $shop->id,
+                    'channel_id' => 'dhobipro_partner_channel',
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('FCM shop docs required notification failed: ' . $e->getMessage());
+        }
 
         return response()->json(['success' => true, 'message' => 'Requested additional documents']);
     }
@@ -712,6 +760,23 @@ class AdminDashboardController extends Controller
             $shop->account_status = 'DEACTIVATED';
         }
         $shop->save();
+
+        // Firebase Push Notification to Laundry Shop Owner
+        try {
+            \App\Services\FirebaseNotificationService::sendToShopOwner(
+                (int) $shop->id,
+                'Shop Status Updated: ' . $status,
+                'Your shop "' . $shop->name . '" status has been updated to ' . $status . ' by admin.',
+                [
+                    'type'       => 'status_updated',
+                    'status'     => $status,
+                    'shop_id'    => (string) $shop->id,
+                    'channel_id' => 'dhobipro_partner_channel',
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('FCM shop status update notification failed: ' . $e->getMessage());
+        }
 
         return response()->json(['success' => true, 'message' => 'Account status updated to ' . $status]);
     }
@@ -2436,6 +2501,38 @@ class AdminDashboardController extends Controller
                 'endDate'    => $endDate,
                 'status'     => $status,
             ]
+        ]);
+    }
+
+    /**
+     * Send Broadcast Notification via Firebase Cloud Messaging
+     */
+    public function broadcastNotification(Request $request)
+    {
+        $request->validate([
+            'title'    => 'required|string|max:255',
+            'body'     => 'required|string',
+            'audience' => 'nullable|string',
+        ]);
+
+        $title = $request->input('title');
+        $body  = $request->input('body');
+        $aud   = strtoupper($request->input('audience', 'ALL_CUSTOMERS'));
+
+        $role = match($aud) {
+            'LAUNDRY_OWNERS'    => 'laundry_owner',
+            'DELIVERY_PARTNERS' => 'delivery_boy',
+            default             => 'customer',
+        };
+
+        $result = \App\Services\FirebaseNotificationService::sendToRole($role, $title, $body, [
+            'type' => 'broadcast_announcement',
+        ]);
+
+        return response()->json([
+            'success'    => true,
+            'message'    => "Push notification broadcast sent to {$aud}!",
+            'sent_count' => $result['sent_count'] ?? 0,
         ]);
     }
 }

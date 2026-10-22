@@ -8,6 +8,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { RootState } from '../../store';
 import { authStart, authSuccess, authFailure } from '../../store/authSlice';
 import apiClient from '../../api/client';
+import { firebaseAuthService } from '../../services/firebaseAuthService';
 import Toast from 'react-native-toast-message';
 
 export const PhoneInputScreen = ({ navigation }: any) => {
@@ -16,7 +17,7 @@ export const PhoneInputScreen = ({ navigation }: any) => {
   const { isDark, colors } = useTheme();
 
   const handleSendOtp = async () => {
-    if (!phone || phone.length !== 10) {
+    if (!phone || phone.replace(/\D/g, '').length !== 10) {
       Toast.show({
         type: 'error',
         text1: 'Invalid Phone Number',
@@ -26,31 +27,33 @@ export const PhoneInputScreen = ({ navigation }: any) => {
     }
 
     setLoading(true);
+    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+
     try {
-      await apiClient.post('/auth/send-otp', {
-        mobile: phone,
-        country_code: '91',
-      });
+      let confirmation: any = null;
+      try {
+        confirmation = await firebaseAuthService.sendPhoneOtp(cleanPhone, '91');
+      } catch (fbErr: any) {
+        console.warn('Firebase sendOtp error, falling back to backend:', fbErr?.message);
+        await apiClient.post('/auth/send-otp', {
+          mobile: cleanPhone,
+          country_code: '91',
+        });
+      }
 
       Toast.show({
         type: 'success',
         text1: 'OTP Sent ✅',
-        text2: `Code sent to +91 ${phone}`,
+        text2: `Verification code sent to +91 ${cleanPhone}`,
       });
 
-      navigation.navigate('OtpVerify', { phone });
+      navigation.navigate('OtpVerify', { phone: cleanPhone, confirmation });
     } catch (error: any) {
-      console.error('Send OTP error:', error.response?.data || error.message);
-      const msg =
-        error.response?.data?.message ||
-        (error.response?.data?.errors
-          ? Object.values(error.response.data.errors).flat().join(', ')
-          : null) ||
-        'Could not send OTP. Check your connection.';
+      console.error('Send OTP error:', error.message);
       Toast.show({
         type: 'error',
         text1: 'Failed to send OTP',
-        text2: msg,
+        text2: error.message || 'Could not send verification code. Please try again.',
       });
     } finally {
       setLoading(false);
