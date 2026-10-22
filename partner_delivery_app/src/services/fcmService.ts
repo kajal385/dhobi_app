@@ -11,7 +11,7 @@ import {
   registerDeviceForRemoteMessages,
   AuthorizationStatus,
 } from '@react-native-firebase/messaging';
-import { Platform, PermissionsAndroid, Alert } from 'react-native';
+import { Platform, PermissionsAndroid, Alert, Vibration } from 'react-native';
 import apiClient from './apiClient';
 
 export const PARTNER_NOTIFICATION_CHANNEL_ID = 'dhobipro_partner_channel';
@@ -150,7 +150,10 @@ class PartnerFcmService {
 
       const title = String(remoteMessage.notification?.title || remoteMessage.data?.title || 'New Order Notification! 🧺');
       const body = String(remoteMessage.notification?.body || remoteMessage.data?.body || 'A new laundry order is waiting for review.');
-      const orderId = remoteMessage.data?.order_id;
+      // Play haptic vibration on message arrival
+      try {
+        Vibration.vibrate([0, 300, 200, 300]);
+      } catch (e) {}
 
       Alert.alert(
         title,

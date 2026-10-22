@@ -1495,6 +1495,19 @@ class AdminDashboardController extends Controller
                     'channel_id' => 'dhobipro_customer_channel',
                 ]
             );
+
+            // Also notify Laundry Shop Owner App & Web Panel
+            \App\Services\FirebaseNotificationService::sendToShopOwner(
+                (int) ($order->shop_id ?? 1),
+                $newStatus === 'CANCELLED' ? 'Order Cancelled by Admin 🚫' : 'Order Status: ' . $newStatus,
+                'Admin updated Order #' . ($order->order_number ?? $order->id) . ' to ' . $newStatus . ($notes ? " ({$notes})" : ""),
+                [
+                    'type'       => $newStatus === 'CANCELLED' ? 'order_cancelled' : 'order_status_update',
+                    'order_id'   => (string) $order->id,
+                    'status'     => $newStatus,
+                    'channel_id' => 'dhobipro_orders_channel',
+                ]
+            );
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('FCM admin status update notification failed: ' . $e->getMessage());
         }

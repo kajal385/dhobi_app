@@ -407,15 +407,29 @@ class OrderController extends Controller
             if (!empty($order->shop_id)) {
                 FirebaseNotificationService::sendToShopOwner(
                     (int) $order->shop_id,
-                    'Order Cancelled',
-                    'Order #' . ($order->order_number ?? $order->id) . ' was cancelled by the customer.',
+                    'Order Cancelled 🚫',
+                    'Order #' . ($order->order_number ?? $order->id) . ' was cancelled by customer. Reason: ' . $reason,
                     [
                         'type'       => 'order_cancelled',
                         'order_id'   => (string) $order->id,
-                        'channel_id' => 'dhobipro_partner_channel',
+                        'status'     => 'CANCELLED',
+                        'channel_id' => 'dhobipro_orders_channel',
                     ]
                 );
             }
+
+            // Notify Admin Panel
+            FirebaseNotificationService::sendToRole(
+                'admin',
+                'Order Cancelled 🚫',
+                'Order #' . ($order->order_number ?? $order->id) . ' was cancelled by customer. Reason: ' . $reason,
+                [
+                    'type'       => 'order_cancelled',
+                    'order_id'   => (string) $order->id,
+                    'status'     => 'CANCELLED',
+                    'channel_id' => 'dhobipro_orders_channel',
+                ]
+            );
         } catch (\Throwable $e) {}
 
         $refundBreakdown = [
@@ -672,6 +686,7 @@ class OrderController extends Controller
         $order = Order::findOrFail($id);
         $isAvailable = filter_var($request->input('is_available', true), FILTER_VALIDATE_BOOLEAN);
         $notes = $request->input('notes', '');
+        $orderNum = $order->order_number ?? ('#' . $order->id);
 
         if ($isAvailable) {
             $order->status = 'customer_confirmed';
@@ -689,9 +704,60 @@ class OrderController extends Controller
                 'updated_at' => now(),
             ]);
 
+            // Dispatch push notifications to Laundry Shop Owner (App & Web Panel) and Admin Panel
+            try {
+                FirebaseNotificationService::sendToShopOwner(
+                    (int) ($order->shop_id ?? 1),
+                    'Customer Delivery Confirmed! 🏠',
+                    'Customer confirmed delivery availability for Order ' . $orderNum . '. Ready for delivery dispatch!',
+                    [
+                        'type'       => 'customer_availability',
+                        'order_id'   => (string) $order->id,
+                        'status'     => 'customer_confirmed',
+                        'channel_id' => 'dhobipro_orders_channel',
+                    ]
+                );
+
+                FirebaseNotificationService::sendToRole(
+                    'admin',
+                    'Customer Delivery Confirmed! 🏠',
+                    'Customer confirmed delivery availability for Order ' . $orderNum . '.',
+                    [
+                        'type'       => 'customer_availability',
+                        'order_id'   => (string) $order->id,
+                        'status'     => 'customer_confirmed',
+                        'channel_id' => 'dhobipro_orders_channel',
+                    ]
+                );
+
+                // Insert into notifications table
+                $shop = LaundryShop::find($order->shop_id ?? 1);
+                $ownerId = $shop ? $shop->owner_id : null;
+                if ($ownerId) {
+                    DB::table('notifications')->insert([
+                        'user_id'    => $ownerId,
+                        'title'      => 'Customer Delivery Confirmed! 🏠',
+                        'message'    => 'Customer confirmed availability for Order ' . $orderNum . ($notes ? ' (Note: ' . $notes . ')' : ''),
+                        'type'       => 'CUSTOMER_AVAILABLE',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+                DB::table('notifications')->insert([
+                    'user_id'    => null,
+                    'title'      => 'Customer Delivery Confirmed! 🏠',
+                    'message'    => 'Customer confirmed availability for Order ' . $orderNum,
+                    'type'       => 'CUSTOMER_AVAILABLE',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('confirmAvailability notification failed: ' . $e->getMessage());
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Delivery availability confirmed! Delivery partner will be assigned shortly.',
+                'message' => 'Delivery availability confirmed! Laundry owner and admin have been notified.',
                 'data'    => $order,
             ]);
         } else {
@@ -705,6 +771,31 @@ class OrderController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            // Notify Laundry Owner & Admin of Reschedule Request
+            try {
+                FirebaseNotificationService::sendToShopOwner(
+                    (int) ($order->shop_id ?? 1),
+                    'Customer Reschedule Request ⏱️',
+                    'Customer for Order ' . $orderNum . ' requested reschedule: ' . ($notes ?: 'Not available at address.'),
+                    [
+                        'type'       => 'customer_reschedule',
+                        'order_id'   => (string) $order->id,
+                        'channel_id' => 'dhobipro_orders_channel',
+                    ]
+                );
+
+                FirebaseNotificationService::sendToRole(
+                    'admin',
+                    'Customer Reschedule Request ⏱️',
+                    'Customer for Order ' . $orderNum . ' requested reschedule: ' . ($notes ?: 'Not available.'),
+                    [
+                        'type'       => 'customer_reschedule',
+                        'order_id'   => (string) $order->id,
+                        'channel_id' => 'dhobipro_orders_channel',
+                    ]
+                );
+            } catch (\Throwable $e) {}
 
             return response()->json([
                 'success' => true,

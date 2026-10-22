@@ -449,6 +449,19 @@ class LaundryOwnerController extends Controller
                     'channel_id' => 'dhobipro_customer_channel',
                 ]
             );
+
+            // Also notify Admin Panel of status change or cancellation
+            FirebaseNotificationService::sendToRole(
+                'admin',
+                $isCancelled ? 'Order Cancelled by Shop 🚫' : 'Order Status: ' . $status,
+                'Laundry Shop updated Order #' . ($order->order_number ?? $order->id) . ' to ' . $status . ($isCancelled ? '. Reason: ' . ($order->cancellation_reason ?? $notes) : ''),
+                [
+                    'type'       => $isCancelled ? 'order_cancelled' : 'order_status_update',
+                    'order_id'   => (string) $order->id,
+                    'status'     => $status,
+                    'channel_id' => 'dhobipro_orders_channel',
+                ]
+            );
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('FCM status update notification failed: ' . $e->getMessage());
         }
@@ -1634,6 +1647,21 @@ class LaundryOwnerController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        // Push notification to Customer
+        try {
+            FirebaseNotificationService::sendToUser(
+                (int) $order->user_id,
+                'Payment Received 💳',
+                'Payment for order #' . ($order->order_number ?? $order->id) . ' has been marked as ' . strtoupper($paymentStatus) . '.',
+                [
+                    'type'       => 'payment_update',
+                    'order_id'   => (string) $order->id,
+                    'status'     => $order->status,
+                    'channel_id' => 'dhobipro_customer_channel',
+                ]
+            );
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'success' => true,

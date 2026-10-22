@@ -11,7 +11,7 @@ import {
   registerDeviceForRemoteMessages,
   AuthorizationStatus,
 } from '@react-native-firebase/messaging';
-import { Platform, PermissionsAndroid } from 'react-native';
+import { Platform, PermissionsAndroid, Alert, Vibration } from 'react-native';
 import Toast from 'react-native-toast-message';
 import apiClient from '../api/client';
 
@@ -178,6 +178,11 @@ class FcmService {
         console.warn('[FCM] Could not dispatch to store:', err);
       }
 
+      // Play haptic vibration on message arrival
+      try {
+        Vibration.vibrate([0, 250, 250, 250]);
+      } catch (e) {}
+
       // 2. Show in-app banner/toast popup for order actions
       Toast.show({
         type: 'info',
@@ -190,6 +195,24 @@ class FcmService {
           }
         },
       });
+
+      // 3. Show prominent Native Alert Modal Popup for order actions
+      Alert.alert(
+        String(title),
+        String(body),
+        [
+          { text: 'Dismiss', style: 'cancel' },
+          {
+            text: 'View Order',
+            onPress: () => {
+              if (orderId && navigationRef?.isReady?.()) {
+                navigationRef.navigate('OrderDetail', { orderId: Number(orderId) });
+              }
+            },
+          },
+        ],
+        { cancelable: true }
+      );
     });
 
     // 2. Notification Tap from Background

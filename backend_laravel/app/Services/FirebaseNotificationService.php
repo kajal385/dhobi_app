@@ -174,15 +174,19 @@ class FirebaseNotificationService
                 'android' => [
                     'priority' => 'high',
                     'notification' => [
-                        'channel_id' => $data['channel_id'] ?? 'dhobipro_orders_channel',
-                        'sound'      => 'default',
-                        'priority'   => 'high',
+                        'channel_id'              => $data['channel_id'] ?? 'dhobipro_orders_channel',
+                        'sound'                   => 'notification_sound',
+                        'default_sound'           => false,
+                        'default_vibrate_timings' => true,
+                        'priority'                => 'high',
+                        'notification_priority'   => 'PRIORITY_MAX',
+                        'visibility'              => 'PUBLIC',
                     ],
                 ],
                 'apns' => [
                     'payload' => [
                         'aps' => [
-                            'sound' => 'default',
+                            'sound' => 'notification_sound.wav',
                             'badge' => 1,
                         ],
                     ],
@@ -217,12 +221,14 @@ class FirebaseNotificationService
         $url = 'https://fcm.googleapis.com/fcm/send';
 
         $payload = [
-            'to' => $token,
+            'to'       => $token,
             'priority' => 'high',
             'notification' => [
-                'title' => $title,
-                'body'  => $body,
-                'sound' => 'default',
+                'title'              => $title,
+                'body'               => $body,
+                'sound'              => 'notification_sound',
+                'android_channel_id' => $data['channel_id'] ?? 'dhobipro_orders_channel',
+                'priority'           => 'high',
             ],
             'data' => array_merge($data, [
                 'title' => $title,

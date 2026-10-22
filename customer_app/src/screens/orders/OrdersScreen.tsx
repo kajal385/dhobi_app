@@ -10,6 +10,7 @@ import {
   StatusBar,
   Image,
   ImageBackground,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
@@ -54,12 +55,33 @@ export const OrdersScreen = ({ navigation }: any) => {
         orderData.forEach((order) => {
           const prevStatus = lastStatusesRef.current[order.id];
           if (prevStatus && prevStatus !== order.status) {
+            const isCancelled = ['CANCELLED', 'REJECTED', 'CANCEL'].includes(order.status.toUpperCase());
+            const title = isCancelled
+              ? `Order #${order.order_number || order.id} Cancelled 🚫`
+              : `Order #${order.order_number || order.id} Updated! 🔔`;
+            const msg = isCancelled
+              ? `Your order was cancelled by the laundry shop/admin. Reason: ${order.cancellation_reason || 'See details'}`
+              : `Status changed to: ${order.status.replace(/_/g, ' ')}`;
+
             Toast.show({
-              type: 'info',
-              text1: `Order #${order.order_number || order.id} Updated! 🔔`,
-              text2: `Status changed to: ${order.status.replace(/_/g, ' ')}`,
+              type: isCancelled ? 'error' : 'info',
+              text1: title,
+              text2: msg,
               visibilityTime: 6000,
             });
+
+            Alert.alert(
+              title,
+              msg,
+              [
+                { text: 'Dismiss', style: 'cancel' },
+                {
+                  text: 'View Order',
+                  onPress: () => navigation?.navigate('OrderDetail', { orderId: order.id }),
+                },
+              ],
+              { cancelable: true }
+            );
           }
         });
       }
@@ -79,6 +101,10 @@ export const OrdersScreen = ({ navigation }: any) => {
 
   useEffect(() => {
     fetchOrders();
+    const interval = setInterval(() => {
+      fetchOrders();
+    }, 15000);
+    return () => clearInterval(interval);
   }, [fetchOrders]);
 
   const onRefresh = async () => {
