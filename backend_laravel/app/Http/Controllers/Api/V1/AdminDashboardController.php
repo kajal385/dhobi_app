@@ -1462,6 +1462,43 @@ class AdminDashboardController extends Controller
             'updated_at' => now(),
         ]);
 
+        // Push notification to Customer
+        try {
+            $statusTitles = [
+                'ACCEPTED'           => 'Order Accepted! 🧺',
+                'CONFIRMED'          => 'Order Confirmed! 🧺',
+                'REJECTED'           => 'Order Declined ❌',
+                'PROCESSING'         => 'Order In Process 🧼',
+                'IN_PROGRESS'        => 'Order In Process 🧼',
+                'IN_PROCESS'         => 'Order In Process 🧼',
+                'WASHING'            => 'Clothes Being Washed 💧',
+                'IRONING'            => 'Steam Ironing in Progress 👔',
+                'READY'              => 'Order Ready! ✨',
+                'READY_FOR_PICKUP'   => 'Order Ready for Pickup! ✨',
+                'READY_FOR_DELIVERY' => 'Order Ready for Delivery! ✨',
+                'OUT_FOR_DELIVERY'   => 'Out for Delivery 🛵',
+                'DELIVERED'          => 'Order Completed & Delivered 🎉',
+                'COMPLETED'          => 'Order Completed 🎉',
+                'CANCELLED'          => 'Order Cancelled 🚫',
+            ];
+            $pushTitle = $statusTitles[$newStatus] ?? ('Order Update: #' . ($order->order_number ?? $order->id));
+            $pushBody = "Your laundry order #" . ($order->order_number ?? $order->id) . " status is now " . ucfirst(strtolower(str_replace('_', ' ', $newStatus))) . ".";
+
+            \App\Services\FirebaseNotificationService::sendToUser(
+                (int) $order->user_id,
+                $pushTitle,
+                $pushBody,
+                [
+                    'type'       => 'order_status_update',
+                    'order_id'   => (string) $order->id,
+                    'status'     => $newStatus,
+                    'channel_id' => 'dhobipro_customer_channel',
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('FCM admin status update notification failed: ' . $e->getMessage());
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Order status override updated to ' . $newStatus,

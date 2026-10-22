@@ -78,3 +78,4 @@ yarn-error.log
 **/nul
 nul
 *.log
+*.zip

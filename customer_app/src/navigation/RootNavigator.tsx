@@ -29,9 +29,7 @@ export const RootNavigator = () => {
     fcmService.requestPermission();
     fcmService.setupListeners(navigationRef);
 
-    if (isAuthenticated && user?.id) {
-      fcmService.registerTokenWithBackend(undefined, user.id);
-    }
+    fcmService.registerTokenWithBackend(undefined, user?.id);
 
     return () => {
       fcmService.destroy();

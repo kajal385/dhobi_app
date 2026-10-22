@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
+import Toast from 'react-native-toast-message';
 import { COLORS, DARK_COLORS, SPACING, SIZES } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { RootState } from '../../store';
@@ -31,6 +32,7 @@ export const OrdersScreen = ({ navigation }: any) => {
   const { orders, loading } = useSelector((s: RootState) => s.orders);
   const [tab, setTab] = useState<Tab>('active');
   const [refreshing, setRefreshing] = useState(false);
+  const lastStatusesRef = useRef<Record<number, string>>({});
 
   const isHistoryStatus = (status?: string) => {
     const s = (status || '').toLowerCase();
@@ -45,7 +47,30 @@ export const OrdersScreen = ({ navigation }: any) => {
   const fetchOrders = useCallback(async () => {
     try {
       const res: any = await orderService.getOrders();
-      const orderData = Array.isArray(res) ? res : (res?.data || []);
+      const orderData: Order[] = Array.isArray(res) ? res : (res?.data || []);
+
+      // Detect if laundry owner or admin changed any order status to trigger popups
+      if (Object.keys(lastStatusesRef.current).length > 0) {
+        orderData.forEach((order) => {
+          const prevStatus = lastStatusesRef.current[order.id];
+          if (prevStatus && prevStatus !== order.status) {
+            Toast.show({
+              type: 'info',
+              text1: `Order #${order.order_number || order.id} Updated! 🔔`,
+              text2: `Status changed to: ${order.status.replace(/_/g, ' ')}`,
+              visibilityTime: 6000,
+            });
+          }
+        });
+      }
+
+      // Cache current statuses
+      const newMap: Record<number, string> = {};
+      orderData.forEach((o) => {
+        if (o?.id) newMap[o.id] = o.status;
+      });
+      lastStatusesRef.current = newMap;
+
       dispatch(setOrders(orderData));
     } catch (e: any) {
       dispatch(ordersError(e.message));

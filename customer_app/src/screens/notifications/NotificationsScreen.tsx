@@ -43,13 +43,7 @@ export const NotificationsScreen = ({ navigation }: any) => {
       dispatch(setNotifications(notifList));
     } catch (e: any) {
       console.warn('[Notifications] Failed to load notifications:', e?.message);
-      // Prevent stuck loading skeleton, show empty list
       dispatch(setNotifications([]));
-      Toast.show({
-        type: 'error',
-        text1: 'Could not load notifications',
-        text2: 'Pull down to refresh or check your internet connection.',
-      });
     }
   }, [dispatch]);
 

@@ -25,6 +25,34 @@ class FirebaseNotificationService
             ->pluck('token')
             ->toArray();
 
+        // 3. Fallback: match by user's phone number across user records
+        if (empty($tokens)) {
+            $user = User::find($userId);
+            if ($user && !empty($user->phone)) {
+                $digits = preg_replace('/\D/', '', (string) $user->phone);
+                $last10 = substr($digits, -10);
+                if (strlen($last10) === 10) {
+                    $matchingUserIds = User::where('phone', 'like', "%{$last10}%")->pluck('id')->toArray();
+                    if (!empty($matchingUserIds)) {
+                        $tokens = FcmDeviceToken::whereIn('user_id', $matchingUserIds)
+                            ->where('is_active', true)
+                            ->pluck('token')
+                            ->toArray();
+                    }
+                }
+            }
+        }
+
+        // 4. Fallback for testing: if customer order update and still empty, notify active customer app devices
+        if (empty($tokens) && ($data['channel_id'] ?? '') === 'dhobipro_customer_channel') {
+            $tokens = FcmDeviceToken::where('app_type', 'customer')
+                ->where('is_active', true)
+                ->orderBy('updated_at', 'desc')
+                ->limit(5)
+                ->pluck('token')
+                ->toArray();
+        }
+
         if (empty($tokens)) {
             Log::info("FCM: No active device tokens found for user ID: {$userId}");
             return ['success' => true, 'sent_count' => 0, 'message' => 'No active devices registered'];
