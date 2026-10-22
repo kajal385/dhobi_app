@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\WalletController;
 use App\Http\Controllers\Api\V1\ShopServiceController;
 use App\Http\Controllers\Api\V1\FcmTokenController;
+use App\Http\Controllers\Api\V1\NotificationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -79,6 +80,12 @@ Route::prefix('v1')->group(function () {
     Route::post('/wallet/add', [WalletController::class, 'add']);
     Route::post('/wallet/verify-payment', [WalletController::class, 'verifyPayment']);
 
+    // Customer Notification Center APIs
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead']);
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+
     // ──────────────────────────────────────────────
     // 3. LAUNDRY OWNER / PARTNER APP CRUD APIs
     // ──────────────────────────────────────────────
@@ -114,7 +121,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/delivery-boys', [LaundryOwnerController::class, 'storeDeliveryBoy']);
         Route::post('/delivery-boys/{id}/status', [LaundryOwnerController::class, 'toggleDeliveryBoyStatus']);
         Route::get('/revenue', [LaundryOwnerController::class, 'ownerRevenue']);   // Real-time revenue for this shop
-        Route::get('/notifications', [LaundryOwnerController::class, 'notifications']);
+        Route::get('/notifications', [NotificationController::class, 'index']);
+        Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+        Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead']);
     });
 
     // Support /laundry/ path for backward compatibility

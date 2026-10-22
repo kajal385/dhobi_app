@@ -29,10 +29,27 @@ export const NotificationsScreen = ({ navigation }: any) => {
   const fetchNotifications = useCallback(async () => {
     dispatch(notificationsLoading());
     try {
-      const res = await notificationService.getNotifications();
-      dispatch(setNotifications(res.data));
+      const res: any = await notificationService.getNotifications();
+      let notifList: Notification[] = [];
+
+      if (Array.isArray(res)) {
+        notifList = res;
+      } else if (res && Array.isArray(res.data)) {
+        notifList = res.data;
+      } else if (res && res.data && Array.isArray(res.data.data)) {
+        notifList = res.data.data;
+      }
+
+      dispatch(setNotifications(notifList));
     } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'Could not load notifications' });
+      console.warn('[Notifications] Failed to load notifications:', e?.message);
+      // Prevent stuck loading skeleton, show empty list
+      dispatch(setNotifications([]));
+      Toast.show({
+        type: 'error',
+        text1: 'Could not load notifications',
+        text2: 'Pull down to refresh or check your internet connection.',
+      });
     }
   }, [dispatch]);
 

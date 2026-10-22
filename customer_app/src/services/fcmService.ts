@@ -157,16 +157,36 @@ class FcmService {
       const title = remoteMessage.notification?.title || remoteMessage.data?.title || 'DhobiPro Update';
       const body = remoteMessage.notification?.body || remoteMessage.data?.body || 'You have a new update on your order.';
       const orderId = remoteMessage.data?.order_id;
+      const notifType = remoteMessage.data?.type || 'ORDER_STATUS_UPDATE';
 
-      // Show in-app banner/toast
+      // 1. Insert into Redux notification center store in real-time
+      try {
+        const { store } = require('../store');
+        const { addNotification } = require('../store/notificationSlice');
+        store.dispatch(
+          addNotification({
+            id: Date.now(),
+            title: String(title),
+            body: String(body),
+            type: String(notifType),
+            is_read: false,
+            data: remoteMessage.data || {},
+            created_at: new Date().toISOString(),
+          })
+        );
+      } catch (err) {
+        console.warn('[FCM] Could not dispatch to store:', err);
+      }
+
+      // 2. Show in-app banner/toast popup for order actions
       Toast.show({
         type: 'info',
-        text1: title,
-        text2: body,
-        visibilityTime: 5000,
+        text1: String(title),
+        text2: String(body),
+        visibilityTime: 6000,
         onPress: () => {
           if (orderId && navigationRef?.isReady?.()) {
-            navigationRef.navigate('OrderDetails', { orderId: Number(orderId) });
+            navigationRef.navigate('OrderDetail', { orderId: Number(orderId) });
           }
         },
       });
@@ -177,7 +197,7 @@ class FcmService {
       console.log('[FCM Notification Opened from Background]:', remoteMessage);
       const orderId = remoteMessage.data?.order_id;
       if (orderId && navigationRef?.isReady?.()) {
-        navigationRef.navigate('OrderDetails', { orderId: Number(orderId) });
+        navigationRef.navigate('OrderDetail', { orderId: Number(orderId) });
       }
     });
 
@@ -189,7 +209,7 @@ class FcmService {
           const orderId = remoteMessage.data?.order_id;
           if (orderId && navigationRef?.isReady?.()) {
             setTimeout(() => {
-              navigationRef.navigate('OrderDetails', { orderId: Number(orderId) });
+              navigationRef.navigate('OrderDetail', { orderId: Number(orderId) });
             }, 1000);
           }
         }
